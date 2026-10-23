@@ -3,9 +3,10 @@
 // settings snapshot is part of the registered code, so it is in the page
 // synchronously before the bundle runs; re-registering updates it.
 //
-// Phase 1 (GECKOVIEW-PLAN.md): the snapshot is a fixed test config with every
-// plugin on (stub-config.json) and Rust is replaced by stub-ipc.js. Phase 2
-// gets the snapshot from Rust over native messaging.
+// Phase 1 (GECKOVIEW-PLAN.md): the snapshot is a fixed config with plugin
+// defaults and in-app-menu on (stub-config.json; the comparison with every
+// plugin on used a variant of it), and Rust is replaced by stub-ipc.js.
+// Phase 2 gets the snapshot from Rust over native messaging.
 
 // Runs in the content script (isolated world) at document_start
 function load(payload, stubUrl, bundleUrl) {

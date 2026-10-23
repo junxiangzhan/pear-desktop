@@ -4,6 +4,7 @@ import android.graphics.Color
 import android.os.Bundle
 import android.util.Log
 import android.view.View
+import android.widget.FrameLayout
 import androidx.activity.OnBackPressedCallback
 import androidx.activity.SystemBarStyle
 import androidx.activity.enableEdgeToEdge
@@ -36,10 +37,15 @@ class GeckoActivity : AppCompatActivity() {
       navigationBarStyle = SystemBarStyle.dark(Color.TRANSPARENT),
     )
     super.onCreate(savedInstanceState)
+    // Insets go on a container: padding on the GeckoView itself shifts what
+    // it draws but not where touches land (taps were off by the status bar)
     val view = GeckoView(this)
-    view.setBackgroundColor(Color.rgb(3, 3, 3))
-    setContentView(view)
-    ViewCompat.setOnApplyWindowInsetsListener(view) { v: View, insets ->
+    val container = FrameLayout(this).apply {
+      setBackgroundColor(Color.rgb(3, 3, 3))
+      addView(view, FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.MATCH_PARENT)
+    }
+    setContentView(container)
+    ViewCompat.setOnApplyWindowInsetsListener(container) { v: View, insets ->
       val bars = insets.getInsets(
         WindowInsetsCompat.Type.systemBars() or WindowInsetsCompat.Type.displayCutout()
       )
