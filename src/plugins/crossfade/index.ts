@@ -4,8 +4,12 @@ import { Innertube } from '\u0079\u006f\u0075\u0074\u0075\u0062\u0065i.js';
 
 import { t } from '@/i18n';
 import { getNetFetchAsFetch } from '@/plugins/utils/main';
+import {
+  mintPoToken,
+  setupYoutubeiEvaluator,
+} from '@/plugins/utils/main/youtubei';
 import promptOptions from '@/providers/prompt-options';
-import { createPlugin } from '@/utils';
+import { createPlugin, LoggerPrefix } from '@/utils';
 
 import { VolumeFader } from './fader';
 
@@ -165,13 +169,36 @@ export default createPlugin<
   },
 
   async backend({ ipc }) {
+    setupYoutubeiEvaluator();
     const yt = await Innertube.create({
       fetch: getNetFetchAsFetch(),
     });
 
     ipc.handle('audio-url', async (videoID: string) => {
-      const info = await yt.getBasicInfo(videoID);
-      return info.streaming_data?.formats[0].decipher(yt.session.player);
+      try {
+        const poToken = await mintPoToken(
+          yt.session.context.client.visitorData ?? '',
+          videoID,
+        );
+        const info = await yt.getBasicInfo(videoID, {
+          client: 'YTMUSIC',
+          po_token: poToken,
+        });
+        const url = new URL(
+          await info
+            .chooseFormat({ type: 'audio', quality: 'best' })
+            .decipher(yt.session.player),
+        );
+        url.searchParams.set('pot', poToken);
+        return url.toString();
+      } catch (error) {
+        console.error(
+          LoggerPrefix,
+          `[crossfade] Failed to get the stream URL of ${videoID}:`,
+          error,
+        );
+        return '';
+      }
     });
   },
 
@@ -234,16 +261,46 @@ export default createPlugin<
         syncVideoWithTransitionAudio();
       };
 
+      let videoListenersAdded = false;
+      let transitionBeforeEnd: (() => void) | undefined;
+
       const syncVideoWithTransitionAudio = () => {
         const video = document.querySelector('video')!;
+
+        transitionAudio.play();
+        transitionAudio.seek(video.currentTime);
+
+        // Exit just before the end for the transition
+        if (transitionBeforeEnd) {
+          video.removeEventListener('timeupdate', transitionBeforeEnd);
+        }
+
+        const onTimeUpdate = () => {
+          if (
+            video.currentTime >=
+              video.duration - (this.config?.secondsBeforeEnd ?? 0) &&
+            isReadyToCrossfade()
+          ) {
+            video.removeEventListener('timeupdate', onTimeUpdate);
+
+            // Go to next video - XXX: does not support "repeat 1" mode
+            document.querySelector<HTMLButtonElement>('.next-button')?.click();
+          }
+        };
+        transitionBeforeEnd = onTimeUpdate;
+        video.addEventListener('timeupdate', onTimeUpdate);
+
+        // The same <video> is reused for every track, so only add these once,
+        // otherwise several faders fight over its volume
+        if (videoListenersAdded) {
+          return;
+        }
+        videoListenersAdded = true;
 
         const videoFader = new VolumeFader(video, {
           fadeScaling: this.config?.fadeScaling,
           fadeDuration: this.config?.fadeInDuration,
         });
-
-        transitionAudio.play();
-        transitionAudio.seek(video.currentTime);
 
         video.addEventListener('seeking', () => {
           transitionAudio.seek(video.currentTime);
@@ -262,22 +319,6 @@ export default createPlugin<
           video.volume = 0;
           videoFader.fadeTo(videoVolume);
         });
-
-        // Exit just before the end for the transition
-        const transitionBeforeEnd = () => {
-          if (
-            video.currentTime >=
-              video.duration - (this.config?.secondsBeforeEnd ?? 0) &&
-            isReadyToCrossfade()
-          ) {
-            video.removeEventListener('timeupdate', transitionBeforeEnd);
-
-            // Go to next video - XXX: does not support "repeat 1" mode
-            document.querySelector<HTMLButtonElement>('.next-button')?.click();
-          }
-        };
-
-        video.addEventListener('timeupdate', transitionBeforeEnd);
       };
 
       const crossfade = (cb: () => void) => {
@@ -311,6 +352,10 @@ export default createPlugin<
         await waitForTransition;
         const url = await getStreamURL(videoID);
         if (!url) {
+          // Don't fade out the previous track's audio on the next transition
+          if (transitionAudio) {
+            transitionAudio.unload();
+          }
           return;
         }
 
