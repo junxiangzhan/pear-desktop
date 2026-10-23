@@ -200,7 +200,11 @@ pub fn run() {
                 .unwrap()
         })
         .setup(|app| {
-            let config_path = app.path().app_config_dir()?.join("config.json");
+            let config_dir = match window::profile_dir() {
+                Some(dir) => dir,
+                None => app.path().app_config_dir()?,
+            };
+            let config_path = config_dir.join("config.json");
             app.manage(Config::load(config_path));
             app.manage(Ipc::default());
             app.manage(SongInfoProvider::default());

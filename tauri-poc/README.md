@@ -39,7 +39,7 @@ tauri-poc/
    └─ gen/android            # `tauri android init` 產生的 Android 專案；MainActivity、PlaybackService、MediaSessionPlugin 是手寫的
 ```
 
-`src/` 與 `vite-plugins/` 的配合修改（不影響 Electron 行為）：`plugin-loader` 可一次保留多個插件部分並排除指定插件；`virtual:plugins` 可輸出多個 `<mode>Plugins()`；新增 `src/providers/net.ts`（`crossOriginFetch`），synced-lyrics 的 LRCLib / Genius / Megalobiz / YTMusic 改用它；notifications 的純常數移到 `constants.ts`；scrobbler 選單不再 import backend；in-app-menu 在宿主設定 `__pearNoTitleBarOverlay` 時（Tauri 沒有 `titleBarOverlay`）自己畫視窗按鈕。
+`src/` 與 `vite-plugins/` 的配合修改（不影響 Electron 行為）：`plugin-loader` 可一次保留多個插件部分並排除指定插件；`virtual:plugins` 可輸出多個 `<mode>Plugins()`；新增 `src/providers/net.ts`（`crossOriginFetch`），synced-lyrics 的 LRCLib / Genius / Megalobiz / YTMusic 改用它；notifications 的純常數移到 `constants.ts`；scrobbler 選單不再 import backend；in-app-menu 在宿主設定 `__pearNoTitleBarOverlay` 時（Tauri 沒有 `titleBarOverlay`）自己畫視窗按鈕；do-not-track 的 pruner 不再對 `null` 等非物件呼叫 `delete`（原本 `JSON.parse('null')` 會丟 TypeError，Electron 版也有這個問題）。
 
 ### 注入方式
 
@@ -59,8 +59,8 @@ Rust 擁有 `config.json`（`config.rs`，`defaults.ts` 的移植）。renderer 
 |---|---|
 | 純 renderer，原本就能用 | album-actions、album-color-theme、ambient-mode、clock、equalizer、navigation、performance-improvement、playback-speed、video-toggle、visualizer 等 |
 | backend 已移植到 Rust | sponsorblock、synced-lyrics（`synced-lyrics:fetch`）、lumiastream、tuna-obs、notifications（基本模式）、picture-in-picture、transparent-player、scrobbler、shortcuts（全域／視窗內快捷鍵、媒體鍵）、precise-volume、discord、api-server、amuse、in-app-menu、taskbar-mediacontrol（Windows） |
-| backend 改在頁面處理 | captions-selector、quality-changer、music-together（只有 UI，`plugin-glue.ts`）、crossfade（`crossfade.ts`） |
-| 尚未移植（強制停用、選單變灰） | auth-proxy-adapter、do-not-track、downloader、touchbar |
+| backend 改在頁面處理 | captions-selector、quality-changer、music-together（只有 UI，`plugin-glue.ts`）、crossfade（`crossfade.ts`）、do-not-track（只有 In player 模式） |
+| 尚未移植（強制停用、選單變灰） | auth-proxy-adapter、downloader、touchbar |
 
 - **crossfade：** `audio-url` 改在頁面裡用 youtubei.js 取得串流網址（與 `src/plugins/utils/main/youtubei.ts` 相同的做法：`new Function` 直譯器、BotGuard 在隱藏 iframe 裡跑、PO token minter 快取），跨網域請求經 `net_fetch`（白名單加了 `www.youtube.com`、`jnn-pa.googleapis.com`）。
 - **discord：** Rust 直接講 Discord 的本機 IPC（Windows named pipe `discord-ipc-N`、Unix socket），取代 `@xhayper/discord-rpc`；節流、暫停逾時清除、自動重連照搬 `DiscordService`。選單在頁面執行，它 import 的 `main.ts` 在打包時換成 `compat/discord.ts`（透過 IPC 讀連線狀態、連線、清除）。
@@ -69,6 +69,7 @@ Rust 擁有 `config.json`（`config.rs`，`defaults.ts` 的移植）。renderer 
 - **in-app-menu：** 啟用時（Windows 預設）主視窗無邊框，選單與視窗按鈕由頁面畫，Rust 回答 `get-menu`／`peard:menu-event`／`window-*`。`app-region: drag` 由 `plugin-glue.ts` 轉成 `start_dragging`（雙擊最大化）。window-state 插件不還原 decorations／visible，否則會蓋掉這個設定。
 - **系統媒體控制：** Windows 的 SMTC 由 WebView2 自己提供（顯示名稱是 `msedgewebview2.exe`，設定 AppUserModelID 也不會變）；taskbar-mediacontrol 的縮圖按鈕用 `ITaskbarList3`。Linux 的 MPRIS 與 macOS Now Playing 尚未移植（無法在 Windows 上建置測試）。Android 見下方「背景播放」。
 - **notifications：** 互動式 Windows toast（附播放按鈕）尚未移植；`interactive` 開啟時退回基本通知。
+- **do-not-track（廣告阻擋）：** 預設的 **In player** 模式完全在頁面裡執行（包住 `JSON.parse` 與 `Response.json`，刪掉播放器回應裡的 `playerAds`／`adPlacements`／`adSlots`），Windows 與 Android 都可用。**With blocklists 模式沒有移植**：它靠 Electron 的 `session.webRequest` 依清單攔截網路請求，Tauri 沒有跨平台的對應 API（`on_web_resource_request` 只涵蓋 app 自己的協定）；要做得在 Windows 用 WebView2 的 `WebResourceRequested`、Android 改 WebViewClient 的 `shouldInterceptRequest`，再配一個比對引擎（例如 `adblock` crate）。選了這個模式時，頁面只會印出警告，不會阻擋任何東西。打包時 `blocker.ts` 與 Ghostery 的 preload 由 `compat/do-not-track.ts` 取代。
 - **啟用時要求播放器事件：** Electron 的 backend 只在 `peard:player-api-loaded` 時要求 `peard:setup-*-listener`，執行中才啟用的插件會錯過；Rust 版（`plugins::request_player_listeners`）啟動時也會立刻要求一次（頁面端是 singleton，重複要求沒有影響）。
 
 **CSS：** renderer 的 `import 'mdui/mdui.css'` 會被 Vite 抽成獨立 CSS 檔，但 Electron 的 `get-renderer-script` 只讀 `<script>`，所以這份 CSS 在 Electron 裡從未套用。PoC 一度把它內嵌注入，結果 mdui 的 `:root { background-color }` 在 YTM 半透明背景後面畫出灰色色塊；現在改為直接丟棄，行為與 Electron 一致。
@@ -104,6 +105,7 @@ cargo run --manifest-path tauri-poc/src-tauri/Cargo.toml
 | `PEAR_POC_USER_AGENT=...` | 覆寫 User-Agent（例如 Google 登入被擋時測試） |
 | `PEAR_POC_NO_INJECT=1` | 不注入，載入原始網站（區分外殼問題與 renderer 問題） |
 | `PEAR_POC_INJECT_FILE=path` | 改注入磁碟上的檔案，免重編譯 |
+| `PEAR_POC_PROFILE_DIR=path` | WebView 資料與 `config.json` 改放在這個資料夾（例如在不動到登入狀態的情況下測未登入） |
 | `PEAR_POC_DEBUG_PORT=9333` | 開啟 Chrome DevTools Protocol（保留 Tauri 預設的 WebView2 參數；不要改用 `WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS`，它會整個覆蓋掉預設參數） |
 
 測試時請正常關閉視窗。強制結束行程會讓 WebView2 來不及寫回 cookie，登入狀態會遺失；若主行程已無回應，先用 CDP 的 `Browser.close` 讓 WebView2 正常關閉再結束行程。另外，單獨按一下 Alt 會讓視窗進入 Windows 的選單模式，期間 WebView2（至少 DevTools）會停止回應，按 Esc 即可離開。
@@ -126,6 +128,7 @@ cd tauri-poc/src-tauri && pnpm dlx @tauri-apps/cli@2.12.4 android build --debug 
 - 模擬器若出現 `ERR_NAME_NOT_RESOLVED`（主機有 Tailscale 等 VPN 時常見），用 `emulator -avd <name> -dns-server 8.8.8.8` 啟動。
 - 預設使用桌面版 Chrome 的 User-Agent，否則會拿到行動版 YTM，插件無法運作。
 - 實機平板請改用 `--target aarch64`。
+- **已知問題：** Android 上 init script 會執行兩次（Tauri 自己的腳本也是，console 會出現 `Cannot redefine property`），所以 bundle 會被評估兩次（出現兩次 `shim installed`、mdui 的 custom element 重複定義錯誤）；偶爾啟動後頁面停在空白（`about:blank`），強制停止再開就會恢復。都還沒追查。
 - debug APK 帶完整除錯資訊時約 374 MB（`.so` 240 MB），模擬器空間不足會裝不上；測試時可在建置前設 `CARGO_PROFILE_DEV_DEBUG=0 CARGO_PROFILE_DEV_STRIP=debuginfo`（約 134 MB）。
 
 ### 背景播放
@@ -195,6 +198,7 @@ cd tauri-poc/src-tauri && pnpm dlx @tauri-apps/cli@2.12.4 android build --debug 
 | api-server | 未帶 token 401、`/auth/{id}`（已授權 client）取得 token、song／volume／like-state／shuffle／repeat-mode／queue/next 回應正確、竄改的 token 401、CORS preflight（含 Private-Network）；WebSocket：`PLAYER_INFO`、暫停／播放的 `PLAYER_STATE_CHANGED`、`VOLUME_CHANGED`、`POSITION_CHANGED`，無 token 以 1008 關閉；重開 app 後自動啟動 |
 | amuse | `/` 回傳翻譯文字、`/query` 回傳目前歌曲、CORS |
 | Android 背景播放 | 模擬器（API 34）：foreground service（type mediaPlayback）、MediaSession 顯示封面／標題／進度；背景 30 秒持續播放；媒體鍵暫停／播放／下一首在背景有效；正常播放時 30 秒內 0 次 session 更新 |
+| do-not-track（In player） | 未登入的獨立設定檔（`PEAR_POC_PROFILE_DIR`／Android 模擬器），每次播 6 首歌，比對 YouTube 送來的原始 `/youtubei/v1/player` 回應與播放器實際拿到的 `getPlayerResponse()`。**Windows：** 關閉時原始回應 6/6 含廣告欄位、播放器拿到 6/6、播出 1 則廣告；開啟時原始回應仍 6/6 含廣告，播放器拿到 **0/6**、播出 **0** 則。**Android：** 開啟時原始回應 5/5 含廣告（第一首來自頁面 HTML），播放器拿到 **0/6**、播出 0 則 |
 | Electron 不受影響 | `pnpm typecheck`、`pnpm lint`、`pnpm build` 通過；`cargo test`（24）、`cargo clippy` 無警告；Android 版可編譯 |
 
 未驗證：真正的 Discord 用戶端、api-server 的 Allow/Deny 對話框與 HTTPS、HTTPS 憑證選檔對話框、Android 實機與 Android 上的 api-server／discord。

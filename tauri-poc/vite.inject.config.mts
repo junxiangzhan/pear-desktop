@@ -2,7 +2,7 @@
 // shell injects as an initialization script. Run from the repository root:
 //   pnpm exec vite build -c tauri-poc/vite.inject.config.mts
 import { readFileSync } from 'node:fs';
-import { dirname, resolve } from 'node:path';
+import { basename, dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 import builtinModules from 'builtin-modules';
@@ -44,6 +44,9 @@ const dropExtractedCss = (): Plugin => ({
 // for page modules that reach the Rust port over IPC
 const backendProxies: Record<string, string> = {
   'src/plugins/discord/main.ts': compat('discord.ts'),
+  // do-not-track: only the page-side "In player" mode is ported
+  'src/plugins/do-not-track/blocker.ts': compat('do-not-track.ts'),
+  'src/plugins/do-not-track/injectors/inject-cliqz-preload.ts': compat('do-not-track.ts'),
 };
 const proxyBackends = (): Plugin => {
   const targets = new Map(
@@ -52,11 +55,15 @@ const proxyBackends = (): Plugin => {
       proxy,
     ]),
   );
+  // Only resolve imports whose last segment names a proxied module
+  const names = new Set(
+    Object.keys(backendProxies).map((file) => basename(file, '.ts')),
+  );
   return {
     name: 'pear-proxy-backends',
     enforce: 'pre',
     async resolveId(source, importer, options) {
-      if (!importer || !/\bmain(?:\.ts)?$/.test(source)) return null;
+      if (!importer || !names.has(basename(source, '.ts'))) return null;
       const resolved = await this.resolve(source, importer, {
         ...options,
         skipSelf: true,

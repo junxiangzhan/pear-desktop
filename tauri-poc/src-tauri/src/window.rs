@@ -15,7 +15,13 @@ use crate::{config::Config, ipc::MAIN_WEBVIEW, menu::label, prompt};
 pub fn shared_webview_options<'a, R: tauri::Runtime, M: Manager<R>>(
     builder: tauri::WebviewWindowBuilder<'a, R, M>,
 ) -> tauri::WebviewWindowBuilder<'a, R, M> {
-    let builder = builder.use_https_scheme(true);
+    #[allow(unused_mut)]
+    let mut builder = builder.use_https_scheme(true);
+    // Diagnostic switch: a separate profile (see `profile_dir`)
+    #[cfg(desktop)]
+    if let Some(dir) = profile_dir() {
+        builder = builder.data_directory(dir.join("webview"));
+    }
     // Diagnostic switch: expose the Chrome DevTools Protocol on this port.
     // Setting browser args replaces wry's defaults, so they are repeated here.
     #[cfg(windows)]
@@ -25,6 +31,13 @@ pub fn shared_webview_options<'a, R: tauri::Runtime, M: Manager<R>>(
         ));
     }
     builder
+}
+
+/// Diagnostic switch: `PEAR_POC_PROFILE_DIR` keeps the WebView data and
+/// `config.json` in that folder instead of the user's profile, e.g. to test
+/// logged out without touching the real login.
+pub fn profile_dir() -> Option<std::path::PathBuf> {
+    std::env::var_os("PEAR_POC_PROFILE_DIR").map(std::path::PathBuf::from)
 }
 
 /// The last document title, so a cleared custom title can fall back to it.
