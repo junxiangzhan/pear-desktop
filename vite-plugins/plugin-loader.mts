@@ -35,9 +35,32 @@ const getPropertyName = (prop: Node): string | null => {
   return null;
 };
 
+type PluginContext = 'backend' | 'preload' | 'renderer' | 'menu';
+
+/**
+ * Strips the plugin parts that do not belong to this bundle.
+ * Pass several contexts to keep more than one part, e.g. the Tauri page
+ * bundle keeps `renderer`, `preload` and `menu` together. `backend` always
+ * keeps `menu`, since menus are built in the Electron main process.
+ */
 export default function (
-  mode: 'backend' | 'preload' | 'renderer' | 'none',
+  mode: PluginContext | PluginContext[] | 'none',
+  options: {
+    /** Plugin ids whose part of a given context is stripped anyway */
+    omit?: Partial<Record<PluginContext, string[]>>;
+  } = {},
 ): PluginOption {
+  const keep = new Set<string>(
+    mode === 'none' ? [] : Array.isArray(mode) ? mode : [mode],
+  );
+  if (keep.has('backend')) keep.add('menu');
+
+  // Same id rule as `virtual:plugins`: the folder name, or the file name
+  const pluginIdOf = (id: string) => {
+    const name = basename(id).replace(/\.(?:js|ts|jsx|tsx)$/, '');
+    return name === 'index' ? basename(dirname(id)) : name;
+  };
+
   return {
     name: 'ytm-plugin-loader',
     load: {
@@ -121,13 +144,12 @@ export default function (
           if (name) propMap.set(name, prop);
         }
 
-        const contexts = ['backend', 'preload', 'renderer', 'menu'];
+        const pluginId = pluginIdOf(id);
+        const contexts = ['backend', 'preload', 'renderer', 'menu'] as const;
         for (const ctx of contexts) {
-          if (mode === 'none' && propMap.has(ctx)) {
-            propMap.get(ctx)?.remove();
+          if (keep.has(ctx) && !options.omit?.[ctx]?.includes(pluginId)) {
             continue;
           }
-          if (ctx === mode || (ctx === 'menu' && mode === 'backend')) continue;
           if (propMap.has(ctx)) propMap.get(ctx)?.remove();
         }
 
@@ -153,10 +175,10 @@ export default function (
           if (name) stubMap.set(name, prop);
         }
 
-        const stubContexts =
-          mode === 'backend'
-            ? contexts.filter((ctx) => ctx !== 'menu')
-            : contexts;
+        // Stubs (`allPlugins()`) carry the menu wherever menus are built
+        const stubContexts = keep.has('menu')
+          ? contexts.filter((ctx) => ctx !== 'menu')
+          : contexts;
         for (const ctx of stubContexts) {
           if (stubMap.has(ctx)) {
             stubMap.get(ctx)?.remove();

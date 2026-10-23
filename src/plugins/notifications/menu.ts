@@ -3,7 +3,7 @@ import is from 'electron-is';
 
 import { t } from '@/i18n';
 
-import { snakeToCamel, ToastStyles, urgencyLevels } from './utils';
+import { snakeToCamel, ToastStyles, urgencyLevels } from './constants';
 
 import type { NotificationsPluginConfig } from './index';
 import type { MenuTemplate } from '@/menu';

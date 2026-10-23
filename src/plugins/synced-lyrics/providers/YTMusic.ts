@@ -1,3 +1,5 @@
+import { crossOriginFetch } from '@/providers/net';
+
 import type { LyricProvider, LyricResult, SearchSongInfo } from '../types';
 import type { MusicPlayerAppElement } from '@/types/music-player-app-element';
 
@@ -123,14 +125,17 @@ export class YTMusic implements LyricProvider {
   }
 
   private fetchBrowse(browseId: string) {
-    return fetch(this.PROXIED_ENDPOINT + 'browse?prettyPrint=false', {
-      headers,
-      method: 'POST',
-      body: JSON.stringify({
-        browseId,
-        context: { client },
-      }),
-    }).then((res) => res.json()) as Promise<BrowseData>;
+    return crossOriginFetch(
+      this.PROXIED_ENDPOINT + 'browse?prettyPrint=false',
+      {
+        headers,
+        method: 'POST',
+        body: JSON.stringify({
+          browseId,
+          context: { client },
+        }),
+      },
+    ).then((res) => res.json()) as Promise<BrowseData>;
   }
 }
 

@@ -1,5 +1,7 @@
 import { jaroWinkler } from '@skyra/jaro-winkler';
 
+import { crossOriginFetch } from '@/providers/net';
+
 import { LRC } from '../parsers/lrc';
 
 import type { LyricProvider, LyricResult, SearchSongInfo } from '../types';
@@ -25,7 +27,7 @@ export class Megalobiz implements LyricProvider {
       qry: `${artist} ${title}`,
     });
 
-    const response = await fetch(`${this.baseUrl}/search/all?${query}`, {
+    const response = await crossOriginFetch(`${this.baseUrl}/search/all?${query}`, {
       signal: AbortSignal.timeout(5_000),
     });
     if (!response.ok) {
@@ -87,7 +89,7 @@ export class Megalobiz implements LyricProvider {
       return null;
     }
 
-    const html = await fetch(`${this.baseUrl}${closestResult.href}`).then((r) => r.text());
+    const html = await crossOriginFetch(`${this.baseUrl}${closestResult.href}`).then((r) => r.text());
     const lyricsDoc = this.domParser.parseFromString(html, 'text/html');
     const raw = lyricsDoc.querySelector('span[id^="lrc_"][id$="_lyrics"]')?.textContent;
     if (!raw) throw new Error('Failed to extract lyrics from page.');

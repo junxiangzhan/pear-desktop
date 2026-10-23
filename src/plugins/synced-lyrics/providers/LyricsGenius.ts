@@ -1,3 +1,5 @@
+import { crossOriginFetch } from '@/providers/net';
+
 import type { LyricProvider, LyricResult, SearchSongInfo } from '../types';
 
 const preloadedStateRegex = /__PRELOADED_STATE__ = JSON\.parse\('(.*?)'\);/;
@@ -16,7 +18,7 @@ export class LyricsGenius implements LyricProvider {
       per_page: '10',
     });
 
-    const response = await fetch(`${this.baseUrl}/api/search/song?${query}`);
+    const response = await crossOriginFetch(`${this.baseUrl}/api/search/song?${query}`);
     if (!response.ok) {
       return null;
     }
@@ -52,7 +54,7 @@ export class LyricsGenius implements LyricProvider {
 
     const { result: { path } } = closestHit;
 
-    const html = await fetch(`${this.baseUrl}${path}`).then((res) =>
+    const html = await crossOriginFetch(`${this.baseUrl}${path}`).then((res) =>
       res.text(),
     );
     const doc = this.domParser.parseFromString(html, 'text/html');

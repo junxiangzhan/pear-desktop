@@ -5,8 +5,8 @@ import { t } from '@/i18n';
 import promptOptions from '@/providers/prompt-options';
 
 import { type ScrobblerPluginConfig } from './index';
-import { type SetConfType, backend } from './main';
 
+import type { SetConfType } from './main';
 import type { MenuTemplate } from '@/menu';
 import type { MenuContext } from '@/types/contexts';
 
@@ -121,7 +121,7 @@ export const onMenu = async ({
           type: 'checkbox',
           checked: Boolean(config.scrobblers.lastfm?.enabled),
           click(item) {
-            backend.toggleScrobblers(config, window);
+            // The backend re-toggles its scrobblers in `onConfigChange`
             config.scrobblers.lastfm.enabled = item.checked;
             setConfig(config);
           },
@@ -142,7 +142,7 @@ export const onMenu = async ({
           type: 'checkbox',
           checked: Boolean(config.scrobblers.listenbrainz?.enabled),
           click(item) {
-            backend.toggleScrobblers(config, window);
+            // The backend re-toggles its scrobblers in `onConfigChange`
             config.scrobblers.listenbrainz.enabled = item.checked;
             setConfig(config);
           },

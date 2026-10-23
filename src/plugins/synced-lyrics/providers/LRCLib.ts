@@ -1,5 +1,7 @@
 import { jaroWinkler } from '@skyra/jaro-winkler';
 
+import { crossOriginFetch } from '@/providers/net';
+
 import { LRC } from '../parsers/lrc';
 import { config } from '../renderer/renderer';
 
@@ -28,7 +30,7 @@ export class LRCLib implements LyricProvider {
     }
 
     let url = `${this.baseUrl}/api/search?${query.toString()}`;
-    let response = await fetch(url);
+    let response = await crossOriginFetch(url);
 
     if (!response.ok) {
       throw new Error(`bad HTTPStatus(${response.statusText})`);
@@ -49,7 +51,7 @@ export class LRCLib implements LyricProvider {
       query = new URLSearchParams({ q: `${trackName}` });
       url = `${this.baseUrl}/api/search?${query.toString()}`;
 
-      response = await fetch(url);
+      response = await crossOriginFetch(url);
       if (!response.ok) {
         throw new Error(`bad HTTPStatus(${response.statusText})`);
       }
@@ -64,7 +66,7 @@ export class LRCLib implements LyricProvider {
         query = new URLSearchParams({ q: title });
         url = `${this.baseUrl}/api/search?${query.toString()}`;
 
-        response = await fetch(url);
+        response = await crossOriginFetch(url);
         if (!response.ok) {
           throw new Error(`bad HTTPStatus(${response.statusText})`);
         }

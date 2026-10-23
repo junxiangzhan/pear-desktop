@@ -18,9 +18,18 @@ const globalProject = new Project({
   skipFileDependencyResolution: true,
 });
 
+type VirtualModuleMode = 'main' | 'preload' | 'renderer';
+
+/**
+ * Generates `virtual:plugins`. Pass several non-main modes to export one
+ * `<mode>Plugins()` per mode from a single bundle (used by the Tauri page
+ * bundle, which runs the preload and renderer parts in the same context).
+ */
 export const pluginVirtualModuleGenerator = (
-  mode: 'main' | 'preload' | 'renderer',
+  modeOrModes: VirtualModuleMode | Exclude<VirtualModuleMode, 'main'>[],
 ) => {
+  const modes = Array.isArray(modeOrModes) ? modeOrModes : [modeOrModes];
+  const mode = modes[0];
   const srcPath = resolve(__dirname, '..', 'src');
   const plugins = globSync([
     'src/plugins/*/index.{js,ts,jsx,tsx}',
@@ -74,7 +83,7 @@ export const pluginVirtualModuleGenerator = (
       }
 
       writer.blankLine();
-      if (mode === 'main' || mode === 'preload') {
+      if (modes.includes('main') || modes.includes('preload')) {
         writer.writeLine("import is from 'electron-is';");
         writer.writeLine('globalThis.electronIs = is;');
       }
@@ -82,30 +91,32 @@ export const pluginVirtualModuleGenerator = (
       writer.blankLine();
 
       // Context-specific exports
-      writer.writeLine(`let ${mode}PluginsCache = null;`);
-      writer.writeLine(`export const ${mode}Plugins = async () => {`);
-      writer.writeLine(
-        `  if (${mode}PluginsCache) return await ${mode}PluginsCache;`,
-      );
-      writer.writeLine(
-        '  const { promise, resolve } = Promise.withResolvers();',
-      );
-      writer.writeLine('  ' + `${mode}PluginsCache = promise;`);
-      writer.writeLine('  const pluginEntries = await Promise.all([');
-      for (const { name } of plugins) {
-        const checkMode = mode === 'main' ? 'backend' : mode;
-        // HACK: To avoid situation like importing renderer plugins in main
+      for (const mode of modes) {
+        writer.writeLine(`let ${mode}PluginsCache = null;`);
+        writer.writeLine(`export const ${mode}Plugins = async () => {`);
         writer.writeLine(
-          `    ${kebabToCamel(name)}Plugin().then((plg) => plg['${checkMode}'] ? ["${name}", plg] : null),`,
+          `  if (${mode}PluginsCache) return await ${mode}PluginsCache;`,
         );
+        writer.writeLine(
+          '  const { promise, resolve } = Promise.withResolvers();',
+        );
+        writer.writeLine('  ' + `${mode}PluginsCache = promise;`);
+        writer.writeLine('  const pluginEntries = await Promise.all([');
+        for (const { name } of plugins) {
+          const checkMode = mode === 'main' ? 'backend' : mode;
+          // HACK: To avoid situation like importing renderer plugins in main
+          writer.writeLine(
+            `    ${kebabToCamel(name)}Plugin().then((plg) => plg['${checkMode}'] ? ["${name}", plg] : null),`,
+          );
+        }
+        writer.writeLine('  ]);');
+        writer.writeLine(
+          '  resolve(pluginEntries.filter((entry) => entry && supportsPlatform(entry[1])).reduce((acc, [name, plg]) => { acc[name] = plg; return acc; }, {}));',
+        );
+        writer.writeLine(`  return await ${mode}PluginsCache;`);
+        writer.writeLine('};');
+        writer.blankLine();
       }
-      writer.writeLine('  ]);');
-      writer.writeLine(
-        '  resolve(pluginEntries.filter((entry) => entry && supportsPlatform(entry[1])).reduce((acc, [name, plg]) => { acc[name] = plg; return acc; }, {}));',
-      );
-      writer.writeLine(`  return await ${mode}PluginsCache;`);
-      writer.writeLine('};');
-      writer.blankLine();
 
       // All plugins export (stub only) // Omit<Plugin, 'backend' | 'preload' | 'renderer'>
       writer.writeLine('let allPluginsCache = null;');
