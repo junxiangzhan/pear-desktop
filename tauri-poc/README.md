@@ -147,7 +147,7 @@ cd tauri-poc/src-tauri && pnpm dlx @tauri-apps/cli@2.12.4 android build --debug 
 | 流暢度：模擬捲動（debug build，未登入） | 原始網站 vs 注入後幾乎相同：靜置 ~165 fps；捲動 ~138 fps、長任務 7 次（兩者皆是 YTM 自身載入內容）。同條件下 Electron 開發版的滾輪測試並沒有比較好 | 靜置 59.3 fps、p95 16.8 ms、無長任務 |
 | 流暢度：使用者實際滾輪捲動（已登入，20 秒） | `performance-improvement` **開啟：550 個掉幀**、主執行緒忙碌 76%、`animationiteration` 事件 18,854 次。**關閉：0 個掉幀**、忙碌 22%、無 `animationiteration`。兩者 GC 都很少（Major GC 4–5 次、合計約 60–110 ms），卡頓不是 GC 造成的 | — |
 | 同一插件在 Electron vs Tauri（模擬滾輪、插件開啟） | 兩者開銷相近：`animationiteration` 1,806 vs 2,009 次、長任務 3 vs 2 次。WebView2 並沒有放大這個問題 | — |
-| 執行檔大小 | release exe 11 MB（含 6.6 MB bundle；壓縮後 3.6 MB），Electron 執行環境本身 355 MB | debug APK 134 MB（含除錯符號，非代表值） |
+| 執行檔大小 | 第二輪後重新量測：release exe 15.9 MB（含 7.3 MB bundle；gzip 後 6.0 MB），已安裝的 Electron 版 397 MB（Electron 執行環境本身 355 MB）。WebView2 由 Windows 10/11 內建，不計入。改寫 Rust 主行程之前的 PoC 是 11 MB（壓縮後 3.6 MB） | debug APK 134 MB（不含除錯資訊；含完整除錯資訊時 374 MB，皆非代表值） |
 
 ### 卡頓的原因：performance-improvement 的 cpu-tamer
 
