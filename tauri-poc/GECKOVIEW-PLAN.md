@@ -1,6 +1,6 @@
 # Android 版改用 GeckoView 的計畫
 
-狀態：第 1 階段完成（2026-10-24），結果見「第 1 階段結果」。前提是 [可行性驗證](README.md#geckoview-可行性驗證android2026-10-24) 的結果：GeckoView 裡可以登入 Google 並保持登入，WebExtension 能在頁面腳本之前注入主世界。桌面版不受影響，仍用 Tauri 的 WebView2／WebKit。
+狀態：第 2 階段完成（2026-10-24），結果見「第 1 階段結果」與「第 2 階段結果」。前提是 [可行性驗證](README.md#geckoview-可行性驗證android2026-10-24) 的結果：GeckoView 裡可以登入 Google 並保持登入，WebExtension 能在頁面腳本之前注入主世界。桌面版不受影響，仍用 Tauri 的 WebView2／WebKit。
 
 ## 目標與範圍
 
@@ -126,6 +126,37 @@ Tauri 版的 loader 用同步 XHR 從 `pear` 協定拿「設定快照 + bundle�
 其餘只在 GeckoView 出現的錯誤都是 stub 造成的（`get-menu` 等沒有 Rust 回答），或是 Firefox 的無害警告（`unreachable code after return statement`、CSP 的忽略提示）。尚未逐一點開插件的 UI 確認行為（需要 IPC 橋接後才有意義，留到第 4 階段）。
 
 **結論：可以進入第 2 階段（IPC 橋接）。**
+
+## 第 2 階段結果（2026-10-24，Xiaomi 平板，GeckoView 153）
+
+**橋接可以用，Android 版預設改成 GeckoView。** 頁面、extension、Kotlin、Rust 之間的路徑照第 2 節的設計實作，平板上已登入的狀態下驗證：
+
+| 項目 | 結果 |
+|---|---|
+| 設定快照 | ✅ background script 啟動時以 `gecko_payload` 向 Rust 取設定，註冊 loader 後才載入頁面（含 `options.resumeOnStart` 的起始網址） |
+| 歌曲資訊 | ✅ 頁面的 `ipc_send` 到 Rust（`song_info`、媒體通知照常更新） |
+| 選單 | ✅ `menu_update` 送出選單，in-app-menu 的選單列能開啟（第 1 階段打不開）；點擊外掛項目會寫入 `config.json`，Rust 推回 `pear:config`／`config-changed`，Clock 外掛即時出現與消失 |
+| `net_fetch` | ✅ synced-lyrics 的 5 次查詢都回來了，歌詞面板有同步捲動的歌詞。這首歌的歌詞來源內容本身是亂碼般的文字，WebView 引擎上一模一樣，與橋接無關 |
+| Rust 在頁面執行腳本 | ✅ 選單的「重新整理」經 `{ eval }` 執行 `location.reload()` |
+| 設定變更後重新載入 | ✅ 啟動時快照裡 Clock 是開的；從選單關掉再重新整理，新頁面沒有 Clock，表示 background script 收到 `pear:config` 後重新註冊了 loader |
+| WebView 引擎 | ✅ `--es engine webview` 啟動時照舊（同一首歌、同樣的選單），Tauri 的 IPC 路徑沒有被影響 |
+
+**延遲（頁面送出到收到回覆，含 Rust 處理時間）**：同步的指令（`menu_update`、`plugins_manifest`）平均 23–34 ms；頁面載入期間偶爾到數百 ms。`ipc_invoke` 平均 25–106 ms（含插件 handler 自己的等待），`net_fetch` 340–700 ms（主要是網路）。每趟要經過 Gecko 的內容行程 → 主行程 → Java → JNI → Rust 再回來，Rust 的同步指令跑在 Android UI 執行緒上，所以頁面載入時會和 GeckoView 搶。目前的資料量下沒有可感覺的延遲；樣本數少，第 4 階段再做專門的量測。
+
+**和計畫不同的地方**
+
+- **GeckoView 移進 `MainActivity`（第 3 階段的一部分提前做）。** Rust 只會隨 Tauri 的 activity 啟動，獨立的 `GeckoActivity` 背後沒有 Rust，接不上橋接。現在 `MainActivity` 在 wry 設好 WebView 後把 `GeckoPage`（GeckoView）疊在上面；Tauri 的 WebView 載入 `about:blank`、不注入。連結、返回鍵也改由 `GeckoPage` 處理。`GeckoActivity`、`stub-ipc.js`、`stub-config.json` 已移除。
+- **引擎可以切換**：`MainActivity` 在 Rust 啟動前把 `PEAR_ENGINE` 寫進環境變數，`src/page.rs` 依此決定事件、腳本與導覽走 GeckoView 還是 Tauri 的 WebView。方便兩個引擎對照。
+- **沒有用 `storage.local` 快取設定**：Rust 與 extension 在同一個行程，啟動時向 Rust 取設定只要約 5 ms（extension 安裝完成到 loader 註冊完成），不需要快取。
+- **`invoke` 一律帶 `id`**：`send` 類的指令也會收到回覆，`tauri.ts` 不必分兩種；多出的回覆很小。
+
+**途中修正**：YTM 播放時會要求離開頁面前確認（`beforeunload`），GeckoView 沒有 prompt delegate 時會直接拒絕，選單的重新整理因此沒有作用。`GeckoPage` 現在一律允許離開，和 Electron 版在 `src/index.ts` 對 `will-prevent-unload` 的處理相同。
+
+**留給第 3 階段**
+
+- 背景播放：`MainActivity` 讓 WebView 在背景保持「可見」的處理還是針對 WebView；GeckoView 在 activity 停止後是否繼續播放要驗證，必要時讓 `GeckoSession` 保持 active。
+- 選單的「複製目前網址」讀的是 Tauri 視窗的網址，GeckoView 模式下會是 `about:blank`；要改成讀 GeckoView 的網址。
+- 從最近任務滑掉後重開、`app_restart` 在 GeckoView 模式下的行為還沒測。
 
 ## 7. 風險與待確認事項
 

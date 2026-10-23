@@ -36,19 +36,6 @@
             </intent-filter>
         </activity>
 
-        <!-- Feasibility test: YouTube Music in GeckoView instead of the WebView -->
-        <activity
-            android:name=".GeckoActivity"
-            android:configChanges="orientation|keyboardHidden|keyboard|screenSize|locale|smallestScreenSize|screenLayout|uiMode"
-            android:label="Pear (GeckoView)"
-            android:taskAffinity="com.github.pear_devs.tauri_poc.gecko"
-            android:exported="true">
-            <intent-filter>
-                <action android:name="android.intent.action.MAIN" />
-                <category android:name="android.intent.category.LAUNCHER" />
-            </intent-filter>
-        </activity>
-
         <service
             android:name=".PlaybackService"
             android:exported="false"

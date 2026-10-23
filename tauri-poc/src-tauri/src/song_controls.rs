@@ -70,11 +70,10 @@ pub fn set_fullscreen(app: &AppHandle, fullscreen: bool) {
 
 /// Electron synthesized a `/` keydown with `webContents.sendInputEvent`.
 pub fn open_search_box(app: &AppHandle) {
-    if let Some(window) = app.get_webview_window(crate::ipc::MAIN_WEBVIEW) {
-        let _ = window.eval(
-            "document.dispatchEvent(new KeyboardEvent('keydown', { key: '/', code: 'Slash', bubbles: true }))",
-        );
-    }
+    crate::page::eval(
+        app,
+        "document.dispatchEvent(new KeyboardEvent('keydown', { key: '/', code: 'Slash', bubbles: true }))",
+    );
 }
 
 pub fn add_song_to_queue(app: &AppHandle, video_id: &str, position: &str) {

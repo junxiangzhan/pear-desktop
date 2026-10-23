@@ -3,7 +3,7 @@
 //! Plays the role of Electron's `ipcMain` + `webContents.send`:
 //! - page `send(channel, ...args)` → `ipc_send` → every listener on `channel`
 //! - page `invoke(channel, ...args)` → `ipc_invoke` → the one handler on `channel`
-//! - Rust → page: [`send_to_page`] emits `pear:ipc` to the main webview
+//! - Rust → page: [`send_to_page`] emits `pear:ipc` to the page
 //!
 //! Listeners and handlers carry an owner (`"core"` or a plugin id) so a
 //! plugin's registrations can be dropped when it stops.
@@ -17,7 +17,7 @@ use std::{
 use futures::future::BoxFuture;
 use serde::Serialize;
 use serde_json::Value;
-use tauri::{AppHandle, Emitter, Manager};
+use tauri::{AppHandle, Manager};
 use tokio::sync::oneshot;
 
 pub const MAIN_WEBVIEW: &str = "main";
@@ -134,9 +134,7 @@ impl Ipc {
 
 /// Like `webContents.send(channel, ...args)`.
 pub fn send_to_page(app: &AppHandle, channel: &str, args: &[Value]) {
-    if let Err(error) = app.emit_to(MAIN_WEBVIEW, "pear:ipc", PageMessage { channel, args }) {
-        log::warn!("sending '{channel}' to the page failed: {error}");
-    }
+    crate::page::emit(app, "pear:ipc", PageMessage { channel, args });
 }
 
 #[tauri::command]

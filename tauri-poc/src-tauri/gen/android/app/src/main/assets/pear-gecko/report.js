@@ -1,5 +1,6 @@
-// Phase 1: sends the stub's counters, the page state and layout metrics to
-// GeckoActivity, which saves the latest report to files/gecko-report.json.
+// Diagnostics: sends the page state, the IPC bridge's round trips and layout
+// metrics to GeckoPage, which saves the latest report to
+// files/gecko-report.json.
 const rect = (selector) => {
   const element = document.querySelector(selector);
   if (!element) return null;
@@ -30,6 +31,19 @@ const layout = () => {
   };
 };
 
+// Per command: count, average and maximum round trip (ms)
+const bridgeStats = () => {
+  const page = window.wrappedJSObject;
+  if (!page.__pearBridgeStats) return null;
+  const stats = JSON.parse(page.JSON.stringify(page.__pearBridgeStats));
+  return Object.fromEntries(
+    Object.entries(stats).map(([cmd, { count, totalMs, maxMs }]) => [
+      cmd,
+      [count, Math.round((totalMs / count) * 10) / 10, Math.round(maxMs)],
+    ]),
+  );
+};
+
 const report = () => {
   const signInButton = document.querySelector('a[href*="ServiceLogin"], ytmusic-guide-signin-promo-renderer');
   browser.runtime.sendNativeMessage('pear', {
@@ -37,7 +51,7 @@ const report = () => {
     rendererLoaded: !!window.wrappedJSObject.__pearRendererLoaded,
     shim: typeof window.wrappedJSObject.ipcRenderer,
     signedIn: !!document.querySelector('ytmusic-settings-button img') && !signInButton,
-    stub: JSON.parse(document.documentElement.dataset.pearStub ?? 'null'),
+    bridge: bridgeStats(),
     layout: layout(),
   });
 };

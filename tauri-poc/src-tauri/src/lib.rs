@@ -6,9 +6,12 @@ mod android_media;
 mod app_controls;
 mod config;
 mod dialogs;
+#[cfg(target_os = "android")]
+mod gecko_bridge;
 mod ipc;
 mod menu;
 mod net;
+mod page;
 mod plugins;
 mod prompt;
 mod song_controls;
@@ -151,7 +154,7 @@ pub fn run() {
     }
     #[cfg(target_os = "android")]
     {
-        builder = builder.plugin(android_media::init());
+        builder = builder.plugin(android_media::init()).plugin(gecko_bridge::init());
     }
 
     builder = builder.invoke_handler(tauri::generate_handler![
@@ -220,7 +223,12 @@ pub fn run() {
                 }
             }
             #[cfg(target_os = "android")]
-            android_media::register(app.handle());
+            {
+                android_media::register(app.handle());
+                if page::in_gecko() {
+                    gecko_bridge::register(app.handle());
+                }
+            }
 
             // Diagnostic switch: inject a file from disk instead of the built-in bundle
             let bundle = match std::env::var("PEAR_POC_INJECT_FILE") {
@@ -243,14 +251,20 @@ pub fn run() {
         .expect("error while running tauri application");
 }
 
-fn create_main_window(app: &tauri::App) -> tauri::Result<()> {
-    let config = app.state::<Config>();
-    // Like `options.resumeOnStart` in src/index.ts
-    let start_url = if config.get_bool("options.resumeOnStart") {
+/// Like `options.resumeOnStart` in src/index.ts.
+fn start_url(config: &Config) -> String {
+    if config.get_bool("options.resumeOnStart") {
         config.get_str("url")
     } else {
         YTM_URL.to_owned()
-    };
+    }
+}
+
+fn create_main_window(app: &tauri::App) -> tauri::Result<()> {
+    let config = app.state::<Config>();
+    // In GeckoView mode MainActivity shows GeckoView over this webview, which
+    // stays blank: it only keeps Tauri's Android lifecycle going
+    let start_url = if page::in_gecko() { "about:blank".to_owned() } else { start_url(&config) };
     let start_url = start_url
         .parse()
         .unwrap_or_else(|_| YTM_URL.parse().expect("valid default URL"));
@@ -261,7 +275,7 @@ fn create_main_window(app: &tauri::App) -> tauri::Result<()> {
         WebviewUrl::External(start_url),
     ));
     // Diagnostic switch: load the bare site to tell shell issues from renderer issues
-    if std::env::var_os("PEAR_POC_NO_INJECT").is_none() {
+    if std::env::var_os("PEAR_POC_NO_INJECT").is_none() && !page::in_gecko() {
         builder = builder.initialization_script_for_all_frames(loader_script());
     }
 

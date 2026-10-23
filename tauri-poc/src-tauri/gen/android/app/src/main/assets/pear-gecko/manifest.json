@@ -1,7 +1,7 @@
 {
   "manifest_version": 2,
   "name": "Pear GeckoView",
-  "version": "0.2",
+  "version": "0.3",
   "description": "Runs Pear Desktop's renderer bundle in music.youtube.com (GeckoView build).",
   "browser_specific_settings": {
     "gecko": { "id": "pear-gecko@pear-devs.github.io" }

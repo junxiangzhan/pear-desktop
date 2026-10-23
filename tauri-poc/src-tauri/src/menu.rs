@@ -54,6 +54,7 @@ use crate::{
     app_controls,
     config::Config,
     ipc::{self, MAIN_WEBVIEW},
+    page,
 };
 
 /// One item of a plugin's serialized Electron menu template.
@@ -555,12 +556,6 @@ fn set_menu_option(app: &AppHandle, key: &str, value: Value) {
     }
 }
 
-fn eval_in_page(app: &AppHandle, script: &str) {
-    if let Some(window) = app.get_webview_window(MAIN_WEBVIEW) {
-        let _ = window.eval(script);
-    }
-}
-
 #[cfg(desktop)]
 fn zoom(app: &AppHandle, change: impl FnOnce(f64) -> f64) {
     let state = app.state::<MenuState>();
@@ -632,7 +627,7 @@ fn dispatch(app: &AppHandle, id: &str) {
             "language" => {
                 config.set(app, "options.language", json!(value));
                 // The renderer reads the language at load
-                eval_in_page(app, "location.reload()");
+                page::reload(app);
             }
             _ => {}
         }
@@ -656,12 +651,7 @@ fn dispatch(app: &AppHandle, id: &str) {
                 }
             }
         }
-        "act:reload" => {
-            if let Some(window) = &window {
-                let _ = window.reload();
-            }
-        }
-        "act:forceReload" => eval_in_page(app, "location.reload()"),
+        "act:reload" | "act:forceReload" => page::reload(app),
         #[cfg(desktop)]
         "act:zoomIn" => zoom(app, |z| z + 0.1),
         #[cfg(desktop)]
@@ -675,8 +665,8 @@ fn dispatch(app: &AppHandle, id: &str) {
                 let _ = window.set_fullscreen(!fullscreen);
             }
         }
-        "act:goBack" => eval_in_page(app, "history.back()"),
-        "act:goForward" => eval_in_page(app, "history.forward()"),
+        "act:goBack" => page::eval(app, "history.back()"),
+        "act:goForward" => page::eval(app, "history.forward()"),
         "act:copyUrl" => {
             if let Some(url) = window.as_ref().and_then(|w| w.url().ok()) {
                 use tauri_plugin_clipboard_manager::ClipboardExt;

@@ -131,6 +131,7 @@ cd tauri-poc/src-tauri && pnpm dlx @tauri-apps/cli@2.12.4 android build --debug 
 - **YouTube Music 連結：** manifest 為 `https://music.youtube.com` 宣告了 VIEW intent filter，`MainActivity` 會載入收到的連結（冷啟動時排在 wry 的起始網址之後，執行中則經 `onNewIntent`）。這個 app 無法通過該網域的驗證，所以 Android 12 起不會自動接手：要在「應用程式資訊 › 預設開啟」加入 `music.youtube.com`；若裝了官方 YouTube Music app，它是已驗證的處理者，會優先。桌面版沒有對應功能（Windows 無法替 https 網址註冊處理程式）。
 - **Google 登入：** 在 WebView 裡無法登入，PoC 不打算繞過。登入頁本身送出的 POST（`AccountsSignInUi/data/batchexecute`、`browserinfo`）都帶 `X-Requested-With`，而 `shouldInterceptRequest` 拿不到 POST 內容，無法不帶標頭重送；`browserinfo` 也會回傳瀏覽器指紋。WebView 版目前只能未登入使用；可行的方向是換成 GeckoView（見下一節）。
 - 實機平板請改用 `--target aarch64`。
+- **頁面引擎：** 預設是 GeckoView（Google 登入可用，見「GeckoView 可行性驗證」）。`adb shell am start -n com.github.pear_devs.tauri_poc/.MainActivity --es engine webview` 改回 WebView，`--es engine gecko` 切回；選擇會記住。`MainActivity` 在 Rust 啟動前把它寫進環境變數 `PEAR_ENGINE`（`src/page.rs` 讀取）。下面關於 WebView 的說明只適用於 WebView 引擎。
 - **init script 執行兩次：** wry 產生的 Android 程式碼會用 `addDocumentStartJavaScript` 注入 init script，但 `RustWebViewClient.onPageStarted` 又對所有沒被 Rust 攔截的頁面再 `evaluateJavascript` 一次，沒有檢查前者是否可用（wry 的 bug；`generated/` 每次建置都會重新產生，不能直接改）。PoC 的 loader 以 `window.__pearRendererLoaded` 確保每個文件只載入一次 bundle；Tauri 自己的腳本仍會跑兩次，console 會出現無害的 `Cannot redefine property`。
 - **已知問題：** 偶爾啟動後頁面停在空白（`about:blank`），強制停止再開就會恢復，還沒追查。
 - debug APK 帶完整除錯資訊時約 374 MB（`.so` 240 MB），模擬器空間不足會裝不上；測試時可在建置前設 `CARGO_PROFILE_DEV_DEBUG=0 CARGO_PROFILE_DEV_STRIP=debuginfo`（約 134 MB）。
@@ -227,7 +228,7 @@ arm64 debug APK 61.6 MB（不含除錯資訊）。小米需要在開發者選項
 
 ## GeckoView 可行性驗證（Android，2026-10-24）
 
-為了在 Android 上登入 Google，測試把 Android WebView 換成 GeckoView（Firefox 的引擎）。`GeckoActivity` 是同一個 app 裡獨立的入口（桌面圖示「Pear (GeckoView)」），和 Tauri 版互不影響；`assets/pear-gecko/` 是內建的 WebExtension：`probe.js` 以 `world: "MAIN"`、`document_start` 注入頁面主世界，`report.js` 經 native messaging 把結果回報給 app（logcat tag `PearGecko`）。
+為了在 Android 上登入 Google，測試把 Android WebView 換成 GeckoView（Firefox 的引擎）。驗證時用的是同一個 app 裡獨立的入口 `GeckoActivity`（第 2 階段已移除，GeckoView 改到 `MainActivity` 裡）；`assets/pear-gecko/` 是內建的 WebExtension：`probe.js` 以 `world: "MAIN"`、`document_start` 注入頁面主世界，`report.js` 經 native messaging 把結果回報給 app（logcat tag `PearGecko`）。
 
 | 項目 | 結果（Xiaomi 平板，GeckoView 153） |
 |---|---|
@@ -239,7 +240,8 @@ arm64 debug APK 61.6 MB（不含除錯資訊）。小米需要在開發者選項
 
 - 用 GeckoView 153 而不是最新的 158：154 起依賴 Kotlin 2.4，這個專案的 Kotlin 2.2 讀不了。
 - 改用 GeckoView 的完整計畫（IPC 橋接、bundle 與設定的注入、Tauri 的角色、體積）見 [GECKOVIEW-PLAN.md](GECKOVIEW-PLAN.md)。
-- **第 1 階段（bundle 在 Gecko 裡跑）已完成：** 全部插件打開時，GeckoView 與 WebView 載入的插件相同（28 個）；找到並修正兩個 Firefox 才有的問題（`pear-trans` 元素建構失敗、AudioContext 被 autoplay 政策暫停而沒有聲音）。細節見計畫文件的「第 1 階段結果」。IPC 目前是 stub（`assets/pear-gecko/stub-ipc.js`），第 2 階段接上 Rust。
+- **第 1 階段（bundle 在 Gecko 裡跑）已完成：** 全部插件打開時，GeckoView 與 WebView 載入的插件相同（28 個）；找到並修正兩個 Firefox 才有的問題（`pear-trans` 元素建構失敗、AudioContext 被 autoplay 政策暫停而沒有聲音）。細節見計畫文件的「第 1 階段結果」。
+- **第 2 階段（IPC 橋接）已完成：** Android 版現在預設用 GeckoView 顯示頁面，頁面與 Rust 之間走 native messaging（`inject/tauri.ts` → extension → `GeckoBridgePlugin` → `src/gecko_bridge.rs`）。平板上驗證了設定讀寫、歌曲資訊、選單（開啟、點擊、外掛開關即時生效）、`net_fetch`（歌詞）、Rust 在頁面執行腳本（重新整理）與設定變更後的重新載入。細節與延遲見計畫文件的「第 2 階段結果」。
 
 ## 手動驗證清單
 

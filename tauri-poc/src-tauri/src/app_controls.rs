@@ -15,18 +15,7 @@ pub fn restart(app: &AppHandle) {
 /// Like the `peard:reload` handler: loads the configured URL again (used by
 /// the Retry button of the error page).
 pub fn reload(app: &AppHandle) {
-    let url = app.state::<Config>().get_str("url");
-    let Some(window) = app.get_webview_window(crate::ipc::MAIN_WEBVIEW) else {
-        return;
-    };
-    match url.parse() {
-        Ok(url) => {
-            let _ = window.navigate(url);
-        }
-        Err(_) => {
-            let _ = window.reload();
-        }
-    }
+    crate::page::navigate(app, &app.state::<Config>().get_str("url"));
 }
 
 pub fn register_ipc(ipc: &Ipc) {

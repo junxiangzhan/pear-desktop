@@ -3,9 +3,12 @@ package com.github.pear_devs.tauri_poc
 import android.content.Intent
 import android.graphics.Color
 import android.os.Bundle
+import android.system.Os
 import android.util.Log
 import android.view.View
+import android.view.ViewGroup
 import android.webkit.WebView
+import androidx.activity.OnBackPressedCallback
 import androidx.activity.SystemBarStyle
 import androidx.activity.enableEdgeToEdge
 import androidx.core.view.ViewCompat
@@ -17,8 +20,24 @@ import androidx.webkit.WebViewFeature
 
 class MainActivity : TauriActivity() {
   private var webView: WebView? = null
+  /** The page in GeckoView; null when this runs on the WebView. */
+  private var gecko: GeckoPage? = null
+  private var useGecko = true
+
+  // With GeckoView the WebView is only Tauri's; GeckoPage handles back
+  override val handleBackNavigation: Boolean
+    get() = !useGecko
 
   override fun onCreate(savedInstanceState: Bundle?) {
+    // The page engine: GeckoView, or the WebView with
+    // `am start ... --es engine webview` (remembered until changed). Rust
+    // reads it from PEAR_ENGINE (src/page.rs), so it is set before Rust starts
+    val prefs = getSharedPreferences("pear", MODE_PRIVATE)
+    intent?.getStringExtra("engine")?.let { prefs.edit().putString("engine", it).apply() }
+    useGecko = prefs.getString("engine", "gecko") != "webview"
+    Os.setenv("PEAR_ENGINE", if (useGecko) "gecko" else "webview", true)
+    Log.i(TAG, "page engine: " + if (useGecko) "GeckoView" else "WebView")
+
     // YouTube Music is dark: light system bar icons on its background
     enableEdgeToEdge(
       statusBarStyle = SystemBarStyle.dark(Color.TRANSPARENT),
@@ -36,10 +55,31 @@ class MainActivity : TauriActivity() {
       view.setPadding(bars.left, bars.top, bars.right, bars.bottom)
       WindowInsetsCompat.CONSUMED
     }
+    if (useGecko) {
+      val page = GeckoPage(this)
+      gecko = page
+      linkUrl(intent)?.let(page::open)
+      onBackPressedDispatcher.addCallback(this, object : OnBackPressedCallback(true) {
+        override fun handleOnBackPressed() {
+          if (page.canGoBack) page.goBack() else finish()
+        }
+      })
+    }
   }
 
   override fun onWebViewCreate(webView: WebView) {
     this.webView = webView
+    gecko?.let { page ->
+      // wry makes the WebView the content view right after this. GeckoView
+      // goes over it, inside android.R.id.content and its insets padding
+      webView.post {
+        addContentView(
+          page.view,
+          ViewGroup.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT),
+        )
+      }
+      return
+    }
     presentAsDesktopChrome(webView)
     // Opened from a YouTube Music link: load it after wry's start URL. wry
     // posts that load right after this returns, so post behind it
@@ -48,7 +88,13 @@ class MainActivity : TauriActivity() {
 
   override fun onNewIntent(intent: Intent) {
     super.onNewIntent(intent)
-    linkUrl(intent)?.let { url -> webView?.loadUrl(url) }
+    val url = linkUrl(intent) ?: return
+    gecko?.open(url) ?: webView?.loadUrl(url)
+  }
+
+  override fun onDestroy() {
+    gecko?.close()
+    super.onDestroy()
   }
 
   /** The music.youtube.com link this activity was opened with, if any. */

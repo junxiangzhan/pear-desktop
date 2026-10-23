@@ -14,11 +14,11 @@ use std::{
 
 use serde::Deserialize;
 use serde_json::{json, Map, Value};
-use tauri::{AppHandle, Emitter, Manager};
+use tauri::{AppHandle, Manager};
 use tokio::sync::watch;
 
 use crate::{
-    ipc::{self, Ipc, MAIN_WEBVIEW},
+    ipc::{self, Ipc},
     plugins::Plugins,
 };
 
@@ -287,9 +287,7 @@ impl Config {
             ipc::send_to_page(app, "config-changed", &[json!(id), config]);
         }
 
-        if let Err(error) = app.emit_to(MAIN_WEBVIEW, "pear:config", after) {
-            log::warn!("syncing the config to the page failed: {error}");
-        }
+        crate::page::emit(app, "pear:config", after);
     }
 }
 
