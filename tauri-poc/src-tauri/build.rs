@@ -16,6 +16,8 @@ fn main() {
             "prompt_submit",
             "net_fetch",
             "window_set_always_on_top",
+            "window_start_dragging",
+            "window_toggle_maximize",
         ]),
     ))
     .expect("failed to run tauri-build");

@@ -12,7 +12,25 @@ use std::{
 use serde_json::Value;
 use tauri::{AppHandle, Manager};
 
-use crate::{config::Config, ipc::Ipc, song_info::SongInfoProvider};
+use crate::{
+    config::Config,
+    ipc::{send_to_page, Ipc},
+    song_info::SongInfoProvider,
+};
+
+/// Asks the page to report player events (`peard:setup-<name>-listener`),
+/// now and whenever the player API loads again. Electron only asked on
+/// `peard:player-api-loaded`, which a plugin enabled at runtime has missed;
+/// the page sets each listener up once, so asking twice is harmless.
+pub fn request_player_listeners(app: &AppHandle, owner: &str, names: &'static [&'static str]) {
+    let send = move |app: &AppHandle| {
+        for name in names {
+            send_to_page(app, &format!("peard:setup-{name}-listener"), &[]);
+        }
+    };
+    send(app);
+    app.state::<Ipc>().on(owner, "peard:player-api-loaded", move |app, _| send(app));
+}
 
 pub trait Plugin: Send + Sync + 'static {
     fn id(&self) -> &'static str;
@@ -77,33 +95,50 @@ impl Plugins {
     }
 }
 
+mod amuse;
+mod api_server;
+#[cfg(desktop)]
+pub mod in_app_menu;
+mod discord;
 mod notifications;
 mod now_playing_post;
+#[cfg(desktop)]
 mod picture_in_picture;
 mod scrobbler;
 #[cfg(desktop)]
 mod shortcuts;
 mod sponsorblock;
 mod synced_lyrics;
+#[cfg(windows)]
+mod taskbar_mediacontrol;
+#[cfg(desktop)]
 mod transparent_player;
 
 /// The ported backends. Each id must also be removed from
 /// `tauri-poc/plugin-support.json` so the page enables it.
 pub fn all() -> Vec<Arc<dyn Plugin>> {
+    #[cfg_attr(mobile, allow(unused_mut))]
     let mut list: Vec<Arc<dyn Plugin>> = vec![
         Arc::new(sponsorblock::SponsorBlock),
         Arc::new(synced_lyrics::SyncedLyrics),
         Arc::new(now_playing_post::LumiaStream),
         Arc::new(now_playing_post::TunaObs::new()),
         Arc::new(notifications::Notifications::new()),
-        Arc::new(picture_in_picture::PictureInPicture::new()),
-        Arc::new(transparent_player::TransparentPlayer),
         Arc::new(scrobbler::Scrobbler::new()),
+        Arc::new(discord::Discord::new()),
+        Arc::new(api_server::ApiServer::new()),
+        Arc::new(amuse::Amuse::new()),
     ];
+    // Window and keyboard features of the desktop shell
     #[cfg(desktop)]
     {
+        list.push(Arc::new(picture_in_picture::PictureInPicture::new()));
+        list.push(Arc::new(transparent_player::TransparentPlayer));
         list.push(Arc::new(shortcuts::Shortcuts::new()));
         list.push(Arc::new(shortcuts::PreciseVolume::new()));
+        list.push(Arc::new(in_app_menu::InAppMenu::new()));
     }
+    #[cfg(windows)]
+    list.push(Arc::new(taskbar_mediacontrol::TaskbarMediaControl));
     list
 }

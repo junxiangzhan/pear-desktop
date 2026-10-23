@@ -43,7 +43,34 @@ const mainProcessOnly = (name: string) =>
 
 export const app = mainProcessOnly('app');
 export const BrowserWindow = mainProcessOnly('BrowserWindow');
-export const dialog = mainProcessOnly('dialog');
+type OpenDialogOptions = {
+  title?: string;
+  filters?: { name: string; extensions: string[] }[];
+  properties?: string[];
+};
+
+// Menus pick files (api-server's HTTPS certificate); the Rust side opens the
+// native dialog. Only single-file picking, the one use so far.
+export const dialog = new Proxy(
+  {
+    showOpenDialog: async (
+      windowOrOptions: unknown,
+      maybeOptions?: OpenDialogOptions,
+    ): Promise<{ canceled: boolean; filePaths: string[] }> =>
+      (await ipcRenderer.invoke(
+        'pear:show-open-dialog',
+        maybeOptions ?? windowOrOptions,
+      )) as { canceled: boolean; filePaths: string[] },
+  },
+  {
+    get(target, property) {
+      if (property in target) return target[property as keyof typeof target];
+      throw new Error(
+        `electron.dialog.${String(property)} is main-process only; it is not available in the Tauri page`,
+      );
+    },
+  },
+);
 export const globalShortcut = mainProcessOnly('globalShortcut');
 export const ipcMain = mainProcessOnly('ipcMain');
 export const Menu = mainProcessOnly('Menu');

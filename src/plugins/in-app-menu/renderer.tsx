@@ -15,8 +15,11 @@ const scrollStyle = `
 `;
 
 const isMacOS = navigator.userAgent.includes('Macintosh');
-const isNotWindowsOrMacOS =
-  !navigator.userAgent.includes('Windows') && !isMacOS;
+// Electron draws native window controls over the title bar on Windows
+// (`titleBarOverlay`) and macOS; hosts without that overlay set this flag
+const hasNativeWindowControls =
+  !(window as { __pearNoTitleBarOverlay?: boolean }).__pearNoTitleBarOverlay &&
+  (navigator.userAgent.includes('Windows') || isMacOS);
 
 const [config, setConfig] = createSignal<InAppMenuConfig>(
   defaultInAppMenuConfig,
@@ -36,7 +39,7 @@ export const onRendererLoad = async ({
     () => (
       <TitleBar
         enableController={
-          isNotWindowsOrMacOS && !config().hideDOMWindowControls
+          !hasNativeWindowControls && !config().hideDOMWindowControls
         }
         initialCollapsed={window.mainConfig.get('options.hideMenu')}
         ipc={ipc}

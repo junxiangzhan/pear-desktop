@@ -10,10 +10,7 @@ use serde_json::{json, Value};
 use tauri::{AppHandle, Manager};
 
 use super::Plugin;
-use crate::{
-    ipc::{send_to_page, Ipc},
-    song_info::{SongInfo, SongInfoProvider},
-};
+use crate::song_info::{SongInfo, SongInfoProvider};
 
 fn millis(seconds: Option<f64>) -> Option<u64> {
     seconds.filter(|s| *s > 0.0).map(|s| (s * 1000.0).round() as u64)
@@ -21,9 +18,7 @@ fn millis(seconds: Option<f64>) -> Option<u64> {
 
 /// Both plugins ask the page to report playback time.
 fn request_time_updates(app: &AppHandle, owner: &str) {
-    app.state::<Ipc>().on(owner, "peard:player-api-loaded", |app, _| {
-        send_to_page(app, "peard:setup-time-changed-listener", &[]);
-    });
+    super::request_player_listeners(app, owner, &["time-changed"]);
 }
 
 fn has_song(song: &SongInfo) -> bool {

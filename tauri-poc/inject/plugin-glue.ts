@@ -3,7 +3,9 @@
 // through the `custom-electron-prompt` compat. Same strings and results as
 // the Electron backends they replace.
 import prompt from './compat/prompt';
-import { handleLocally, ipcRenderer } from './ipc';
+import './crossfade';
+import { emitLocal, handleLocally, ipcRenderer } from './ipc';
+import { invoke } from './tauri';
 
 import { t } from '@/i18n';
 
@@ -66,4 +68,42 @@ const pipKeys = (event: KeyboardEvent) => {
 ipcRenderer.on('peard:pip-toggle', (_, inPiP) => {
   if (inPiP) window.addEventListener('keydown', pipKeys, true);
   else window.removeEventListener('keydown', pipKeys, true);
+});
+
+// api-server's like state: Electron read it with `executeJavaScript`
+ipcRenderer.on('pear:get-like-state', () => {
+  const button = document.querySelector<HTMLElement & { likeStatus?: string }>(
+    '#like-button-renderer',
+  );
+  ipcRenderer.send('pear:like-state', button?.likeStatus ?? null);
+});
+
+// Frameless window: CSS `app-region: drag` (in-app-menu's title bar) moves the
+// window, as in Electron. The nearest element with an app-region decides.
+const appRegion = (target: EventTarget | null) => {
+  for (let node = target as Element | null; node; node = node.parentElement) {
+    const region = getComputedStyle(node).getPropertyValue('-webkit-app-region').trim();
+    if (region === 'drag' || region === 'no-drag') return region;
+  }
+  return null;
+};
+window.addEventListener(
+  'mousedown',
+  (event) => {
+    if (event.button !== 0 || appRegion(event.target) !== 'drag') return;
+    event.preventDefault();
+    if (event.detail === 2) void invoke('window_toggle_maximize');
+    else void invoke('window_start_dragging');
+  },
+  true,
+);
+
+// in-app-menu: backtick toggles the menu (`electron-localshortcut` in Electron)
+window.addEventListener('keydown', (event) => {
+  if (event.key !== '`' || event.ctrlKey || event.altKey || event.metaKey) return;
+  const target = event.target as HTMLElement | null;
+  if (target?.isContentEditable || ['INPUT', 'TEXTAREA', 'SELECT'].includes(target?.tagName ?? '')) {
+    return;
+  }
+  emitLocal('toggle-in-app-menu');
 });

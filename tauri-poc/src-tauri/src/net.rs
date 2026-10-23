@@ -10,12 +10,17 @@ use std::{collections::HashMap, sync::OnceLock};
 use serde::{Deserialize, Serialize};
 
 /// Hosts the page may fetch through Rust: the synced-lyrics providers that
-/// use `crossOriginFetch` (MusixMatch goes through `synced-lyrics:fetch`).
+/// use `crossOriginFetch` (MusixMatch goes through `synced-lyrics:fetch`),
+/// and crossfade's youtubei.js (www.youtube.com) and BotGuard
+/// (jnn-pa.googleapis.com). No cookies are sent, so these grant nothing the
+/// page could not already request anonymously.
 const PAGE_FETCH_HOSTS: &[&str] = &[
     "lrclib.net",
     "genius.com",
     "www.megalobiz.com",
     "ytmbrowseproxy.zvz.be",
+    "www.youtube.com",
+    "jnn-pa.googleapis.com",
 ];
 
 pub fn client() -> &'static reqwest::Client {

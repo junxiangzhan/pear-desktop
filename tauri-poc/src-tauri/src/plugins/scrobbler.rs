@@ -12,15 +12,17 @@ use std::{
 };
 
 use serde_json::{json, Value};
-use tauri::{
-    webview::PageLoadEvent, AppHandle, Manager, WebviewUrl, WebviewWindowBuilder,
-};
+use tauri::{AppHandle, Manager};
+#[cfg(desktop)]
+use tauri::{webview::PageLoadEvent, WebviewUrl, WebviewWindowBuilder};
+#[cfg(desktop)]
 use tokio::sync::oneshot;
 
 use super::Plugin;
+#[cfg(desktop)]
+use crate::ipc::MAIN_WEBVIEW;
 use crate::{
     config::Config,
-    ipc::MAIN_WEBVIEW,
     song_info::{MediaType, SongInfo, SongInfoEvent, SongInfoProvider},
 };
 
@@ -99,7 +101,15 @@ async fn create_token(config: &Value) -> Option<String> {
     lastfm_get(config, "auth.gettoken", &[]).await?["token"].as_str().map(str::to_owned)
 }
 
+/// The approval page needs a second window, which mobile does not have.
+#[cfg(mobile)]
+async fn authenticate(_app: &AppHandle, _config: &Value, _token: &str) -> bool {
+    log::warn!("scrobbler: last.fm sign-in needs a desktop window");
+    false
+}
+
 /// Opens last.fm's approval page; resolves true once the user approved.
+#[cfg(desktop)]
 async fn authenticate(app: &AppHandle, config: &Value, token: &str) -> bool {
     const APPROVED: &str = "pear-lastfm:approved";
     let url = format!(

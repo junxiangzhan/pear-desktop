@@ -1,16 +1,23 @@
 //! Tauri shell for Pear Desktop: hosts music.youtube.com with the renderer
 //! bundle injected, and reimplements the Electron main process in Rust.
 
+#[cfg(target_os = "android")]
+mod android_media;
 mod app_controls;
 mod config;
 mod dialogs;
 mod ipc;
+#[cfg(desktop)]
+mod menu;
+#[cfg(mobile)]
+#[path = "menu_mobile.rs"]
 mod menu;
 mod net;
 mod plugins;
 mod prompt;
 mod song_controls;
 mod song_info;
+#[cfg(desktop)]
 mod tray;
 mod window;
 
@@ -95,8 +102,21 @@ fn payload(app: &tauri::AppHandle) -> String {
     )
 }
 
+/// Like `app.setAppUserModelId` in src/index.ts: the identity Windows shows
+/// for the app (taskbar grouping, notifications, media controls).
+#[cfg(windows)]
+fn set_app_user_model_id(identifier: &str) {
+    use windows::{core::HSTRING, Win32::UI::Shell::SetCurrentProcessExplicitAppUserModelID};
+    if let Err(error) = unsafe { SetCurrentProcessExplicitAppUserModelID(&HSTRING::from(identifier)) } {
+        log::warn!("setting the AppUserModelID failed: {error}");
+    }
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
+    #[cfg(windows)]
+    set_app_user_model_id("com.github.pear-devs.tauri-poc");
+
     let mut builder = tauri::Builder::default()
         .plugin(
             tauri_plugin_log::Builder::new()
@@ -120,16 +140,29 @@ pub fn run() {
                 }
             }))
             // Replaces the hand-rolled window-size/position saving in src/index.ts
-            .plugin(tauri_plugin_window_state::Builder::new().build())
+            .plugin(
+                tauri_plugin_window_state::Builder::new()
+                    // Geometry only: decorations follow in-app-menu and
+                    // visibility follows the tray options, not the last session
+                    .with_state_flags(
+                        tauri_plugin_window_state::StateFlags::all()
+                            - tauri_plugin_window_state::StateFlags::DECORATIONS
+                            - tauri_plugin_window_state::StateFlags::VISIBLE,
+                    )
+                    .build(),
+            )
             .plugin(tauri_plugin_autostart::init(
                 tauri_plugin_autostart::MacosLauncher::LaunchAgent,
                 None,
             ))
             .plugin(tauri_plugin_global_shortcut::Builder::new().build());
     }
+    #[cfg(target_os = "android")]
+    {
+        builder = builder.plugin(android_media::init());
+    }
 
-    builder
-        .invoke_handler(tauri::generate_handler![
+    builder = builder.invoke_handler(tauri::generate_handler![
             ipc::ipc_send,
             ipc::ipc_invoke,
             config::config_set,
@@ -143,8 +176,15 @@ pub fn run() {
             prompt::prompt_submit,
             net::net_fetch,
             window::window_set_always_on_top,
-        ])
-        .on_menu_event(menu::handle_event)
+            window::window_start_dragging,
+            window::window_toggle_maximize,
+        ]);
+    #[cfg(desktop)]
+    {
+        builder = builder.on_menu_event(menu::handle_event);
+    }
+
+    builder
         .register_uri_scheme_protocol(PROTOCOL, |ctx, request| {
             if request.uri().path() != "/renderer.js" {
                 return Response::builder()
@@ -173,6 +213,9 @@ pub fn run() {
             config::register_ipc(&ipc);
             song_info::register_ipc(&ipc);
             app_controls::register_ipc(&ipc);
+            dialogs::register_ipc(&ipc);
+            #[cfg(target_os = "android")]
+            android_media::register(app.handle());
 
             // Diagnostic switch: inject a file from disk instead of the built-in bundle
             let bundle = match std::env::var("PEAR_POC_INJECT_FILE") {
@@ -184,8 +227,11 @@ pub fn run() {
             create_main_window(app)?;
             // Built with fallback labels now; rebuilt once the page sends translations
             menu::rebuild(app.handle());
-            tray::sync(app.handle());
-            tray::register(app.handle());
+            #[cfg(desktop)]
+            {
+                tray::sync(app.handle());
+                tray::register(app.handle());
+            }
             Ok(())
         })
         .run(tauri::generate_context!())
@@ -216,8 +262,14 @@ fn create_main_window(app: &tauri::App) -> tauri::Result<()> {
 
     #[cfg(desktop)]
     {
+        // in-app-menu draws the title bar and menu in the page (restart needed)
+        let in_app_menu = plugins::in_app_menu::enabled_at_startup(&config);
+        app.state::<menu::MenuState>()
+            .in_app
+            .store(in_app_menu, std::sync::atomic::Ordering::Relaxed);
         let tray = config.get_bool("options.tray");
         builder = builder
+            .decorations(!in_app_menu)
             .title("Pear Desktop")
             .inner_size(1100.0, 700.0)
             .min_inner_size(325.0, 425.0)

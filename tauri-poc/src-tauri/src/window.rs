@@ -69,6 +69,7 @@ pub fn install_close_to_tray(window: &WebviewWindow) {
     });
 }
 
+#[cfg_attr(mobile, allow(dead_code))] // menu items, desktop only
 pub fn set_start_at_login(app: &AppHandle, enabled: bool) {
     #[cfg(desktop)]
     {
@@ -84,6 +85,7 @@ pub fn set_start_at_login(app: &AppHandle, enabled: bool) {
 }
 
 /// The "Custom window title" menu item.
+#[cfg_attr(mobile, allow(dead_code))]
 pub fn prompt_custom_title(app: &AppHandle) {
     let app = app.clone();
     tauri::async_runtime::spawn(async move {
@@ -111,10 +113,46 @@ pub fn prompt_custom_title(app: &AppHandle) {
     });
 }
 
+/// Drag regions (CSS `app-region: drag`) of the frameless window, e.g.
+/// in-app-menu's title bar; the page forwards the mouse down.
+#[tauri::command]
+pub fn window_start_dragging(app: AppHandle) -> Result<(), String> {
+    let window = app.get_webview_window(MAIN_WEBVIEW).ok_or("main window is gone")?;
+    #[cfg(desktop)]
+    return window.start_dragging().map_err(|e| e.to_string());
+    #[cfg(mobile)]
+    return desktop_only(window);
+}
+
+/// Double-click on a drag region, like a native title bar.
+#[tauri::command]
+pub fn window_toggle_maximize(app: AppHandle) -> Result<(), String> {
+    let window = app.get_webview_window(MAIN_WEBVIEW).ok_or("main window is gone")?;
+    #[cfg(desktop)]
+    {
+        let result = if window.is_maximized().unwrap_or(false) { window.unmaximize() } else { window.maximize() };
+        result.map_err(|e| e.to_string())
+    }
+    #[cfg(mobile)]
+    desktop_only(window)
+}
+
 #[tauri::command]
 pub fn window_set_always_on_top(app: AppHandle, flag: bool) -> Result<(), String> {
     let window = app
         .get_webview_window(MAIN_WEBVIEW)
         .ok_or("main window is gone")?;
-    window.set_always_on_top(flag).map_err(|e| e.to_string())
+    #[cfg(desktop)]
+    return window.set_always_on_top(flag).map_err(|e| e.to_string());
+    #[cfg(mobile)]
+    {
+        let _ = flag;
+        desktop_only(window)
+    }
+}
+
+/// Window management the mobile webview does not have.
+#[cfg(mobile)]
+fn desktop_only(_window: WebviewWindow) -> Result<(), String> {
+    Err("not available on mobile".into())
 }

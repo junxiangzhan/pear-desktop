@@ -44,6 +44,9 @@ Object.assign(window, {
   reload: () => location.reload(),
   ELECTRON_RENDERER_URL: undefined,
   __pearCrossOriginFetch: crossOriginFetch,
+  // No native window controls over a frameless window (Electron's
+  // `titleBarOverlay`), so in-app-menu draws its own
+  __pearNoTitleBarOverlay: true,
   // Debug hook: deliver a message to page listeners from the DevTools console
   __pearIpcEmit: emitLocal,
 });

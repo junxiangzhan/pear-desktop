@@ -20,6 +20,8 @@
     "allow-menu-set-checked",
     "allow-prompt-open",
     "allow-net-fetch",
-    "allow-window-set-always-on-top"
+    "allow-window-set-always-on-top",
+    "allow-window-start-dragging",
+    "allow-window-toggle-maximize"
   ]
 }

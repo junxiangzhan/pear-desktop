@@ -61,6 +61,7 @@ pub fn mute_unmute(app: &AppHandle) {
 }
 
 pub fn set_fullscreen(app: &AppHandle, fullscreen: bool) {
+    #[cfg(desktop)]
     if let Some(window) = app.get_webview_window(crate::ipc::MAIN_WEBVIEW) {
         let _ = window.set_fullscreen(fullscreen);
     }

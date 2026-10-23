@@ -40,9 +40,36 @@ const dropExtractedCss = (): Plugin => ({
   },
 });
 
+// Main-process modules that a page-side plugin part (a menu) imports, swapped
+// for page modules that reach the Rust port over IPC
+const backendProxies: Record<string, string> = {
+  'src/plugins/discord/main.ts': compat('discord.ts'),
+};
+const proxyBackends = (): Plugin => {
+  const targets = new Map(
+    Object.entries(backendProxies).map(([file, proxy]) => [
+      resolve(repoRoot, file).replaceAll('\\', '/'),
+      proxy,
+    ]),
+  );
+  return {
+    name: 'pear-proxy-backends',
+    enforce: 'pre',
+    async resolveId(source, importer, options) {
+      if (!importer || !/\bmain(?:\.ts)?$/.test(source)) return null;
+      const resolved = await this.resolve(source, importer, {
+        ...options,
+        skipSelf: true,
+      });
+      return (resolved && targets.get(resolved.id.replaceAll('\\', '/'))) ?? resolved;
+    },
+  };
+};
+
 export default defineConfig({
   root: resolve(repoRoot, 'src'),
   plugins: [
+    proxyBackends(),
     // The page runs what Electron splits across the preload, renderer and
     // menu-building main process; backends are reimplemented in Rust
     pluginLoader(['renderer', 'preload', 'menu'], {
@@ -81,6 +108,7 @@ export default defineConfig({
       { find: /^electron-is$/, replacement: compat('electron-is.ts') },
       { find: /^custom-electron-prompt$/, replacement: compat('prompt.ts') },
       { find: /^@\/config$/, replacement: compat('config.ts') },
+      { find: /^@\/config\/plugins$/, replacement: compat('config-plugins.ts') },
       { find: /^@\/providers\/prompt-options$/, replacement: compat('prompt-options.ts') },
       { find: '@assets', replacement: resolve(repoRoot, 'assets') },
       { find: '@', replacement: resolve(repoRoot, 'src') },

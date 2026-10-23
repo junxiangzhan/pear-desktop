@@ -15,6 +15,7 @@ music.youtube.com 頁面（TS bundle）            Rust（src-tauri/src）
        click(commandId) ◀── peard:menu-event ─  tray.rs / window.rs / prompt.rs / dialogs.rs
  crossOriginFetch ──── net_fetch（白名單）──▶  net.rs
                                               plugins/*.rs  插件 backend（Plugin trait）
+                                              android_media.rs ──▶ PlaybackService.kt（Android）
 ```
 
 ```
@@ -23,20 +24,22 @@ tauri-poc/
 │  ├─ entry.ts               # 順序：shim → plugin-stubs → preload-plugins → menu-runtime → plugin-glue → @/renderer
 │  ├─ shim.ts                # window.ipcRenderer / mainConfig / electronIs / __pearCrossOriginFetch
 │  ├─ ipc.ts、tauri.ts        # 對 Rust 的 IPC（不依賴 @tauri-apps/api）
-│  ├─ compat/                # build alias：electron、electron-is、custom-electron-prompt、@/config、prompt-options
+│  ├─ compat/                # build alias：electron、electron-is、custom-electron-prompt、@/config、@/config/plugins、prompt-options；
+│  │                         # discord.ts 取代 discord 選單 import 的 main.ts（`backendProxies`）
 │  ├─ plugin-stubs.ts        # 把插件預設設定送給 Rust（plugins_manifest）
 │  ├─ preload-plugins.ts     # 在頁面裡跑插件的 preload 部分（沿用 src/loader/preload.ts）
-│  ├─ menu-runtime.ts        # 執行插件 menu()、序列化給 Rust、處理點擊
-│  └─ plugin-glue.ts         # 只有 UI 的 backend（captions / quality / music-together 提示框、PiP 按鍵）
+│  ├─ menu-runtime.ts        # 執行插件 menu()、序列化給 Rust、處理點擊；順便送出 Rust 對話框要用的翻譯
+│  ├─ plugin-glue.ts         # 只有 UI 的 backend（提示框、PiP 按鍵、無邊框視窗拖曳、like 狀態）
+│  └─ crossfade.ts           # crossfade 的 `audio-url`（youtubei.js 在頁面裡跑）
 ├─ plugin-support.json       # 尚未移植的插件清單（Vite 與 Rust 共用）
 ├─ placeholder/prompt.html   # 提示框視窗（取代 custom-electron-prompt）
 └─ src-tauri/
-   ├─ src/                   # Rust 主行程（見上圖）
+   ├─ src/                   # Rust 主行程（見上圖）；menu_mobile.rs 是行動版的 `menu`（只保留翻譯）
    ├─ capabilities/          # ytm-remote.json：遠端 origin 只能呼叫這些指令；prompt.json
-   └─ gen/android            # `tauri android init` 產生的 Android 專案
+   └─ gen/android            # `tauri android init` 產生的 Android 專案；MainActivity、PlaybackService、MediaSessionPlugin 是手寫的
 ```
 
-`src/` 與 `vite-plugins/` 的配合修改（不影響 Electron 行為）：`plugin-loader` 可一次保留多個插件部分並排除指定插件；`virtual:plugins` 可輸出多個 `<mode>Plugins()`；新增 `src/providers/net.ts`（`crossOriginFetch`），synced-lyrics 的 LRCLib / Genius / Megalobiz / YTMusic 改用它；notifications 的純常數移到 `constants.ts`；scrobbler 選單不再 import backend。
+`src/` 與 `vite-plugins/` 的配合修改（不影響 Electron 行為）：`plugin-loader` 可一次保留多個插件部分並排除指定插件；`virtual:plugins` 可輸出多個 `<mode>Plugins()`；新增 `src/providers/net.ts`（`crossOriginFetch`），synced-lyrics 的 LRCLib / Genius / Megalobiz / YTMusic 改用它；notifications 的純常數移到 `constants.ts`；scrobbler 選單不再 import backend；in-app-menu 在宿主設定 `__pearNoTitleBarOverlay` 時（Tauri 沒有 `titleBarOverlay`）自己畫視窗按鈕。
 
 ### 注入方式
 
@@ -55,13 +58,18 @@ Rust 擁有 `config.json`（`config.rs`，`defaults.ts` 的移植）。renderer 
 | 狀態 | 插件 |
 |---|---|
 | 純 renderer，原本就能用 | album-actions、album-color-theme、ambient-mode、clock、equalizer、navigation、performance-improvement、playback-speed、video-toggle、visualizer 等 |
-| backend 已移植到 Rust | sponsorblock、synced-lyrics（`synced-lyrics:fetch`）、lumiastream、tuna-obs、notifications（基本模式）、picture-in-picture、transparent-player、scrobbler、shortcuts（全域／視窗內快捷鍵、媒體鍵）、precise-volume |
-| backend 只有 UI，改在頁面處理 | captions-selector、quality-changer、music-together（`plugin-glue.ts`） |
-| 尚未移植（強制停用、選單變灰） | amuse、api-server、auth-proxy-adapter、crossfade、discord、do-not-track、downloader、in-app-menu、taskbar-mediacontrol、touchbar |
+| backend 已移植到 Rust | sponsorblock、synced-lyrics（`synced-lyrics:fetch`）、lumiastream、tuna-obs、notifications（基本模式）、picture-in-picture、transparent-player、scrobbler、shortcuts（全域／視窗內快捷鍵、媒體鍵）、precise-volume、discord、api-server、amuse、in-app-menu、taskbar-mediacontrol（Windows） |
+| backend 改在頁面處理 | captions-selector、quality-changer、music-together（只有 UI，`plugin-glue.ts`）、crossfade（`crossfade.ts`） |
+| 尚未移植（強制停用、選單變灰） | auth-proxy-adapter、do-not-track、downloader、touchbar |
 
-- **crossfade：** 它的 backend 用 youtubei.js 解析串流網址，但 youtubei.js 17 需要自備 JavaScript 直譯器才能 decipher（Node 與瀏覽器版都只內建會丟例外的 `evaluate`），所以 Electron 版的 crossfade 很可能本來就無法運作，先不移植。
+- **crossfade：** `audio-url` 改在頁面裡用 youtubei.js 取得串流網址（與 `src/plugins/utils/main/youtubei.ts` 相同的做法：`new Function` 直譯器、BotGuard 在隱藏 iframe 裡跑、PO token minter 快取），跨網域請求經 `net_fetch`（白名單加了 `www.youtube.com`、`jnn-pa.googleapis.com`）。
+- **discord：** Rust 直接講 Discord 的本機 IPC（Windows named pipe `discord-ipc-N`、Unix socket），取代 `@xhayper/discord-rpc`；節流、暫停逾時清除、自動重連照搬 `DiscordService`。選單在頁面執行，它 import 的 `main.ts` 在打包時換成 `compat/discord.ts`（透過 IPC 讀連線狀態、連線、清除）。
+- **api-server：** axum 重寫，路由、JWT（HS256，與 hono/jwt 互通）、CORS、WebSocket 事件與 Electron 版相同；`AUTH_AT_FIRST` 的 Allow/Deny 對話框用頁面送來的翻譯。沒有移植 `/doc`（OpenAPI）與 `/swagger`。預設 secret 是頁面載入時的 `Date.now()`，Rust 第一次啟動時把它存進設定，token 才不會在重新整理後失效。HTTPS 用 rustls（ring）。
+- **amuse：** 9863 埠的 `/`、`/query`、`/api`，axum。
+- **in-app-menu：** 啟用時（Windows 預設）主視窗無邊框，選單與視窗按鈕由頁面畫，Rust 回答 `get-menu`／`peard:menu-event`／`window-*`。`app-region: drag` 由 `plugin-glue.ts` 轉成 `start_dragging`（雙擊最大化）。window-state 插件不還原 decorations／visible，否則會蓋掉這個設定。
+- **系統媒體控制：** Windows 的 SMTC 由 WebView2 自己提供（顯示名稱是 `msedgewebview2.exe`，設定 AppUserModelID 也不會變）；taskbar-mediacontrol 的縮圖按鈕用 `ITaskbarList3`。Linux 的 MPRIS 與 macOS Now Playing 尚未移植（無法在 Windows 上建置測試）。Android 見下方「背景播放」。
 - **notifications：** 互動式 Windows toast（附播放按鈕）尚未移植；`interactive` 開啟時退回基本通知。
-- **shortcuts：** Linux 的 MPRIS 尚未移植。
+- **啟用時要求播放器事件：** Electron 的 backend 只在 `peard:player-api-loaded` 時要求 `peard:setup-*-listener`，執行中才啟用的插件會錯過；Rust 版（`plugins::request_player_listeners`）啟動時也會立刻要求一次（頁面端是 singleton，重複要求沒有影響）。
 
 **CSS：** renderer 的 `import 'mdui/mdui.css'` 會被 Vite 抽成獨立 CSS 檔，但 Electron 的 `get-renderer-script` 只讀 `<script>`，所以這份 CSS 在 Electron 裡從未套用。PoC 一度把它內嵌注入，結果 mdui 的 `:root { background-color }` 在 YTM 半透明背景後面畫出灰色色塊；現在改為直接丟棄，行為與 Electron 一致。
 
@@ -75,6 +83,8 @@ Rust 擁有 `config.json`（`config.rs`，`defaults.ts` 的移植）。renderer 
 - **呼叫視窗 API 時不要持有鎖。** `set_position`／`set_size` 會在同一執行緒同步觸發 window event；若 event handler 要取同一把鎖就會死結（PiP 曾因此讓整個 app 無回應）。
 - **HTML 全螢幕會變成視窗全螢幕。** Tauri runtime 會把頁面的 fullscreen 直接轉成視窗全螢幕，沒有 Electron `setFullScreenable(false)` 的對應；PiP 在 Resized 事件裡把它復原。
 - **`set_size` 設的是內部尺寸。** 要還原尺寸就要存 `inner_size()`，存 `outer_size()` 會每次多出邊框與選單列的高度。
+- **選單項目的方法也會等主執行緒。** 在 worker 上呼叫 `CheckMenuItem::is_checked()` 時持有 `checks` 鎖，而主執行緒正在重建選單、要取同一把鎖 → 整個 app 無回應（discord 連線後刷新選單時遇到）。現在一律先把項目 clone 出鎖再呼叫。
+- **主行程程式碼要能在行動版編譯。** 選單、系統匣、提示框視窗、視窗操作在 Android 上不存在；這些模組或函式以 `cfg(desktop)` 隔開，行動版的 `menu` 只保留頁面送來的翻譯。
 
 ## 執行（Windows）
 
@@ -116,6 +126,13 @@ cd tauri-poc/src-tauri && pnpm dlx @tauri-apps/cli@2.12.4 android build --debug 
 - 模擬器若出現 `ERR_NAME_NOT_RESOLVED`（主機有 Tailscale 等 VPN 時常見），用 `emulator -avd <name> -dns-server 8.8.8.8` 啟動。
 - 預設使用桌面版 Chrome 的 User-Agent，否則會拿到行動版 YTM，插件無法運作。
 - 實機平板請改用 `--target aarch64`。
+- debug APK 帶完整除錯資訊時約 374 MB（`.so` 240 MB），模擬器空間不足會裝不上；測試時可在建置前設 `CARGO_PROFILE_DEV_DEBUG=0 CARGO_PROFILE_DEV_STRIP=debuginfo`（約 134 MB）。
+
+### 背景播放
+
+- `PlaybackService`（`mediaPlayback` 類型的 foreground service + `MediaSession`）讓 Android 不會凍結行程，並提供系統媒體控制（通知、鎖定畫面、媒體鍵）。歌曲資訊由 `android_media.rs` 透過 Tauri 的 Android plugin（`MediaSessionPlugin`）送過去；按鈕經 Channel 回到 Rust 變成 `song_controls`。每秒的時間更新只有在跳轉（差超過 2 秒）時才轉送，其餘由 `PlaybackState` 自行推算。
+- **只有 foreground service 還不夠：** WebView 被 `onPause()`（`WryActivity` 會呼叫）或視窗變成不可見時，Chromium 會暫停有影像軌的媒體，而 YTM 一律用 `<video>` 播放。`MainActivity` 在 service 執行期間於 `onPause` 後立刻 `webView.onResume()`、`onStop` 後把視窗可見度報回 `VISIBLE`。
+- 暫停時通知仍是常駐的（service 不離開前景），避免之後從背景恢復播放時受 Android 12 起的「背景不可啟動前景服務」限制。從最近任務滑掉 app 會停止 service（WebView 跟著 activity 消失）。
 
 ## 驗證結果（2026-10-23）
 
@@ -125,7 +142,7 @@ cd tauri-poc/src-tauri && pnpm dlx @tauri-apps/cli@2.12.4 android build --debug 
 | 插件載入 | ✅ navigation、performance-improvement、playback-speed | ✅（同一份 bundle） |
 | 未登入播放 | ✅ 4 秒前進 4.01 秒 | ✅ 前景可播（含廣告） |
 | 設定存取（遠端 IPC） | ✅ `config.json` 寫入並於重開後生效 | 未測 |
-| 背景播放 | — | ❌ 按 Home 後立即暫停；行程被 Android cached-apps freezer 凍結（`isFrozen=true`），需要 foreground service |
+| 背景播放 | — | ✅（第二輪）按 Home 後持續播放（8 秒前進 8.3 秒、`isFrozen=false`）；修正前按 Home 即暫停、行程被 cached-apps freezer 凍結 |
 | Google 登入 | ✅ 預設 UA 可登入；正常關閉後重開仍保持登入（完整的 SID/SAPISID/LOGIN_INFO cookie）。用 `taskkill /F` 強制結束會來不及寫回 cookie，登入狀態會遺失 | 未測 |
 | 流暢度：模擬捲動（debug build，未登入） | 原始網站 vs 注入後幾乎相同：靜置 ~165 fps；捲動 ~138 fps、長任務 7 次（兩者皆是 YTM 自身載入內容）。同條件下 Electron 開發版的滾輪測試並沒有比較好 | 靜置 59.3 fps、p95 16.8 ms、無長任務 |
 | 流暢度：使用者實際滾輪捲動（已登入，20 秒） | `performance-improvement` **開啟：550 個掉幀**、主執行緒忙碌 76%、`animationiteration` 事件 18,854 次。**關閉：0 個掉幀**、忙碌 22%、無 `animationiteration`。兩者 GC 都很少（Major GC 4–5 次、合計約 60–110 ms），卡頓不是 GC 造成的 | — |
@@ -166,10 +183,29 @@ cd tauri-poc/src-tauri && pnpm dlx @tauri-apps/cli@2.12.4 android build --debug 
 
 未驗證：通知是否實際顯示（沒有錯誤紀錄，但沒有目視確認）、scrobbler 對 Last.fm / ListenBrainz 的實際送出（沒有測試帳號，只有簽章的單元測試）、lumiastream / tuna-obs（需要對應的本機程式）、移植後的捲動流暢度（未重新量測）。
 
+## 第二輪移植的驗證結果（2026-10-23）
+
+| 項目 | 結果 |
+|---|---|
+| crossfade | `audio-url` 約 290 ms 回傳帶 `pot` 的 googlevideo `audio/mp4` 網址，可播放、可跳到 150 秒；第二次（快取 minter）265 ms |
+| 系統媒體控制（Windows） | WebView2 原生 SMTC：WinRT `TryTogglePlayPauseAsync` 可暫停／繼續 |
+| taskbar-mediacontrol | 送 `THBN_CLICKED` → `peard:toggle-play`／`previous-video`／`next-video`（按鈕外觀未目視確認） |
+| in-app-menu | 無邊框視窗、頁面畫出選單與視窗按鈕、原生選單消失；點選單項目（Always on top）→ 設定與視窗置頂同步；雙擊標題列最大化；`window-maximize`/`unmaximize` 事件送達；關閉按鈕可關閉 |
+| discord | 以假的 Discord IPC server（`discord-ipc-0`）驗證：握手 → READY → `SET_ACTIVITY` 內容與 Electron 版格式相同（Listening、按鈕、時間戳、`status_display_type`）；選單顯示「Connected」；Clear activity；server 關閉後狀態變 false、重開後 5 秒內自動重連 |
+| api-server | 未帶 token 401、`/auth/{id}`（已授權 client）取得 token、song／volume／like-state／shuffle／repeat-mode／queue/next 回應正確、竄改的 token 401、CORS preflight（含 Private-Network）；WebSocket：`PLAYER_INFO`、暫停／播放的 `PLAYER_STATE_CHANGED`、`VOLUME_CHANGED`、`POSITION_CHANGED`，無 token 以 1008 關閉；重開 app 後自動啟動 |
+| amuse | `/` 回傳翻譯文字、`/query` 回傳目前歌曲、CORS |
+| Android 背景播放 | 模擬器（API 34）：foreground service（type mediaPlayback）、MediaSession 顯示封面／標題／進度；背景 30 秒持續播放；媒體鍵暫停／播放／下一首在背景有效；正常播放時 30 秒內 0 次 session 更新 |
+| Electron 不受影響 | `pnpm typecheck`、`pnpm lint`、`pnpm build` 通過；`cargo test`（24）、`cargo clippy` 無警告；Android 版可編譯 |
+
+未驗證：真正的 Discord 用戶端、api-server 的 Allow/Deny 對話框與 HTTPS、HTTPS 憑證選檔對話框、Android 實機與 Android 上的 api-server／discord。
+
 ## 手動驗證清單
 
 - [x] Google 登入成功（Windows，預設 UA）
 - [x] 登入後正常關閉、重開仍保持登入（Windows）
 - [ ] 確認單獨按 Alt 進入選單模式時，頁面本身是否也會凍結（若是，需攔截 `WM_SYSCOMMAND`/`SC_KEYMENU`）
 - [ ] 通知實際顯示、Last.fm 登入流程、ListenBrainz 送出
-- [ ] Android 實機平板：登入、播放、觸控操作
+- [ ] Android 實機平板：登入、播放、觸控操作、背景播放與鎖定畫面控制
+- [ ] discord：實際 Discord 用戶端顯示 Rich Presence
+- [ ] api-server：新 client 的 Allow/Deny 對話框、HTTPS
+- [ ] taskbar-mediacontrol：縮圖按鈕外觀

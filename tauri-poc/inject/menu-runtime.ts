@@ -138,9 +138,10 @@ const build = async () => {
   });
 };
 
-// Translations for every `main.menu.*` and `main.tray.*` key; Rust builds the
-// core menu and the tray with them. Interpolated values stay as `{name}`
-// placeholders for Rust to fill (e.g. the tray tooltip's artist and title).
+// Translations for every `main.menu.*` and `main.tray.*` key, plus dialogs
+// that Rust backends show; Rust builds the core menu and the tray with them.
+// Interpolated values stay as `{name}` placeholders for Rust to fill (e.g.
+// the tray tooltip's artist and title).
 const coreMenuLabels = async () => {
   const flatten = (node: unknown, prefix: string): string[] =>
     node && typeof node === 'object'
@@ -148,12 +149,21 @@ const coreMenuLabels = async () => {
       : [prefix];
   const english = (await languageResources()).en?.translation as {
     main?: { menu?: unknown; tray?: unknown };
+    plugins?: Record<string, { dialog?: unknown }>;
   };
   const keys = [
     ...flatten(english?.main?.menu, 'main.menu'),
     ...flatten(english?.main?.tray, 'main.tray'),
+    ...flatten(english?.plugins?.['api-server']?.dialog, 'plugins.api-server.dialog'),
+    'plugins.amuse.response.query',
   ];
-  const values = { applicationName: APPLICATION_NAME, artist: '{artist}', title: '{title}' };
+  const values = {
+    applicationName: APPLICATION_NAME,
+    artist: '{artist}',
+    title: '{title}',
+    ID: '{ID}',
+    origin: '{origin}',
+  };
   return Object.fromEntries(keys.map((key) => [key, i18next.t(key, values)]));
 };
 

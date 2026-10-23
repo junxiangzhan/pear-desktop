@@ -2,6 +2,8 @@
 //! (`placeholder/prompt.html`) that shows one prompt and returns its value,
 //! or `null` when closed or cancelled. Supports the types the plugins use:
 //! input, select, counter, keybind and multiInput.
+// Mobile has no prompt windows; only the commands' signatures remain there
+#![cfg_attr(mobile, allow(dead_code, unused_imports))]
 
 use std::{
     collections::HashMap,
@@ -45,7 +47,14 @@ fn default_size(options: &Value) -> (f64, f64) {
     )
 }
 
+/// Android and iOS have the main webview only.
+#[cfg(mobile)]
+pub async fn open(_app: &AppHandle, _options: Value) -> Result<Value, String> {
+    Err("prompt windows are not available on mobile".into())
+}
+
 /// Opens a prompt and waits for its result (`null` if dismissed).
+#[cfg(desktop)]
 pub async fn open(app: &AppHandle, options: Value) -> Result<Value, String> {
     let prompts = app.state::<Prompts>();
     let label = format!("prompt-{}", prompts.next_id.fetch_add(1, Ordering::Relaxed));

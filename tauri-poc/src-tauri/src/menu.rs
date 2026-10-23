@@ -73,16 +73,28 @@ pub struct MenuState {
     checks: Mutex<HashMap<String, CheckMenuItem<Wry>>>,
     /// Item id → ids of every item in its radio group (itself included)
     radio_groups: Mutex<HashMap<String, Arc<Vec<String>>>>,
+    /// The same menu as Electron's `Menu` JSON, for in-app-menu's `get-menu`
+    tree: Mutex<Vec<Value>>,
     zoom: Mutex<f64>,
+    /// Set when in-app-menu draws the menu in the page (no native menu bar)
+    pub in_app: std::sync::atomic::AtomicBool,
 }
 
-type Items = Vec<MenuItemKind<Wry>>;
+/// A built item: the native Tauri item and its Electron-shaped JSON
+/// (`commandId`, `label`, `type`, `checked`, `submenu.items`...).
+struct Node {
+    native: MenuItemKind<Wry>,
+    json: Value,
+}
+
+type Items = Vec<Node>;
 
 struct Builder<'a> {
     app: &'a AppHandle,
     labels: &'a HashMap<String, String>,
     checks: HashMap<String, CheckMenuItem<Wry>>,
     radio_groups: HashMap<String, Arc<Vec<String>>>,
+    next_command_id: u64,
 }
 
 impl Builder<'_> {
@@ -94,19 +106,27 @@ impl Builder<'_> {
         })
     }
 
-    fn item(&self, id: &str, text: &str, enabled: bool, accelerator: Option<&str>) -> MenuItemKind<Wry> {
-        MenuItem::with_id(self.app, id, text, enabled, accelerator)
+    fn json(&mut self, id: &str, text: &str, kind: &str, enabled: bool) -> Value {
+        self.next_command_id += 1;
+        json!({ "commandId": self.next_command_id, "id": id, "label": text, "type": kind, "enabled": enabled, "visible": true })
+    }
+
+    fn item(&mut self, id: &str, text: &str, enabled: bool, accelerator: Option<&str>) -> Node {
+        let native = MenuItem::with_id(self.app, id, text, enabled, accelerator)
             // Electron accelerators Tauri rejects are dropped, not fatal
             .or_else(|_| MenuItem::with_id(self.app, id, text, enabled, None::<&str>))
             .expect("creating a menu item")
-            .kind()
+            .kind();
+        let mut json = self.json(id, text, "normal", enabled);
+        json["accelerator"] = json!(accelerator);
+        Node { native, json }
     }
 
-    fn check(&mut self, id: &str, text: &str, checked: bool, enabled: bool) -> MenuItemKind<Wry> {
+    fn check(&mut self, id: &str, text: &str, checked: bool, enabled: bool) -> Node {
         let item = CheckMenuItem::with_id(self.app, id, text, enabled, checked, None::<&str>)
             .expect("creating a check menu item");
         self.checks.insert(id.to_owned(), item.clone());
-        item.kind()
+        Node { native: item.kind(), json: self.json(id, text, "checkbox", enabled) }
     }
 
     /// Check items acting as one radio group.
@@ -116,20 +136,26 @@ impl Builder<'_> {
             .into_iter()
             .map(|(id, text, checked)| {
                 self.radio_groups.insert(id.clone(), ids.clone());
-                self.check(&id, &text, checked, true)
+                let mut node = self.check(&id, &text, checked, true);
+                node.json["type"] = json!("radio");
+                node
             })
             .collect()
     }
 
-    fn separator(&self) -> MenuItemKind<Wry> {
-        PredefinedMenuItem::separator(self.app).expect("creating a separator").kind()
+    fn separator(&mut self) -> Node {
+        let native = PredefinedMenuItem::separator(self.app).expect("creating a separator").kind();
+        Node { native, json: self.json("", "", "separator", true) }
     }
 
-    fn submenu(&self, text: &str, items: Items) -> MenuItemKind<Wry> {
-        let refs: Vec<&dyn IsMenuItem<Wry>> = items.iter().map(|i| i as &dyn IsMenuItem<Wry>).collect();
-        Submenu::with_items(self.app, text, true, &refs)
+    fn submenu(&mut self, text: &str, items: Items) -> Node {
+        let refs: Vec<&dyn IsMenuItem<Wry>> = items.iter().map(|i| &i.native as &dyn IsMenuItem<Wry>).collect();
+        let native = Submenu::with_items(self.app, text, true, &refs)
             .expect("creating a submenu")
-            .kind()
+            .kind();
+        let mut json = self.json("", text, "submenu", true);
+        json["submenu"] = json!({ "items": items.into_iter().map(|n| n.json).collect::<Vec<_>>() });
+        Node { native, json }
     }
 
     /// A plugin's serialized template. Consecutive radio items form a group.
@@ -173,6 +199,7 @@ fn build(app: &AppHandle, data: &MenuData) -> tauri::Result<Menu<Wry>> {
         labels: &data.labels,
         checks: HashMap::new(),
         radio_groups: HashMap::new(),
+        next_command_id: 0,
     };
 
     // Plugins: a checkbox per plugin, or a submenu when it is enabled and has a menu
@@ -303,12 +330,13 @@ fn build(app: &AppHandle, data: &MenuData) -> tauri::Result<Menu<Wry>> {
     let about = b.item("act:about", &b.label("about"), true, None);
 
     let top = [plugins, options, view, navigation, about];
-    let refs: Vec<&dyn IsMenuItem<Wry>> = top.iter().map(|i| i as &dyn IsMenuItem<Wry>).collect();
+    let refs: Vec<&dyn IsMenuItem<Wry>> = top.iter().map(|i| &i.native as &dyn IsMenuItem<Wry>).collect();
     let menu = Menu::with_items(app, &refs)?;
 
     let state = app.state::<MenuState>();
     *state.checks.lock().unwrap() = b.checks;
     *state.radio_groups.lock().unwrap() = b.radio_groups;
+    *state.tree.lock().unwrap() = top.into_iter().map(|n| n.json).collect();
     Ok(menu)
 }
 
@@ -322,6 +350,11 @@ pub fn rebuild(app: &AppHandle) {
         Ok(menu) => menu,
         Err(error) => return log::error!("building the menu failed: {error}"),
     };
+    if app.state::<MenuState>().in_app.load(std::sync::atomic::Ordering::Relaxed) {
+        // in-app-menu draws it in the page; keep the built items for its clicks
+        ipc::send_to_page(app, "refresh-in-app-menu", &[]);
+        return;
+    }
     #[cfg(target_os = "macos")]
     let installed = app.set_menu(menu).map(|_| ());
     #[cfg(not(target_os = "macos"))]
@@ -334,12 +367,73 @@ pub fn rebuild(app: &AppHandle) {
     }
 }
 
+/// The menu as Electron's `Menu` JSON (`{ items }`), with current check states.
+pub fn electron_menu(app: &AppHandle) -> Value {
+    let state = app.state::<MenuState>();
+    let tree = state.tree.lock().unwrap().clone();
+    let checks = check_items(app);
+    let items: Vec<Value> = tree.iter().map(|node| with_checks(node, &checks)).collect();
+    json!({ "items": items })
+}
+
+/// The check items, cloned out of the lock. Item calls made off the main
+/// thread wait for it, and the main thread takes the lock when rebuilding,
+/// so the lock must never be held across one.
+fn check_items(app: &AppHandle) -> HashMap<String, CheckMenuItem<Wry>> {
+    app.state::<MenuState>().checks.lock().unwrap().clone()
+}
+
+fn check_item(app: &AppHandle, id: &str) -> Option<CheckMenuItem<Wry>> {
+    app.state::<MenuState>().checks.lock().unwrap().get(id).cloned()
+}
+
+fn with_checks(node: &Value, checks: &HashMap<String, CheckMenuItem<Wry>>) -> Value {
+    let mut node = node.clone();
+    if let Some(item) = node["id"].as_str().and_then(|id| checks.get(id)) {
+        node["checked"] = json!(item.is_checked().unwrap_or(false));
+    }
+    if let Some(items) = node["submenu"]["items"].as_array() {
+        let items: Vec<Value> = items.iter().map(|child| with_checks(child, checks)).collect();
+        node["submenu"]["items"] = json!(items);
+    }
+    node
+}
+
+fn find_by_command_id(nodes: &[Value], command_id: u64) -> Option<Value> {
+    nodes.iter().find_map(|node| {
+        if node["commandId"].as_u64() == Some(command_id) {
+            return Some(node.clone());
+        }
+        find_by_command_id(node["submenu"]["items"].as_array()?, command_id)
+    })
+}
+
+/// Like `get-menu-by-id`: one item as Electron JSON, or null.
+pub fn electron_item(app: &AppHandle, command_id: u64) -> Value {
+    let state = app.state::<MenuState>();
+    let found = find_by_command_id(&state.tree.lock().unwrap(), command_id);
+    found.map(|node| with_checks(&node, &check_items(app))).unwrap_or(Value::Null)
+}
+
+/// A click from in-app-menu (`peard:menu-event`). No native item toggled
+/// itself, so check items are toggled here before the shared dispatch.
+pub fn click_by_command_id(app: &AppHandle, command_id: u64) {
+    let state = app.state::<MenuState>();
+    let Some(node) = find_by_command_id(&state.tree.lock().unwrap(), command_id) else { return };
+    let Some(id) = node["id"].as_str().filter(|id| !id.is_empty()).map(str::to_owned) else { return };
+    if node["type"] == "checkbox" {
+        if let Some(item) = check_item(app, &id) {
+            let _ = item.set_checked(!item.is_checked().unwrap_or(false));
+        }
+    }
+    dispatch(app, &id);
+}
+
 /// After a click: radios stay checked and uncheck their group; check items
 /// report their (already toggled) state.
 fn settle_check(app: &AppHandle, id: &str) -> Option<bool> {
-    let state = app.state::<MenuState>();
-    let checks = state.checks.lock().unwrap();
-    let group = state.radio_groups.lock().unwrap().get(id).cloned();
+    let checks = check_items(app);
+    let group = app.state::<MenuState>().radio_groups.lock().unwrap().get(id).cloned();
     if let Some(group) = group {
         for member in group.iter() {
             if let Some(item) = checks.get(member) {
@@ -379,7 +473,13 @@ fn zoom(app: &AppHandle, change: impl FnOnce(f64) -> f64) {
 }
 
 pub fn handle_event(app: &AppHandle, event: MenuEvent) {
-    let id = event.id().as_ref().to_owned();
+    dispatch(app, event.id().as_ref());
+}
+
+/// Runs a menu item by its id, after its check state was updated (natively
+/// by a click on the menu bar, or by `click_by_command_id`).
+fn dispatch(app: &AppHandle, id: &str) {
+    let id = id.to_owned();
     let checked = settle_check(app, &id);
     let config = app.state::<Config>();
     let window = app.get_webview_window(MAIN_WEBVIEW);
@@ -518,13 +618,7 @@ pub fn menu_update(app: AppHandle, data: MenuData) {
 /// cancelled prompt); mirror it on the native item.
 #[tauri::command]
 pub fn menu_set_checked(app: AppHandle, command_id: u64, checked: bool) {
-    if let Some(item) = app
-        .state::<MenuState>()
-        .checks
-        .lock()
-        .unwrap()
-        .get(&format!("cmd:{command_id}"))
-    {
+    if let Some(item) = check_item(&app, &format!("cmd:{command_id}")) {
         let _ = item.set_checked(checked);
     }
 }
