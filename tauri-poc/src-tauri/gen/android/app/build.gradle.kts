@@ -20,7 +20,8 @@ android {
     defaultConfig {
         manifestPlaceholders["usesCleartextTraffic"] = "false"
         applicationId = "com.github.pear_devs.tauri_poc"
-        minSdk = 24
+        // 26 for GeckoView (GeckoActivity)
+        minSdk = 26
         targetSdk = 37
         versionCode = tauriProperties.getProperty("tauri.android.versionCode", "1").toInt()
         versionName = tauriProperties.getProperty("tauri.android.versionName", "1.0")
@@ -75,9 +76,20 @@ dependencies {
     implementation("androidx.activity:activity-ktx:1.10.1")
     implementation("com.google.android.material:material:1.12.0")
     implementation("androidx.lifecycle:lifecycle-process:2.10.0")
+    // GeckoActivity (feasibility test). 153 is the newest release built with
+    // Kotlin 2.3, which this project's Kotlin 2.2 can still read. arm64 only.
+    implementation("org.mozilla.geckoview:geckoview-arm64-v8a:153.0.20260810162159")
     testImplementation("junit:junit:4.13.2")
     androidTestImplementation("androidx.test.ext:junit:1.1.4")
     androidTestImplementation("androidx.test.espresso:espresso-core:3.5.0")
 }
+
+// GeckoActivity's extension loads the same renderer bundle as the Tauri
+// build (tauri-poc/vite.inject.config.mts writes it to src-tauri/inject)
+val copyGeckoBundle by tasks.registering(Copy::class) {
+    from(rootProject.file("../../inject/renderer.js"))
+    into(layout.projectDirectory.dir("src/main/assets/pear-gecko"))
+}
+tasks.named("preBuild") { dependsOn(copyGeckoBundle) }
 
 apply(from = file("tauri.build.gradle.kts"))

@@ -6,6 +6,9 @@
 //!
 //! Labels are the `main.menu.*` i18n keys; the page sends their translations.
 //! Tauri has no radio items, so radios are check items in emulated groups.
+//!
+//! Android has no native menu: only the Electron-shaped tree is built, for
+//! in-app-menu to draw, and check states are kept here (`CheckItem`).
 
 use std::{
     collections::HashMap,
@@ -14,10 +17,38 @@ use std::{
 
 use serde::Deserialize;
 use serde_json::{json, Value};
+#[cfg(desktop)]
 use tauri::{
     menu::{CheckMenuItem, IsMenuItem, Menu, MenuEvent, MenuItem, MenuItemKind, PredefinedMenuItem, Submenu},
-    AppHandle, Manager, Wry,
+    Wry,
 };
+use tauri::{AppHandle, Manager};
+
+#[cfg(desktop)]
+type CheckItem = CheckMenuItem<Wry>;
+#[cfg(desktop)]
+type NativeMenu = Menu<Wry>;
+
+/// A check item's state where there is no native menu, with the calls of
+/// `CheckMenuItem` that this module uses.
+#[cfg(mobile)]
+#[derive(Clone)]
+struct CheckItem(Arc<std::sync::atomic::AtomicBool>);
+#[cfg(mobile)]
+impl CheckItem {
+    fn new(checked: bool) -> Self {
+        Self(Arc::new(checked.into()))
+    }
+    fn is_checked(&self) -> tauri::Result<bool> {
+        Ok(self.0.load(std::sync::atomic::Ordering::Relaxed))
+    }
+    fn set_checked(&self, checked: bool) -> tauri::Result<()> {
+        self.0.store(checked, std::sync::atomic::Ordering::Relaxed);
+        Ok(())
+    }
+}
+#[cfg(mobile)]
+type NativeMenu = ();
 
 use crate::{
     app_controls,
@@ -70,11 +101,12 @@ pub struct MenuData {
 #[derive(Default)]
 pub struct MenuState {
     data: Mutex<MenuData>,
-    checks: Mutex<HashMap<String, CheckMenuItem<Wry>>>,
+    checks: Mutex<HashMap<String, CheckItem>>,
     /// Item id → ids of every item in its radio group (itself included)
     radio_groups: Mutex<HashMap<String, Arc<Vec<String>>>>,
     /// The same menu as Electron's `Menu` JSON, for in-app-menu's `get-menu`
     tree: Mutex<Vec<Value>>,
+    #[cfg_attr(mobile, allow(dead_code))]
     zoom: Mutex<f64>,
     /// Set when in-app-menu draws the menu in the page (no native menu bar)
     pub in_app: std::sync::atomic::AtomicBool,
@@ -83,6 +115,7 @@ pub struct MenuState {
 /// A built item: the native Tauri item and its Electron-shaped JSON
 /// (`commandId`, `label`, `type`, `checked`, `submenu.items`...).
 struct Node {
+    #[cfg(desktop)]
     native: MenuItemKind<Wry>,
     json: Value,
 }
@@ -90,9 +123,10 @@ struct Node {
 type Items = Vec<Node>;
 
 struct Builder<'a> {
+    #[cfg_attr(mobile, allow(dead_code))]
     app: &'a AppHandle,
     labels: &'a HashMap<String, String>,
-    checks: HashMap<String, CheckMenuItem<Wry>>,
+    checks: HashMap<String, CheckItem>,
     radio_groups: HashMap<String, Arc<Vec<String>>>,
     next_command_id: u64,
 }
@@ -112,21 +146,31 @@ impl Builder<'_> {
     }
 
     fn item(&mut self, id: &str, text: &str, enabled: bool, accelerator: Option<&str>) -> Node {
-        let native = MenuItem::with_id(self.app, id, text, enabled, accelerator)
-            // Electron accelerators Tauri rejects are dropped, not fatal
-            .or_else(|_| MenuItem::with_id(self.app, id, text, enabled, None::<&str>))
-            .expect("creating a menu item")
-            .kind();
         let mut json = self.json(id, text, "normal", enabled);
         json["accelerator"] = json!(accelerator);
-        Node { native, json }
+        Node {
+            #[cfg(desktop)]
+            native: MenuItem::with_id(self.app, id, text, enabled, accelerator)
+                // Electron accelerators Tauri rejects are dropped, not fatal
+                .or_else(|_| MenuItem::with_id(self.app, id, text, enabled, None::<&str>))
+                .expect("creating a menu item")
+                .kind(),
+            json,
+        }
     }
 
     fn check(&mut self, id: &str, text: &str, checked: bool, enabled: bool) -> Node {
+        #[cfg(desktop)]
         let item = CheckMenuItem::with_id(self.app, id, text, enabled, checked, None::<&str>)
             .expect("creating a check menu item");
+        #[cfg(mobile)]
+        let item = CheckItem::new(checked);
         self.checks.insert(id.to_owned(), item.clone());
-        Node { native: item.kind(), json: self.json(id, text, "checkbox", enabled) }
+        Node {
+            #[cfg(desktop)]
+            native: item.kind(),
+            json: self.json(id, text, "checkbox", enabled),
+        }
     }
 
     /// Check items acting as one radio group.
@@ -144,18 +188,29 @@ impl Builder<'_> {
     }
 
     fn separator(&mut self) -> Node {
-        let native = PredefinedMenuItem::separator(self.app).expect("creating a separator").kind();
-        Node { native, json: self.json("", "", "separator", true) }
+        Node {
+            #[cfg(desktop)]
+            native: PredefinedMenuItem::separator(self.app).expect("creating a separator").kind(),
+            json: self.json("", "", "separator", true),
+        }
     }
 
     fn submenu(&mut self, text: &str, items: Items) -> Node {
-        let refs: Vec<&dyn IsMenuItem<Wry>> = items.iter().map(|i| &i.native as &dyn IsMenuItem<Wry>).collect();
-        let native = Submenu::with_items(self.app, text, true, &refs)
-            .expect("creating a submenu")
-            .kind();
+        #[cfg(desktop)]
+        let native = {
+            let refs: Vec<&dyn IsMenuItem<Wry>> =
+                items.iter().map(|i| &i.native as &dyn IsMenuItem<Wry>).collect();
+            Submenu::with_items(self.app, text, true, &refs)
+                .expect("creating a submenu")
+                .kind()
+        };
         let mut json = self.json("", text, "submenu", true);
         json["submenu"] = json!({ "items": items.into_iter().map(|n| n.json).collect::<Vec<_>>() });
-        Node { native, json }
+        Node {
+            #[cfg(desktop)]
+            native,
+            json,
+        }
     }
 
     /// A plugin's serialized template. Consecutive radio items form a group.
@@ -192,7 +247,7 @@ impl Builder<'_> {
     }
 }
 
-fn build(app: &AppHandle, data: &MenuData) -> tauri::Result<Menu<Wry>> {
+fn build(app: &AppHandle, data: &MenuData) -> tauri::Result<NativeMenu> {
     let config = app.state::<Config>();
     let mut b = Builder {
         app,
@@ -242,7 +297,9 @@ fn build(app: &AppHandle, data: &MenuData) -> tauri::Result<Menu<Wry>> {
         config.get_bool("options.swapLikeButtonsOrder"),
         true,
     ));
-    let visual_tweaks = vec![
+    // Window, tray and keyboard items only exist on desktop
+    let desktop = cfg!(desktop);
+    let mut visual_tweaks = vec![
         b.check(
             "opt:removeUpgradeButton",
             &b.label("options.submenu.visual-tweaks.submenu.remove-upgrade-button"),
@@ -250,13 +307,15 @@ fn build(app: &AppHandle, data: &MenuData) -> tauri::Result<Menu<Wry>> {
             true,
         ),
         b.submenu(&b.label("options.submenu.visual-tweaks.submenu.like-buttons.label"), like_items),
-        b.item(
+    ];
+    if desktop {
+        visual_tweaks.push(b.item(
             "act:customWindowTitle",
             &b.label("options.submenu.visual-tweaks.submenu.custom-window-title.label"),
             true,
             None,
-        ),
-    ];
+        ));
+    }
 
     let (tray, visible) = (config.get_bool("options.tray"), config.get_bool("options.appVisible"));
     let mut tray_items = b.radios(vec![
@@ -280,7 +339,7 @@ fn build(app: &AppHandle, data: &MenuData) -> tauri::Result<Menu<Wry>> {
             .collect(),
     );
 
-    let advanced = vec![
+    let mut advanced = vec![
         b.check(
             "opt:restartOnConfigChanges",
             &b.label("options.submenu.advanced-options.submenu.restart-on-config-changes"),
@@ -289,55 +348,89 @@ fn build(app: &AppHandle, data: &MenuData) -> tauri::Result<Menu<Wry>> {
         ),
         b.separator(),
         b.item("act:editConfig", &b.label("options.submenu.advanced-options.submenu.edit-config-json"), true, None),
-        b.item("act:toggleDevTools", &b.label("options.submenu.advanced-options.submenu.toggle-dev-tools"), true, None),
     ];
+    if desktop {
+        advanced.push(b.item(
+            "act:toggleDevTools",
+            &b.label("options.submenu.advanced-options.submenu.toggle-dev-tools"),
+            true,
+            None,
+        ));
+    }
 
-    let options_items = vec![
+    let mut options_items = vec![
         b.check("opt:resumeOnStart", &b.label("options.submenu.resume-on-start"), config.get_bool("options.resumeOnStart"), true),
         b.submenu(&b.label("options.submenu.starting-page.label"), starting_pages),
         b.submenu(&b.label("options.submenu.visual-tweaks.label"), visual_tweaks),
-        b.check("opt:alwaysOnTop", &b.label("options.submenu.always-on-top"), config.get_bool("options.alwaysOnTop"), true),
-        b.check("opt:startAtLogin", &b.label("options.submenu.start-at-login"), config.get_bool("options.startAtLogin"), true),
-        b.submenu(&b.label("options.submenu.tray.label"), tray_items),
-        b.separator(),
-        b.submenu(&b.label("options.submenu.language.label"), languages),
-        b.submenu(&b.label("options.submenu.advanced-options.label"), advanced),
     ];
+    if desktop {
+        options_items.push(b.check(
+            "opt:alwaysOnTop",
+            &b.label("options.submenu.always-on-top"),
+            config.get_bool("options.alwaysOnTop"),
+            true,
+        ));
+        options_items.push(b.check(
+            "opt:startAtLogin",
+            &b.label("options.submenu.start-at-login"),
+            config.get_bool("options.startAtLogin"),
+            true,
+        ));
+        options_items.push(b.submenu(&b.label("options.submenu.tray.label"), tray_items));
+    }
+    options_items.push(b.separator());
+    options_items.push(b.submenu(&b.label("options.submenu.language.label"), languages));
+    options_items.push(b.submenu(&b.label("options.submenu.advanced-options.label"), advanced));
     let options = b.submenu(&b.label("options.label"), options_items);
 
-    let view_items = vec![
+    let mut view_items = vec![
         b.item("act:reload", &b.label("view.submenu.reload"), true, Some("CmdOrCtrl+R")),
         b.item("act:forceReload", &b.label("view.submenu.force-reload"), true, Some("CmdOrCtrl+Shift+R")),
-        b.separator(),
-        b.item("act:zoomIn", &b.label("view.submenu.zoom-in"), true, Some("CmdOrCtrl+Plus")),
-        b.item("act:zoomOut", &b.label("view.submenu.zoom-out"), true, Some("CmdOrCtrl+-")),
-        b.item("act:resetZoom", &b.label("view.submenu.reset-zoom"), true, Some("CmdOrCtrl+0")),
-        b.separator(),
-        b.item("act:toggleFullscreen", &b.label("view.submenu.toggle-fullscreen"), true, Some("F11")),
     ];
+    if desktop {
+        view_items.extend([
+            b.separator(),
+            b.item("act:zoomIn", &b.label("view.submenu.zoom-in"), true, Some("CmdOrCtrl+Plus")),
+            b.item("act:zoomOut", &b.label("view.submenu.zoom-out"), true, Some("CmdOrCtrl+-")),
+            b.item("act:resetZoom", &b.label("view.submenu.reset-zoom"), true, Some("CmdOrCtrl+0")),
+            b.separator(),
+            b.item("act:toggleFullscreen", &b.label("view.submenu.toggle-fullscreen"), true, Some("F11")),
+        ]);
+    }
     let view = b.submenu(&b.label("view.label"), view_items);
 
-    let navigation_items = vec![
+    let mut navigation_items = vec![
         b.item("act:goBack", &b.label("navigation.submenu.go-back"), true, Some("Alt+Left")),
         b.item("act:goForward", &b.label("navigation.submenu.go-forward"), true, Some("Alt+Right")),
         b.item("act:copyUrl", &b.label("navigation.submenu.copy-current-url"), true, Some("CmdOrCtrl+L")),
-        b.separator(),
-        b.item("act:restart", &b.label("navigation.submenu.restart"), true, None),
-        b.item("act:quit", &b.label("navigation.submenu.quit"), true, Some("CmdOrCtrl+Q")),
     ];
+    if desktop {
+        navigation_items.extend([
+            b.separator(),
+            b.item("act:restart", &b.label("navigation.submenu.restart"), true, None),
+            b.item("act:quit", &b.label("navigation.submenu.quit"), true, Some("CmdOrCtrl+Q")),
+        ]);
+    }
     let navigation = b.submenu(&b.label("navigation.label"), navigation_items);
 
     let about = b.item("act:about", &b.label("about"), true, None);
 
     let top = [plugins, options, view, navigation, about];
-    let refs: Vec<&dyn IsMenuItem<Wry>> = top.iter().map(|i| &i.native as &dyn IsMenuItem<Wry>).collect();
-    let menu = Menu::with_items(app, &refs)?;
+    #[cfg(desktop)]
+    let menu = {
+        let refs: Vec<&dyn IsMenuItem<Wry>> =
+            top.iter().map(|i| &i.native as &dyn IsMenuItem<Wry>).collect();
+        Menu::with_items(app, &refs)?
+    };
 
     let state = app.state::<MenuState>();
     *state.checks.lock().unwrap() = b.checks;
     *state.radio_groups.lock().unwrap() = b.radio_groups;
     *state.tree.lock().unwrap() = top.into_iter().map(|n| n.json).collect();
-    Ok(menu)
+    #[cfg(desktop)]
+    return Ok(menu);
+    #[cfg(mobile)]
+    return Ok(());
 }
 
 /// Builds and installs the menu from the last data the page sent.
@@ -350,11 +443,19 @@ pub fn rebuild(app: &AppHandle) {
         Ok(menu) => menu,
         Err(error) => return log::error!("building the menu failed: {error}"),
     };
-    if app.state::<MenuState>().in_app.load(std::sync::atomic::Ordering::Relaxed) {
+    if cfg!(mobile) || app.state::<MenuState>().in_app.load(std::sync::atomic::Ordering::Relaxed) {
         // in-app-menu draws it in the page; keep the built items for its clicks
         ipc::send_to_page(app, "refresh-in-app-menu", &[]);
         return;
     }
+    #[cfg(mobile)]
+    let _ = menu;
+    #[cfg(desktop)]
+    install(app, menu);
+}
+
+#[cfg(desktop)]
+fn install(app: &AppHandle, menu: NativeMenu) {
     #[cfg(target_os = "macos")]
     let installed = app.set_menu(menu).map(|_| ());
     #[cfg(not(target_os = "macos"))]
@@ -379,15 +480,15 @@ pub fn electron_menu(app: &AppHandle) -> Value {
 /// The check items, cloned out of the lock. Item calls made off the main
 /// thread wait for it, and the main thread takes the lock when rebuilding,
 /// so the lock must never be held across one.
-fn check_items(app: &AppHandle) -> HashMap<String, CheckMenuItem<Wry>> {
+fn check_items(app: &AppHandle) -> HashMap<String, CheckItem> {
     app.state::<MenuState>().checks.lock().unwrap().clone()
 }
 
-fn check_item(app: &AppHandle, id: &str) -> Option<CheckMenuItem<Wry>> {
+fn check_item(app: &AppHandle, id: &str) -> Option<CheckItem> {
     app.state::<MenuState>().checks.lock().unwrap().get(id).cloned()
 }
 
-fn with_checks(node: &Value, checks: &HashMap<String, CheckMenuItem<Wry>>) -> Value {
+fn with_checks(node: &Value, checks: &HashMap<String, CheckItem>) -> Value {
     let mut node = node.clone();
     if let Some(item) = node["id"].as_str().and_then(|id| checks.get(id)) {
         node["checked"] = json!(item.is_checked().unwrap_or(false));
@@ -460,6 +561,7 @@ fn eval_in_page(app: &AppHandle, script: &str) {
     }
 }
 
+#[cfg(desktop)]
 fn zoom(app: &AppHandle, change: impl FnOnce(f64) -> f64) {
     let state = app.state::<MenuState>();
     let mut zoom = state.zoom.lock().unwrap();
@@ -472,6 +574,7 @@ fn zoom(app: &AppHandle, change: impl FnOnce(f64) -> f64) {
     }
 }
 
+#[cfg(desktop)]
 pub fn handle_event(app: &AppHandle, event: MenuEvent) {
     dispatch(app, event.id().as_ref());
 }
@@ -503,6 +606,7 @@ fn dispatch(app: &AppHandle, id: &str) {
         let checked = checked.unwrap_or(false);
         set_menu_option(app, &format!("options.{option}"), json!(checked));
         match option {
+            #[cfg(desktop)]
             "alwaysOnTop" => {
                 if let Some(window) = &window {
                     let _ = window.set_always_on_top(checked);
@@ -522,6 +626,7 @@ fn dispatch(app: &AppHandle, id: &str) {
             "tray" => {
                 set_menu_option(app, "options.tray", json!(value != "disabled"));
                 set_menu_option(app, "options.appVisible", json!(value != "hide"));
+                #[cfg(desktop)]
                 crate::tray::sync(app);
             }
             "language" => {
@@ -541,6 +646,7 @@ fn dispatch(app: &AppHandle, id: &str) {
                 log::error!("opening config.json failed: {error}");
             }
         }
+        #[cfg(desktop)]
         "act:toggleDevTools" => {
             if let Some(window) = &window {
                 if window.is_devtools_open() {
@@ -556,9 +662,13 @@ fn dispatch(app: &AppHandle, id: &str) {
             }
         }
         "act:forceReload" => eval_in_page(app, "location.reload()"),
+        #[cfg(desktop)]
         "act:zoomIn" => zoom(app, |z| z + 0.1),
+        #[cfg(desktop)]
         "act:zoomOut" => zoom(app, |z| z - 0.1),
+        #[cfg(desktop)]
         "act:resetZoom" => zoom(app, |_| 1.0),
+        #[cfg(desktop)]
         "act:toggleFullscreen" => {
             if let Some(window) = &window {
                 let fullscreen = window.is_fullscreen().unwrap_or(false);
@@ -610,6 +720,7 @@ pub fn menu_update(app: AppHandle, data: MenuData) {
     };
     rebuild(&app);
     if labels_changed {
+        #[cfg(desktop)]
         crate::tray::relabel(&app);
     }
 }

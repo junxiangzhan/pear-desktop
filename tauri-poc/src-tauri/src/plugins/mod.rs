@@ -97,7 +97,6 @@ impl Plugins {
 
 mod amuse;
 mod api_server;
-#[cfg(desktop)]
 pub mod in_app_menu;
 mod discord;
 mod notifications;
@@ -128,6 +127,8 @@ pub fn all() -> Vec<Arc<dyn Plugin>> {
         Arc::new(discord::Discord::new()),
         Arc::new(api_server::ApiServer::new()),
         Arc::new(amuse::Amuse::new()),
+        // The only menu on Android, where there is no native one
+        Arc::new(in_app_menu::InAppMenu::new()),
     ];
     // Window and keyboard features of the desktop shell
     #[cfg(desktop)]
@@ -136,7 +137,6 @@ pub fn all() -> Vec<Arc<dyn Plugin>> {
         list.push(Arc::new(transparent_player::TransparentPlayer));
         list.push(Arc::new(shortcuts::Shortcuts::new()));
         list.push(Arc::new(shortcuts::PreciseVolume::new()));
-        list.push(Arc::new(in_app_menu::InAppMenu::new()));
     }
     #[cfg(windows)]
     list.push(Arc::new(taskbar_mediacontrol::TaskbarMediaControl));

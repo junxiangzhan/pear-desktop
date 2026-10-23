@@ -39,7 +39,7 @@ tauri-poc/
    └─ gen/android            # `tauri android init` 產生的 Android 專案；MainActivity、PlaybackService、MediaSessionPlugin 是手寫的
 ```
 
-`src/` 與 `vite-plugins/` 的配合修改（不影響 Electron 行為）：`plugin-loader` 可一次保留多個插件部分並排除指定插件；`virtual:plugins` 可輸出多個 `<mode>Plugins()`；新增 `src/providers/net.ts`（`crossOriginFetch`），synced-lyrics 的 LRCLib / Genius / Megalobiz / YTMusic 改用它；notifications 的純常數移到 `constants.ts`；scrobbler 選單不再 import backend；in-app-menu 在宿主設定 `__pearNoTitleBarOverlay` 時（Tauri 沒有 `titleBarOverlay`）自己畫視窗按鈕；do-not-track 的 pruner 不再對 `null` 等非物件呼叫 `delete`（原本 `JSON.parse('null')` 會丟 TypeError，Electron 版也有這個問題）。
+`src/` 與 `vite-plugins/` 的配合修改（不影響 Electron 行為）：`plugin-loader` 可一次保留多個插件部分並排除指定插件；`virtual:plugins` 可輸出多個 `<mode>Plugins()`；新增 `src/providers/net.ts`（`crossOriginFetch`），synced-lyrics 的 LRCLib / Genius / Megalobiz / YTMusic 改用它；notifications 的純常數移到 `constants.ts`；scrobbler 選單不再 import backend；in-app-menu 在宿主設定 `__pearNoTitleBarOverlay` 時（Tauri 沒有 `titleBarOverlay`）自己畫視窗按鈕；do-not-track 的 pruner 不再對 `null` 等非物件呼叫 `delete`（原本 `JSON.parse('null')` 會丟 TypeError，Electron 版也有這個問題）；歌曲資訊的標題改用 YTM 播放佇列裡顯示的標題（播放器回應的 `videoDetails.title` 可能是別的語言，例如 zh-TW 頁面上孫燕姿的〈我不難過〉是「I Am Fine」；Electron 版也受影響）；`renderer.ts` 的 AudioContext 在播放、第一次互動時 `resume()`（Firefox 的 autoplay 政策會讓它停在 suspended，影片就沒有聲音），`pear-trans` 改用 bundle 開始時保留的原生 `customElements.define` 註冊（YTM 給 Firefox 的 ES5 adapter 無法建構 ES2015 class）。
 
 ### 注入方式
 
@@ -66,7 +66,7 @@ Rust 擁有 `config.json`（`config.rs`，`defaults.ts` 的移植）。renderer 
 - **discord：** Rust 直接講 Discord 的本機 IPC（Windows named pipe `discord-ipc-N`、Unix socket），取代 `@xhayper/discord-rpc`；節流、暫停逾時清除、自動重連照搬 `DiscordService`。選單在頁面執行，它 import 的 `main.ts` 在打包時換成 `compat/discord.ts`（透過 IPC 讀連線狀態、連線、清除）。
 - **api-server：** axum 重寫，路由、JWT（HS256，與 hono/jwt 互通）、CORS、WebSocket 事件與 Electron 版相同；`AUTH_AT_FIRST` 的 Allow/Deny 對話框用頁面送來的翻譯。沒有移植 `/doc`（OpenAPI）與 `/swagger`。預設 secret 是頁面載入時的 `Date.now()`，Rust 第一次啟動時把它存進設定，token 才不會在重新整理後失效。HTTPS 用 rustls（ring）。
 - **amuse：** 9863 埠的 `/`、`/query`、`/api`，axum。
-- **in-app-menu：** 啟用時（Windows 預設）主視窗無邊框，選單與視窗按鈕由頁面畫，Rust 回答 `get-menu`／`peard:menu-event`／`window-*`。`app-region: drag` 由 `plugin-glue.ts` 轉成 `start_dragging`（雙擊最大化）。window-state 插件不還原 decorations／visible，否則會蓋掉這個設定。
+- **in-app-menu：** 啟用時（Windows 預設）主視窗無邊框，選單與視窗按鈕由頁面畫，Rust 回答 `get-menu`／`peard:menu-event`／`window-*`。`app-region: drag` 由 `plugin-glue.ts` 轉成 `start_dragging`（雙擊最大化）。window-state 插件不還原 decorations／visible，否則會蓋掉這個設定。Android 上它是唯一的選單：啟動時一律開啟（頁面依 UA 判斷的預設值在「Linux」上是關閉），不畫視窗按鈕（`__pearNoWindowControls`），選單裡也拿掉 Android 用不到的項目（置頂、開機啟動、系統匣、縮放、全螢幕、DevTools、自訂視窗標題、重新啟動／結束）。
 - **系統媒體控制：** Windows 的 SMTC 由 WebView2 自己提供（顯示名稱是 `msedgewebview2.exe`，設定 AppUserModelID 也不會變）；taskbar-mediacontrol 的縮圖按鈕用 `ITaskbarList3`。Linux 的 MPRIS 與 macOS Now Playing 尚未移植（無法在 Windows 上建置測試）。Android 見下方「背景播放」。
 - **notifications：** 互動式 Windows toast（附播放按鈕）尚未移植；`interactive` 開啟時退回基本通知。
 - **do-not-track（廣告阻擋）：** 預設的 **In player** 模式完全在頁面裡執行（包住 `JSON.parse` 與 `Response.json`，刪掉播放器回應裡的 `playerAds`／`adPlacements`／`adSlots`），Windows 與 Android 都可用。**With blocklists 模式沒有移植**：它靠 Electron 的 `session.webRequest` 依清單攔截網路請求，Tauri 沒有跨平台的對應 API（`on_web_resource_request` 只涵蓋 app 自己的協定）；要做得在 Windows 用 WebView2 的 `WebResourceRequested`、Android 改 WebViewClient 的 `shouldInterceptRequest`，再配一個比對引擎（例如 `adblock` crate）。選了這個模式時，頁面只會印出警告，不會阻擋任何東西。打包時 `blocker.ts` 與 Ghostery 的 preload 由 `compat/do-not-track.ts` 取代。
@@ -85,7 +85,7 @@ Rust 擁有 `config.json`（`config.rs`，`defaults.ts` 的移植）。renderer 
 - **HTML 全螢幕會變成視窗全螢幕。** Tauri runtime 會把頁面的 fullscreen 直接轉成視窗全螢幕，沒有 Electron `setFullScreenable(false)` 的對應；PiP 在 Resized 事件裡把它復原。
 - **`set_size` 設的是內部尺寸。** 要還原尺寸就要存 `inner_size()`，存 `outer_size()` 會每次多出邊框與選單列的高度。
 - **選單項目的方法也會等主執行緒。** 在 worker 上呼叫 `CheckMenuItem::is_checked()` 時持有 `checks` 鎖，而主執行緒正在重建選單、要取同一把鎖 → 整個 app 無回應（discord 連線後刷新選單時遇到）。現在一律先把項目 clone 出鎖再呼叫。
-- **主行程程式碼要能在行動版編譯。** 選單、系統匣、提示框視窗、視窗操作在 Android 上不存在；這些模組或函式以 `cfg(desktop)` 隔開，行動版的 `menu` 只保留頁面送來的翻譯。
+- **主行程程式碼要能在行動版編譯。** 選單、系統匣、提示框視窗、視窗操作在 Android 上不存在；這些模組或函式以 `cfg(desktop)` 隔開。`menu.rs` 兩邊共用：選單樹（給 in-app-menu 的 Electron 格式 JSON）與點擊處理相同，原生選單項目只在桌面版建立，Android 上勾選狀態存在 `CheckItem`。
 
 ## 執行（Windows）
 
@@ -126,9 +126,13 @@ cd tauri-poc/src-tauri && pnpm dlx @tauri-apps/cli@2.12.4 android build --debug 
 
 - `gen/android/gradle.properties` 已加 `android.overridePathCheck=true`，因為 repo 路徑含中文（`D:\程式專案`），AGP 預設會拒絕建置。
 - 模擬器若出現 `ERR_NAME_NOT_RESOLVED`（主機有 Tailscale 等 VPN 時常見），用 `emulator -avd <name> -dns-server 8.8.8.8` 啟動。
-- 預設使用桌面版 Chrome 的 User-Agent，否則會拿到行動版 YTM，插件無法運作。
+- `MainActivity` 把 WebView 呈現為**同版本的桌面版 Chrome**：UA 字串用實際的 WebView 版本，Client Hints（`Sec-CH-UA*`、`navigator.userAgentData`，原本會列出「Android WebView」）透過 `WebSettingsCompat.setUserAgentMetadata` 改成 Google Chrome／Linux／非行動裝置。否則會拿到行動版 YTM（插件無法運作），Google 登入也會以「這個瀏覽器或應用程式可能不安全」拒絕。`X-Requested-With: <套件名稱>` 標頭仍會送出：用來關掉它的 `setRequestedWithHeaderOriginAllowList` 在 WebView 143 上不支援（`REQUESTED_WITH_HEADER_ALLOW_LIST` 為 false）。
+- 畫面從 Android 15 起強制延伸到系統列下方；`MainActivity` 依系統列與瀏海的 inset 留邊距，底色用 YTM 的 `#030303`、系統列圖示用淺色。
+- **YouTube Music 連結：** manifest 為 `https://music.youtube.com` 宣告了 VIEW intent filter，`MainActivity` 會載入收到的連結（冷啟動時排在 wry 的起始網址之後，執行中則經 `onNewIntent`）。這個 app 無法通過該網域的驗證，所以 Android 12 起不會自動接手：要在「應用程式資訊 › 預設開啟」加入 `music.youtube.com`；若裝了官方 YouTube Music app，它是已驗證的處理者，會優先。桌面版沒有對應功能（Windows 無法替 https 網址註冊處理程式）。
+- **Google 登入：** 在 WebView 裡無法登入，PoC 不打算繞過。登入頁本身送出的 POST（`AccountsSignInUi/data/batchexecute`、`browserinfo`）都帶 `X-Requested-With`，而 `shouldInterceptRequest` 拿不到 POST 內容，無法不帶標頭重送；`browserinfo` 也會回傳瀏覽器指紋。WebView 版目前只能未登入使用；可行的方向是換成 GeckoView（見下一節）。
 - 實機平板請改用 `--target aarch64`。
-- **已知問題：** Android 上 init script 會執行兩次（Tauri 自己的腳本也是，console 會出現 `Cannot redefine property`），所以 bundle 會被評估兩次（出現兩次 `shim installed`、mdui 的 custom element 重複定義錯誤）；偶爾啟動後頁面停在空白（`about:blank`），強制停止再開就會恢復。都還沒追查。
+- **init script 執行兩次：** wry 產生的 Android 程式碼會用 `addDocumentStartJavaScript` 注入 init script，但 `RustWebViewClient.onPageStarted` 又對所有沒被 Rust 攔截的頁面再 `evaluateJavascript` 一次，沒有檢查前者是否可用（wry 的 bug；`generated/` 每次建置都會重新產生，不能直接改）。PoC 的 loader 以 `window.__pearRendererLoaded` 確保每個文件只載入一次 bundle；Tauri 自己的腳本仍會跑兩次，console 會出現無害的 `Cannot redefine property`。
+- **已知問題：** 偶爾啟動後頁面停在空白（`about:blank`），強制停止再開就會恢復，還沒追查。
 - debug APK 帶完整除錯資訊時約 374 MB（`.so` 240 MB），模擬器空間不足會裝不上；測試時可在建置前設 `CARGO_PROFILE_DEV_DEBUG=0 CARGO_PROFILE_DEV_STRIP=debuginfo`（約 134 MB）。
 
 ### 背景播放
@@ -201,7 +205,41 @@ cd tauri-poc/src-tauri && pnpm dlx @tauri-apps/cli@2.12.4 android build --debug 
 | do-not-track（In player） | 未登入的獨立設定檔（`PEAR_POC_PROFILE_DIR`／Android 模擬器），每次播 6 首歌，比對 YouTube 送來的原始 `/youtubei/v1/player` 回應與播放器實際拿到的 `getPlayerResponse()`。**Windows：** 關閉時原始回應 6/6 含廣告欄位、播放器拿到 6/6、播出 1 則廣告；開啟時原始回應仍 6/6 含廣告，播放器拿到 **0/6**、播出 **0** 則。**Android：** 開啟時原始回應 5/5 含廣告（第一首來自頁面 HTML），播放器拿到 **0/6**、播出 0 則 |
 | Electron 不受影響 | `pnpm typecheck`、`pnpm lint`、`pnpm build` 通過；`cargo test`（24）、`cargo clippy` 無警告；Android 版可編譯 |
 
-未驗證：真正的 Discord 用戶端、api-server 的 Allow/Deny 對話框與 HTTPS、HTTPS 憑證選檔對話框、Android 實機與 Android 上的 api-server／discord。
+未驗證：真正的 Discord 用戶端、api-server 的 Allow/Deny 對話框與 HTTPS、HTTPS 憑證選檔對話框、Android 上的 api-server／discord。
+
+## Android 實機平板（Xiaomi 25091RP04G，Android 16，WebView 143，2026-10-24）
+
+arm64 debug APK 61.6 MB（不含除錯資訊）。小米需要在開發者選項開啟「USB 安裝」。
+
+| 項目 | 結果 |
+|---|---|
+| 頁面、注入 | ✅ 桌面版 YTM，橫向 1163×776 CSS px；bundle 只載入一次 |
+| 觸控操作（使用者實測） | ✅ 正常，沒有感覺到卡頓 |
+| 播放、背景播放 | ✅ 回到桌面 30 秒前進 30.5 秒；關閉螢幕 60 秒前進 60.3 秒，行程沒被凍結 |
+| 媒體控制（使用者實測） | ✅ 鎖定畫面與通知顯示正確，手動與自然切歌都會更新，可從面板調進度、切歌；媒體鍵暫停／播放／下一首有效 |
+| 廣告阻擋（do-not-track） | ✅ 原始回應 5/5 含廣告，播放器拿到 0/6、播出 0 則 |
+| 狀態列 | ✅ 修正後頁面從狀態列下方開始，底部不被手勢列蓋住（修正前狀態列圖示疊在頁面上） |
+| 標題語言 | ✅ 修正後歌曲資訊與媒體控制顯示「我不難過」（修正前是「I Am Fine」） |
+| Google 登入 | ❌ 使用者實測：被拒絕（「這不是安全的瀏覽器」）；把 UA 與 Client Hints 改成桌面版 Chrome 後重測仍被拒。登入頁的 POST 都帶 `X-Requested-With`，無法移除（見上方「Google 登入」） |
+| 選單 | ✅ in-app-menu 的標題列與選單（Plugins／Options／View／Navigation／About）、沒有視窗按鈕（DOM 檢查；畫面尚待目視確認） |
+| YouTube Music 連結 | ✅ 指定本 app 的連結 intent：執行中與冷啟動都會開到該首歌 |
+| 登入狀態保存 | 未登入時關閉再開會還原上次的畫面，cookie 與頁面狀態有寫入 |
+
+## GeckoView 可行性驗證（Android，2026-10-24）
+
+為了在 Android 上登入 Google，測試把 Android WebView 換成 GeckoView（Firefox 的引擎）。`GeckoActivity` 是同一個 app 裡獨立的入口（桌面圖示「Pear (GeckoView)」），和 Tauri 版互不影響；`assets/pear-gecko/` 是內建的 WebExtension：`probe.js` 以 `world: "MAIN"`、`document_start` 注入頁面主世界，`report.js` 經 native messaging 把結果回報給 app（logcat tag `PearGecko`）。
+
+| 項目 | 結果（Xiaomi 平板，GeckoView 153） |
+|---|---|
+| Google 登入 | ✅ 使用者實測可以登入，關閉再開仍保持登入（app 回報 `signedIn: true`） |
+| 在頁面腳本之前注入 | ✅ 注入時 `readyState` 是 `loading`、頁面還沒有任何 `<script>`、`ytcfg` 尚未定義 |
+| 主世界的修改生效 | ✅ 包住 `JSON.parse` 看得到頁面的呼叫（do-not-track 的做法可用） |
+| 桌面版網站 | ✅ UA 為桌面版 Firefox 153（Linux） |
+| 體積 | ❌ debug APK 從 61.6 MB 變成 256 MB（arm64），minSdk 需要 26 |
+
+- 用 GeckoView 153 而不是最新的 158：154 起依賴 Kotlin 2.4，這個專案的 Kotlin 2.2 讀不了。
+- 改用 GeckoView 的完整計畫（IPC 橋接、bundle 與設定的注入、Tauri 的角色、體積）見 [GECKOVIEW-PLAN.md](GECKOVIEW-PLAN.md)。
+- **第 1 階段（bundle 在 Gecko 裡跑）已完成：** 全部插件打開時，GeckoView 與 WebView 載入的插件相同（28 個）；找到並修正兩個 Firefox 才有的問題（`pear-trans` 元素建構失敗、AudioContext 被 autoplay 政策暫停而沒有聲音）。細節見計畫文件的「第 1 階段結果」。IPC 目前是 stub（`assets/pear-gecko/stub-ipc.js`），第 2 階段接上 Rust。
 
 ## 手動驗證清單
 
@@ -209,7 +247,9 @@ cd tauri-poc/src-tauri && pnpm dlx @tauri-apps/cli@2.12.4 android build --debug 
 - [x] 登入後正常關閉、重開仍保持登入（Windows）
 - [ ] 確認單獨按 Alt 進入選單模式時，頁面本身是否也會凍結（若是，需攔截 `WM_SYSCOMMAND`/`SC_KEYMENU`）
 - [ ] 通知實際顯示、Last.fm 登入流程、ListenBrainz 送出
-- [ ] Android 實機平板：登入、播放、觸控操作、背景播放與鎖定畫面控制
+- [x] Android 實機平板：播放、觸控操作、背景播放與鎖定畫面控制
+- [x] Android 實機平板：Google 登入（UA／Client Hints 修改後重測：仍被拒）
+- [ ] Android 實機平板：選單外觀與操作、在「預設開啟」加入 `music.youtube.com` 後點連結
 - [ ] discord：實際 Discord 用戶端顯示 Rich Presence
 - [ ] api-server：新 client 的 Allow/Deny 對話框、HTTPS
 - [ ] taskbar-mediacontrol：縮圖按鈕外觀

@@ -3,20 +3,26 @@
 //! drives the frameless window. Whether the window is frameless is decided at
 //! startup (`restartNeeded`), see `lib.rs`. The backtick toggle and window
 //! dragging are handled in the page (`inject/plugin-glue.ts`).
+//!
+//! On Android it is the only menu; there is no window to manage, so the
+//! window channels answer as for a window that is never maximized.
 
 use std::sync::{
     atomic::{AtomicBool, Ordering},
     Arc, Mutex,
 };
 
-use serde_json::{json, Value};
-use tauri::{AppHandle, Manager, WindowEvent};
+use serde_json::Value;
+#[cfg(desktop)]
+use serde_json::json;
+use tauri::{AppHandle, Manager};
+#[cfg(desktop)]
+use tauri::WindowEvent;
 
 use super::Plugin;
-use crate::{
-    ipc::{send_to_page, Ipc, MAIN_WEBVIEW},
-    menu,
-};
+#[cfg(desktop)]
+use crate::ipc::{send_to_page, MAIN_WEBVIEW};
+use crate::{ipc::Ipc, menu};
 
 pub struct InAppMenu {
     /// Gates the window-event handler of the current run (it can't be removed)
@@ -31,6 +37,7 @@ impl InAppMenu {
 
 /// Whether in-app-menu draws the menu: its stored setting, or its default
 /// (on everywhere but macOS and Linux, like `defaultInAppMenuConfig`).
+#[cfg(desktop)]
 pub fn enabled_at_startup(config: &crate::config::Config) -> bool {
     if crate::config::unavailable_plugins().contains("in-app-menu") {
         return false;
@@ -41,6 +48,7 @@ pub fn enabled_at_startup(config: &crate::config::Config) -> bool {
         .unwrap_or(cfg!(not(any(target_os = "macos", target_os = "linux"))))
 }
 
+#[cfg(desktop)]
 fn window_call(app: &AppHandle, action: impl FnOnce(&tauri::WebviewWindow) -> tauri::Result<()>) -> Result<Value, String> {
     let window = app.get_webview_window(MAIN_WEBVIEW).ok_or("main window is gone")?;
     action(&window).map_err(|e| e.to_string())?;
@@ -68,6 +76,30 @@ impl Plugin for InAppMenu {
                 .map_err(|e| e.to_string())?;
             Ok(Value::Null)
         });
+        // The menu has no item icons on Tauri
+        ipc.handle(id, "image-path-to-data-url", |_, _| async move { Ok(Value::Null) });
+
+        let listening = Arc::new(AtomicBool::new(true));
+        *self.listening.lock().unwrap() = listening.clone();
+        #[cfg(desktop)]
+        Self::handle_window(app, &ipc, listening);
+        #[cfg(mobile)]
+        {
+            let _ = listening;
+            ipc.handle(id, "window-is-maximized", |_, _| async move { Ok(Value::Bool(false)) });
+        }
+    }
+
+    fn stop(&self, _app: &AppHandle) {
+        self.listening.lock().unwrap().store(false, Ordering::Relaxed);
+    }
+}
+
+#[cfg(desktop)]
+impl InAppMenu {
+    /// The frameless window's controls and its maximize state.
+    fn handle_window(app: &AppHandle, ipc: &Ipc, listening: Arc<AtomicBool>) {
+        let id = "in-app-menu";
         ipc.handle(id, "window-is-maximized", |app, _| async move {
             let window = app.get_webview_window(MAIN_WEBVIEW).ok_or("main window is gone")?;
             Ok(json!(window.is_maximized().unwrap_or(false)))
@@ -76,11 +108,7 @@ impl Plugin for InAppMenu {
         ipc.handle(id, "window-minimize", |app, _| async move { window_call(&app, |w| w.minimize()) });
         ipc.handle(id, "window-maximize", |app, _| async move { window_call(&app, |w| w.maximize()) });
         ipc.handle(id, "window-unmaximize", |app, _| async move { window_call(&app, |w| w.unmaximize()) });
-        // The menu has no item icons on Tauri
-        ipc.handle(id, "image-path-to-data-url", |_, _| async move { Ok(Value::Null) });
 
-        let listening = Arc::new(AtomicBool::new(true));
-        *self.listening.lock().unwrap() = listening.clone();
         let Some(window) = app.get_webview_window(MAIN_WEBVIEW) else { return };
         let maximized = Arc::new(AtomicBool::new(window.is_maximized().unwrap_or(false)));
         let (app, events_window) = (app.clone(), window.clone());
@@ -102,9 +130,5 @@ impl Plugin for InAppMenu {
                 _ => {}
             }
         });
-    }
-
-    fn stop(&self, _app: &AppHandle) {
-        self.listening.lock().unwrap().store(false, Ordering::Relaxed);
     }
 }

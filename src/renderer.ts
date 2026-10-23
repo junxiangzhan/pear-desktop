@@ -313,6 +313,20 @@ async function onApiLoaded() {
   const audioContext = new AudioContext();
   const audioSource = audioContext.createMediaElementSource(video);
   audioSource.connect(audioContext.destination);
+  // Engines that block autoplay (Firefox/GeckoView) start this context
+  // suspended, and the video plays through it, so it would be silent.
+  // Resume once allowed: on playback, after any user gesture, and now in
+  // case autoplay already started before the player API was ready.
+  const resumeAudio = () => {
+    if (audioContext.state === 'suspended') {
+      audioContext.resume().catch(() => {});
+    }
+  };
+  video.addEventListener('play', resumeAudio);
+  for (const type of ['pointerdown', 'keydown']) {
+    document.addEventListener(type, resumeAudio, { capture: true });
+  }
+  resumeAudio();
 
   for (const [id, plugin] of Object.entries(getAllLoadedRendererPlugins())) {
     if (typeof plugin.renderer !== 'function') {
@@ -418,8 +432,14 @@ async function onApiLoaded() {
   }
 }
 
+// YouTube Music serves Firefox an ES5 build with custom-elements-es5-adapter,
+// whose define() constructs elements without `new`, which ES2015 classes
+// reject. Where this bundle runs before the page's scripts (the Tauri and
+// GeckoView builds), this is still the native define.
+const defineNativeElement = customElements.define.bind(customElements);
+
 const definePearTransElements = () => {
-  customElements.define(
+  defineNativeElement(
     'pear-trans',
     class extends HTMLElement {
       connectedCallback() {

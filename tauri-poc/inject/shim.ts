@@ -47,6 +47,8 @@ Object.assign(window, {
   // No native window controls over a frameless window (Electron's
   // `titleBarOverlay`), so in-app-menu draws its own
   __pearNoTitleBarOverlay: true,
+  // Android has no window to minimize, maximize or close
+  __pearNoWindowControls: (window as { __PEAR_MOBILE__?: boolean }).__PEAR_MOBILE__ === true,
   // Debug hook: deliver a message to page listeners from the DevTools console
   __pearIpcEmit: emitLocal,
 });

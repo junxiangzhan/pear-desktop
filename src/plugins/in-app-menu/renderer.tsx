@@ -20,6 +20,9 @@ const isMacOS = navigator.userAgent.includes('Macintosh');
 const hasNativeWindowControls =
   !(window as { __pearNoTitleBarOverlay?: boolean }).__pearNoTitleBarOverlay &&
   (navigator.userAgent.includes('Windows') || isMacOS);
+// Hosts without a window to control (Android) set this flag
+const hasNoWindow = !!(window as { __pearNoWindowControls?: boolean })
+  .__pearNoWindowControls;
 
 const [config, setConfig] = createSignal<InAppMenuConfig>(
   defaultInAppMenuConfig,
@@ -39,7 +42,9 @@ export const onRendererLoad = async ({
     () => (
       <TitleBar
         enableController={
-          !hasNativeWindowControls && !config().hideDOMWindowControls
+          !hasNativeWindowControls &&
+          !hasNoWindow &&
+          !config().hideDOMWindowControls
         }
         initialCollapsed={window.mainConfig.get('options.hideMenu')}
         ipc={ipc}

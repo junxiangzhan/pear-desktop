@@ -1,0 +1,147 @@
+{
+ "config": {
+  "options": {
+   "alwaysOnTop": false,
+   "appVisible": true,
+   "autoResetAppCache": false,
+   "autoUpdates": true,
+   "disableHardwareAcceleration": false,
+   "hideMenu": false,
+   "hideMenuWarned": false,
+   "likeButtons": "",
+   "overrideUserAgent": false,
+   "proxy": "",
+   "removeUpgradeButton": false,
+   "restartOnConfigChanges": false,
+   "resumeOnStart": true,
+   "startAtLogin": false,
+   "startingPage": "",
+   "swapLikeButtonsOrder": false,
+   "themes": [],
+   "tray": false,
+   "trayClickPlayPause": false,
+   "usePodcastParticipantAsArtist": false
+  },
+  "plugins": {
+   "album-actions": {
+    "enabled": true
+   },
+   "album-color-theme": {
+    "enabled": true
+   },
+   "ambient-mode": {
+    "enabled": true
+   },
+   "amuse": {
+    "enabled": true
+   },
+   "api-server": {
+    "enabled": true
+   },
+   "audio-compressor": {
+    "enabled": true
+   },
+   "blur-nav-bar": {
+    "enabled": true
+   },
+   "captions-selector": {
+    "enabled": true
+   },
+   "clock": {
+    "enabled": true
+   },
+   "crossfade": {
+    "enabled": true
+   },
+   "custom-output-device": {
+    "enabled": true
+   },
+   "disable-autoplay": {
+    "enabled": true
+   },
+   "discord": {
+    "enabled": true
+   },
+   "do-not-track": {
+    "enabled": true
+   },
+   "equalizer": {
+    "enabled": true
+   },
+   "exponential-volume": {
+    "enabled": true
+   },
+   "in-app-menu": {
+    "enabled": true
+   },
+   "lumiastream": {
+    "enabled": true
+   },
+   "music-together": {
+    "enabled": true
+   },
+   "navigation": {
+    "enabled": true
+   },
+   "notifications": {
+    "enabled": true
+   },
+   "performance-improvement": {
+    "enabled": true
+   },
+   "picture-in-picture": {
+    "enabled": true
+   },
+   "playback-speed": {
+    "enabled": true
+   },
+   "precise-volume": {
+    "enabled": true
+   },
+   "quality-changer": {
+    "enabled": true
+   },
+   "scrobbler": {
+    "enabled": true
+   },
+   "shortcuts": {
+    "enabled": true
+   },
+   "skip-disliked-songs": {
+    "enabled": true
+   },
+   "skip-silences": {
+    "enabled": true
+   },
+   "sponsorblock": {
+    "enabled": true
+   },
+   "synced-lyrics": {
+    "enabled": true
+   },
+   "taskbar-mediacontrol": {
+    "enabled": true
+   },
+   "transparent-player": {
+    "enabled": true
+   },
+   "tuna-obs": {
+    "enabled": true
+   },
+   "unobtrusive-player": {
+    "enabled": true
+   },
+   "video-toggle": {
+    "enabled": true
+   },
+   "visualizer": {
+    "enabled": true
+   }
+  }
+ },
+ "unavailable": [
+  "auth-proxy-adapter",
+  "touchbar",
+  "downloader"
+ ]
+}

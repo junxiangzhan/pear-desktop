@@ -7,10 +7,6 @@ mod app_controls;
 mod config;
 mod dialogs;
 mod ipc;
-#[cfg(desktop)]
-mod menu;
-#[cfg(mobile)]
-#[path = "menu_mobile.rs"]
 mod menu;
 mod net;
 mod plugins;
@@ -50,15 +46,6 @@ const RENDERER_URL: &str = "https://pear.localhost/renderer.js";
 #[cfg(not(any(windows, target_os = "android")))]
 const RENDERER_URL: &str = "pear://localhost/renderer.js";
 
-// Android's WebView gets the mobile site unless it looks like desktop Chrome,
-// and the renderer plugins only understand the desktop DOM.
-#[cfg(mobile)]
-const DEFAULT_USER_AGENT: Option<&str> = Some(
-    "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/141.0.0.0 Safari/537.36",
-);
-#[cfg(desktop)]
-const DEFAULT_USER_AGENT: Option<&str> = None;
-
 /// The bundle served at `RENDERER_URL`.
 struct RendererBundle(String);
 
@@ -73,6 +60,9 @@ fn loader_script() -> String {
     format!(
         r#"(() => {{
   if (window.top !== window.self) return;
+  // Once per document: on Android, wry runs init scripts at document start
+  // and again from onPageStarted
+  if (window.__pearRendererLoaded) return;
   const xhr = new XMLHttpRequest();
   xhr.open('GET', '{RENDERER_URL}', false);
   xhr.send();
@@ -80,6 +70,7 @@ fn loader_script() -> String {
     console.error('[pear-tauri] failed to load renderer', xhr.status);
     return;
   }}
+  window.__pearRendererLoaded = true;
   const policy = window.trustedTypes?.createPolicy('pear-tauri-loader', {{
     createScript: (script) => script,
   }});
@@ -95,9 +86,10 @@ fn payload(app: &tauri::AppHandle) -> String {
     let config = app.state::<Config>();
     let unavailable: Vec<&String> = config::unavailable_plugins().iter().collect();
     format!(
-        "window.__PEAR_STORED_CONFIG__ = {};\nwindow.__PEAR_UNAVAILABLE_PLUGINS__ = {};\n{}",
+        "window.__PEAR_STORED_CONFIG__ = {};\nwindow.__PEAR_UNAVAILABLE_PLUGINS__ = {};\nwindow.__PEAR_MOBILE__ = {};\n{}",
         config.snapshot(),
         json!(unavailable),
+        cfg!(mobile),
         app.state::<RendererBundle>().0
     )
 }
@@ -218,6 +210,15 @@ pub fn run() {
             song_info::register_ipc(&ipc);
             app_controls::register_ipc(&ipc);
             dialogs::register_ipc(&ipc);
+            // in-app-menu is the only menu on Android, but its default comes
+            // from the user agent (desktop Linux there, where it is off)
+            #[cfg(mobile)]
+            {
+                let config = app.state::<Config>();
+                if !config.get_bool("plugins.in-app-menu.enabled") {
+                    config.set(app.handle(), "plugins.in-app-menu.enabled", json!(true));
+                }
+            }
             #[cfg(target_os = "android")]
             android_media::register(app.handle());
 
@@ -286,10 +287,9 @@ fn create_main_window(app: &tauri::App) -> tauri::Result<()> {
             .on_document_title_changed(|window, title| window::apply_title(&window, Some(title)));
     }
 
-    let user_agent = std::env::var("PEAR_POC_USER_AGENT")
-        .ok()
-        .or(DEFAULT_USER_AGENT.map(String::from));
-    if let Some(user_agent) = user_agent {
+    // On Android, MainActivity presents the WebView as desktop Chrome (the
+    // plugins need the desktop site, and Google sign-in refuses WebViews)
+    if let Ok(user_agent) = std::env::var("PEAR_POC_USER_AGENT") {
         builder = builder.user_agent(&user_agent);
     }
 
