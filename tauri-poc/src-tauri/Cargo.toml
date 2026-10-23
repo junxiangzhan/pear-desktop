@@ -1,0 +1,25 @@
+[package]
+name = "pear-tauri-poc"
+version = "0.1.0"
+description = "Proof of concept: Pear Desktop renderer on Tauri v2"
+edition = "2021"
+publish = false
+
+[lib]
+# The `_lib` suffix avoids a name clash with the binary on Windows
+name = "pear_tauri_poc_lib"
+crate-type = ["staticlib", "cdylib", "rlib"]
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[dependencies]
+tauri = { version = "2", features = ["devtools"] }
+serde_json = "1"
+
+[profile.release]
+codegen-units = 1
+lto = true
+opt-level = "s"
+panic = "abort"
+strip = true

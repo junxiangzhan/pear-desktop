@@ -1,0 +1,10 @@
+{
+  "$schema": "../gen/schemas/desktop-schema.json",
+  "identifier": "ytm-remote",
+  "description": "IPC the injected renderer may use from the remote YouTube Music origin",
+  "windows": ["main"],
+  "remote": {
+    "urls": ["https://music.youtube.com/*"]
+  },
+  "permissions": ["allow-save-config"]
+}
