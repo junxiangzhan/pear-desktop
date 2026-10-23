@@ -1,9 +1,32 @@
-use std::{fs, path::PathBuf};
+//! Tauri shell for Pear Desktop: hosts music.youtube.com with the renderer
+//! bundle injected, and reimplements the Electron main process in Rust.
 
-use serde_json::Value;
+mod app_controls;
+mod config;
+mod dialogs;
+mod ipc;
+mod menu;
+mod net;
+mod plugins;
+mod prompt;
+mod song_controls;
+mod song_info;
+mod tray;
+mod window;
+
+use std::fs;
+
+use serde_json::json;
 use tauri::{
     http::{header, Response, StatusCode},
-    AppHandle, Manager, WebviewUrl, WebviewWindowBuilder,
+    Manager, WebviewUrl, WebviewWindowBuilder,
+};
+
+use crate::{
+    config::Config,
+    ipc::{Ipc, MAIN_WEBVIEW},
+    plugins::Plugins,
+    song_info::SongInfoProvider,
 };
 
 const YTM_URL: &str = "https://music.youtube.com";
@@ -29,8 +52,8 @@ const DEFAULT_USER_AGENT: Option<&str> = Some(
 #[cfg(desktop)]
 const DEFAULT_USER_AGENT: Option<&str> = None;
 
-/// The script served at `RENDERER_URL`: stored config followed by the bundle.
-struct RendererPayload(String);
+/// The bundle served at `RENDERER_URL`.
+struct RendererBundle(String);
 
 /// Tiny init script that runs the payload in the top frame before page scripts.
 ///
@@ -47,10 +70,10 @@ fn loader_script() -> String {
   xhr.open('GET', '{RENDERER_URL}', false);
   xhr.send();
   if (xhr.status !== 200) {{
-    console.error('[pear-tauri-poc] failed to load renderer', xhr.status);
+    console.error('[pear-tauri] failed to load renderer', xhr.status);
     return;
   }}
-  const policy = window.trustedTypes?.createPolicy('pear-tauri-poc-loader', {{
+  const policy = window.trustedTypes?.createPolicy('pear-tauri-loader', {{
     createScript: (script) => script,
   }});
   const source = xhr.responseText + '\n//# sourceURL=pear-renderer.js';
@@ -59,32 +82,69 @@ fn loader_script() -> String {
     )
 }
 
-fn config_path(app: &AppHandle) -> tauri::Result<PathBuf> {
-    Ok(app.path().app_config_dir()?.join("config.json"))
-}
-
-fn load_config(app: &AppHandle) -> Value {
-    config_path(app)
-        .ok()
-        .and_then(|path| fs::read_to_string(path).ok())
-        .and_then(|text| serde_json::from_str(&text).ok())
-        .unwrap_or_else(|| Value::Object(Default::default()))
-}
-
-#[tauri::command]
-fn save_config(app: AppHandle, config: Value) -> Result<(), String> {
-    let path = config_path(&app).map_err(|e| e.to_string())?;
-    if let Some(dir) = path.parent() {
-        fs::create_dir_all(dir).map_err(|e| e.to_string())?;
-    }
-    let text = serde_json::to_string_pretty(&config).map_err(|e| e.to_string())?;
-    fs::write(path, text).map_err(|e| e.to_string())
+/// What the renderer reads synchronously at startup, ahead of the bundle.
+/// Built per request so a page reload sees the current config.
+fn payload(app: &tauri::AppHandle) -> String {
+    let config = app.state::<Config>();
+    let unavailable: Vec<&String> = config::unavailable_plugins().iter().collect();
+    format!(
+        "window.__PEAR_STORED_CONFIG__ = {};\nwindow.__PEAR_UNAVAILABLE_PLUGINS__ = {};\n{}",
+        config.snapshot(),
+        json!(unavailable),
+        app.state::<RendererBundle>().0
+    )
 }
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
-    tauri::Builder::default()
-        .invoke_handler(tauri::generate_handler![save_config])
+    let mut builder = tauri::Builder::default()
+        .plugin(
+            tauri_plugin_log::Builder::new()
+                .level(log::LevelFilter::Info)
+                .build(),
+        )
+        .plugin(tauri_plugin_dialog::init())
+        .plugin(tauri_plugin_opener::init())
+        .plugin(tauri_plugin_clipboard_manager::init())
+        .plugin(tauri_plugin_notification::init());
+
+    #[cfg(desktop)]
+    {
+        builder = builder
+            .plugin(tauri_plugin_single_instance::init(|app, _args, _cwd| {
+                // Like the `second-instance` handler in src/index.ts
+                if let Some(window) = app.get_webview_window(MAIN_WEBVIEW) {
+                    let _ = window.unminimize();
+                    let _ = window.show();
+                    let _ = window.set_focus();
+                }
+            }))
+            // Replaces the hand-rolled window-size/position saving in src/index.ts
+            .plugin(tauri_plugin_window_state::Builder::new().build())
+            .plugin(tauri_plugin_autostart::init(
+                tauri_plugin_autostart::MacosLauncher::LaunchAgent,
+                None,
+            ))
+            .plugin(tauri_plugin_global_shortcut::Builder::new().build());
+    }
+
+    builder
+        .invoke_handler(tauri::generate_handler![
+            ipc::ipc_send,
+            ipc::ipc_invoke,
+            config::config_set,
+            config::config_set_partial,
+            config::config_edit,
+            config::plugins_manifest,
+            app_controls::app_restart,
+            menu::menu_update,
+            menu::menu_set_checked,
+            prompt::prompt_open,
+            prompt::prompt_submit,
+            net::net_fetch,
+            window::window_set_always_on_top,
+        ])
+        .on_menu_event(menu::handle_event)
         .register_uri_scheme_protocol(PROTOCOL, |ctx, request| {
             if request.uri().path() != "/renderer.js" {
                 return Response::builder()
@@ -92,66 +152,96 @@ pub fn run() {
                     .body(Vec::new())
                     .unwrap();
             }
-            let payload = ctx.app_handle().state::<RendererPayload>();
             Response::builder()
                 .header(header::CONTENT_TYPE, "text/javascript; charset=utf-8")
                 .header(header::ACCESS_CONTROL_ALLOW_ORIGIN, YTM_URL)
                 .header(header::CACHE_CONTROL, "no-store")
-                .body(payload.0.as_bytes().to_vec())
+                .body(payload(ctx.app_handle()).into_bytes())
                 .unwrap()
         })
         .setup(|app| {
-            // Diagnostic switch: serve a file from disk instead of the built-in bundle
-            let renderer_js = match std::env::var("PEAR_POC_INJECT_FILE") {
+            let config_path = app.path().app_config_dir()?.join("config.json");
+            app.manage(Config::load(config_path));
+            app.manage(Ipc::default());
+            app.manage(SongInfoProvider::default());
+            app.manage(Plugins::new(plugins::all()));
+            app.manage(menu::MenuState::default());
+            app.manage(prompt::Prompts::default());
+            app.manage(window::PageTitle::default());
+
+            let ipc = app.state::<Ipc>();
+            config::register_ipc(&ipc);
+            song_info::register_ipc(&ipc);
+            app_controls::register_ipc(&ipc);
+
+            // Diagnostic switch: inject a file from disk instead of the built-in bundle
+            let bundle = match std::env::var("PEAR_POC_INJECT_FILE") {
                 Ok(path) => fs::read_to_string(path)?,
                 Err(_) => RENDERER_JS.to_owned(),
             };
-            // The renderer reads config synchronously, so it is baked into the
-            // payload instead of fetched over (async-only) Tauri IPC.
-            app.manage(RendererPayload(format!(
-                "window.__PEAR_STORED_CONFIG__ = {};\n{}",
-                load_config(app.handle()),
-                renderer_js
-            )));
+            app.manage(RendererBundle(bundle));
 
-            let mut builder =
-                WebviewWindowBuilder::new(app, "main", WebviewUrl::External(YTM_URL.parse()?))
-                    .use_https_scheme(true);
-            // Diagnostic switch: load the bare site to tell shell issues from renderer issues
-            if std::env::var_os("PEAR_POC_NO_INJECT").is_none() {
-                builder = builder.initialization_script_for_all_frames(loader_script());
-            }
-
-            #[cfg(desktop)]
-            {
-                builder = builder
-                    .title("Pear Desktop (Tauri PoC)")
-                    .inner_size(1100.0, 700.0)
-                    .min_inner_size(325.0, 425.0);
-            }
-
-            // Diagnostic switch: expose the Chrome DevTools Protocol on this port.
-            // Setting browser args replaces wry's defaults, so they are repeated here.
-            #[cfg(windows)]
-            if let Ok(port) = std::env::var("PEAR_POC_DEBUG_PORT") {
-                builder = builder.additional_browser_args(&format!(
-                    "--disable-features=msWebOOUI,msPdfOOUI,msSmartScreenProtection --remote-debugging-port={port}"
-                ));
-            }
-
-            let user_agent = std::env::var("PEAR_POC_USER_AGENT")
-                .ok()
-                .or(DEFAULT_USER_AGENT.map(String::from));
-            if let Some(user_agent) = user_agent {
-                builder = builder.user_agent(&user_agent);
-            }
-
-            let window = builder.build()?;
-            if std::env::var_os("PEAR_POC_DEVTOOLS").is_some() {
-                window.open_devtools();
-            }
+            create_main_window(app)?;
+            // Built with fallback labels now; rebuilt once the page sends translations
+            menu::rebuild(app.handle());
+            tray::sync(app.handle());
+            tray::register(app.handle());
             Ok(())
         })
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
+}
+
+fn create_main_window(app: &tauri::App) -> tauri::Result<()> {
+    let config = app.state::<Config>();
+    // Like `options.resumeOnStart` in src/index.ts
+    let start_url = if config.get_bool("options.resumeOnStart") {
+        config.get_str("url")
+    } else {
+        YTM_URL.to_owned()
+    };
+    let start_url = start_url
+        .parse()
+        .unwrap_or_else(|_| YTM_URL.parse().expect("valid default URL"));
+
+    let mut builder = window::shared_webview_options(WebviewWindowBuilder::new(
+        app,
+        MAIN_WEBVIEW,
+        WebviewUrl::External(start_url),
+    ));
+    // Diagnostic switch: load the bare site to tell shell issues from renderer issues
+    if std::env::var_os("PEAR_POC_NO_INJECT").is_none() {
+        builder = builder.initialization_script_for_all_frames(loader_script());
+    }
+
+    #[cfg(desktop)]
+    {
+        let tray = config.get_bool("options.tray");
+        builder = builder
+            .title("Pear Desktop")
+            .inner_size(1100.0, 700.0)
+            .min_inner_size(325.0, 425.0)
+            .always_on_top(config.get_bool("options.alwaysOnTop"))
+            // Like `options.appVisible`: start hidden in the tray
+            .visible(!tray || config.get_bool("options.appVisible"))
+            // Window materials only show through a transparent window; the
+            // transparent-player plugin needs a restart to toggle, like Electron
+            .transparent(config.get_bool("plugins.transparent-player.enabled"))
+            .on_document_title_changed(|window, title| window::apply_title(&window, Some(title)));
+    }
+
+    let user_agent = std::env::var("PEAR_POC_USER_AGENT")
+        .ok()
+        .or(DEFAULT_USER_AGENT.map(String::from));
+    if let Some(user_agent) = user_agent {
+        builder = builder.user_agent(&user_agent);
+    }
+
+    let window = builder.build()?;
+    window::apply_title(&window, None);
+    window::install_close_to_tray(&window);
+    if std::env::var_os("PEAR_POC_DEVTOOLS").is_some() {
+        window.open_devtools();
+    }
+    Ok(())
 }

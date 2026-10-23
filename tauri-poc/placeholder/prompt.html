@@ -1,0 +1,218 @@
+<!doctype html>
+<!-- Prompt window for `custom-electron-prompt` calls (see src-tauri/src/prompt.rs).
+     Options arrive as window.__PROMPT_OPTIONS__; the result goes back with the
+     `prompt_submit` command (null for cancel). -->
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Prompt</title>
+    <style>
+      :root {
+        color-scheme: dark;
+        --bg: #1f1f1f;
+        --field: #2b2b2b;
+        --border: #444;
+        --text: #eee;
+        --muted: #aaa;
+        --accent: #3ea6ff;
+      }
+      * { box-sizing: border-box; }
+      body {
+        margin: 0;
+        padding: 16px;
+        background: var(--bg);
+        color: var(--text);
+        font: 14px/1.4 system-ui, 'Segoe UI', sans-serif;
+        display: flex;
+        flex-direction: column;
+        gap: 12px;
+        min-height: 100vh;
+      }
+      label { display: block; margin-bottom: 4px; color: var(--muted); }
+      input, select {
+        width: 100%;
+        padding: 6px 8px;
+        border: 1px solid var(--border);
+        border-radius: 6px;
+        background: var(--field);
+        color: var(--text);
+        font: inherit;
+      }
+      input:focus, select:focus { outline: 2px solid var(--accent); outline-offset: -1px; }
+      .counter { display: flex; gap: 6px; }
+      .counter button { width: 36px; }
+      .fields { display: flex; flex-direction: column; gap: 10px; }
+      .buttons { display: flex; justify-content: flex-end; gap: 8px; margin-top: auto; }
+      button {
+        padding: 6px 16px;
+        border: 1px solid var(--border);
+        border-radius: 6px;
+        background: var(--field);
+        color: var(--text);
+        font: inherit;
+        cursor: pointer;
+      }
+      button.primary { background: var(--accent); border-color: var(--accent); color: #000; }
+    </style>
+  </head>
+  <body>
+    <div id="label"></div>
+    <div class="fields" id="fields"></div>
+    <div class="buttons">
+      <button id="cancel" type="button">Cancel</button>
+      <button id="ok" type="button" class="primary">OK</button>
+    </div>
+    <script>
+      const options = window.__PROMPT_OPTIONS__ ?? {};
+      const fields = document.getElementById('fields');
+      const submit = (value) =>
+        window.__TAURI_INTERNALS__.invoke('prompt_submit', { value });
+
+      const labelEl = document.getElementById('label');
+      if (options.useHtmlLabel) labelEl.innerHTML = options.label ?? '';
+      else labelEl.textContent = options.label ?? '';
+      if (options.buttonLabels?.ok) document.getElementById('ok').textContent = options.buttonLabels.ok;
+      if (options.buttonLabels?.cancel) document.getElementById('cancel').textContent = options.buttonLabels.cancel;
+
+      const applyAttrs = (input, attrs) => {
+        for (const [key, value] of Object.entries(attrs ?? {})) {
+          if (value !== undefined && value !== null) input[key] = value;
+        }
+      };
+      const textInput = (value, attrs) => {
+        const input = document.createElement('input');
+        input.type = 'text';
+        applyAttrs(input, attrs);
+        input.value = value ?? '';
+        return input;
+      };
+      const labelled = (text, control) => {
+        const wrap = document.createElement('div');
+        if (text) {
+          const label = document.createElement('label');
+          label.textContent = text;
+          wrap.append(label);
+        }
+        wrap.append(control);
+        return wrap;
+      };
+
+      // Electron-style accelerator from a keydown, e.g. "Ctrl+Shift+A"
+      const accelerator = (event) => {
+        const named = {
+          ArrowUp: 'Up', ArrowDown: 'Down', ArrowLeft: 'Left', ArrowRight: 'Right',
+          Space: 'Space', Tab: 'Tab', Enter: 'Enter', Escape: 'Esc', Minus: '-',
+          Equal: '=', Comma: ',', Period: '.', Slash: '/', Backquote: '`',
+          BracketLeft: '[', BracketRight: ']', Semicolon: ';', Quote: "'", Backslash: '\\',
+          MediaPlayPause: 'MediaPlayPause', MediaTrackNext: 'MediaNextTrack',
+          MediaTrackPrevious: 'MediaPreviousTrack', MediaStop: 'MediaStop',
+          AudioVolumeUp: 'VolumeUp', AudioVolumeDown: 'VolumeDown', AudioVolumeMute: 'VolumeMute',
+          PageUp: 'PageUp', PageDown: 'PageDown', Home: 'Home', End: 'End', Insert: 'Insert',
+        };
+        const { code } = event;
+        let key = null;
+        if (/^Key[A-Z]$/.test(code)) key = code.slice(3);
+        else if (/^Digit\d$/.test(code)) key = code.slice(5);
+        else if (/^Numpad\d$/.test(code)) key = 'num' + code.slice(6);
+        else if (/^F\d{1,2}$/.test(code)) key = code;
+        else key = named[code] ?? named[event.key] ?? null;
+        if (!key) return null;
+        const parts = [];
+        if (event.ctrlKey) parts.push('Ctrl');
+        if (event.altKey) parts.push('Alt');
+        if (event.shiftKey) parts.push('Shift');
+        if (event.metaKey) parts.push('Super');
+        return [...parts, key].join('+');
+      };
+
+      let read;
+      switch (options.type ?? 'input') {
+        case 'select': {
+          const select = document.createElement('select');
+          for (const [value, text] of Object.entries(options.selectOptions ?? {})) {
+            const option = document.createElement('option');
+            option.value = value;
+            option.textContent = text;
+            select.append(option);
+          }
+          if (options.value !== undefined) select.value = String(options.value);
+          fields.append(select);
+          read = () => select.value;
+          break;
+        }
+        case 'counter': {
+          const { minimum, maximum } = options.counterOptions ?? {};
+          const clamp = (n) =>
+            Math.min(maximum ?? Infinity, Math.max(minimum ?? -Infinity, n));
+          const input = document.createElement('input');
+          input.type = 'number';
+          if (minimum !== undefined) input.min = minimum;
+          if (maximum !== undefined) input.max = maximum;
+          input.value = options.value ?? minimum ?? 0;
+          const step = (delta) => () => {
+            input.value = clamp(Number(input.value || 0) + delta);
+          };
+          const minus = document.createElement('button');
+          minus.textContent = '−';
+          minus.onclick = step(-1);
+          const plus = document.createElement('button');
+          plus.textContent = '+';
+          plus.onclick = step(1);
+          const row = document.createElement('div');
+          row.className = 'counter';
+          row.append(minus, input, plus);
+          fields.append(row);
+          read = () => clamp(Number(input.value || 0));
+          break;
+        }
+        case 'keybind': {
+          const inputs = (options.keybindOptions ?? []).map((option) => {
+            const input = document.createElement('input');
+            input.readOnly = true;
+            input.placeholder = 'Press a key combination';
+            input.value = option.default ?? '';
+            input.addEventListener('keydown', (event) => {
+              if (event.key === 'Enter' || event.key === 'Escape') return;
+              event.preventDefault();
+              if (event.key === 'Backspace' || event.key === 'Delete') {
+                input.value = '';
+                return;
+              }
+              const combo = accelerator(event);
+              if (combo) input.value = combo;
+            });
+            fields.append(labelled(option.label, input));
+            return { input, value: option.value };
+          });
+          read = () => inputs.map(({ input, value }) => ({ value, accelerator: input.value }));
+          break;
+        }
+        case 'multiInput': {
+          const inputs = (options.multiInputOptions ?? []).map((option) => {
+            const input = textInput(option.value, option.inputAttrs);
+            fields.append(labelled(option.label, input));
+            return input;
+          });
+          read = () => inputs.map((input) => input.value);
+          break;
+        }
+        default: {
+          const input = textInput(options.value, options.inputAttrs);
+          fields.append(input);
+          read = () => input.value;
+        }
+      }
+
+      const ok = () => submit(read());
+      const cancel = () => submit(null);
+      document.getElementById('ok').onclick = ok;
+      document.getElementById('cancel').onclick = cancel;
+      document.addEventListener('keydown', (event) => {
+        if (event.key === 'Enter') ok();
+        if (event.key === 'Escape') cancel();
+      });
+      fields.querySelector('input, select')?.focus();
+    </script>
+  </body>
+</html>

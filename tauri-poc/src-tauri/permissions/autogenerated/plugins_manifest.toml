@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-plugins-manifest"
+description = "Enables the plugins_manifest command without any pre-configured scope."
+commands.allow = ["plugins_manifest"]
+
+[[permission]]
+identifier = "deny-plugins-manifest"
+description = "Denies the plugins_manifest command without any pre-configured scope."
+commands.deny = ["plugins_manifest"]

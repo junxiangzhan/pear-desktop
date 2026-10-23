@@ -1,10 +1,25 @@
 {
   "$schema": "../gen/schemas/desktop-schema.json",
   "identifier": "ytm-remote",
-  "description": "IPC the injected renderer may use from the remote YouTube Music origin",
+  "description": "IPC the injected renderer may use from the remote YouTube Music origin. Everything privileged happens in Rust handlers behind these commands.",
   "windows": ["main"],
   "remote": {
     "urls": ["https://music.youtube.com/*"]
   },
-  "permissions": ["allow-save-config"]
+  "permissions": [
+    "core:event:allow-listen",
+    "core:event:allow-unlisten",
+    "allow-ipc-send",
+    "allow-ipc-invoke",
+    "allow-config-set",
+    "allow-config-set-partial",
+    "allow-config-edit",
+    "allow-plugins-manifest",
+    "allow-app-restart",
+    "allow-menu-update",
+    "allow-menu-set-checked",
+    "allow-prompt-open",
+    "allow-net-fetch",
+    "allow-window-set-always-on-top"
+  ]
 }

@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-config-set-partial"
+description = "Enables the config_set_partial command without any pre-configured scope."
+commands.allow = ["config_set_partial"]
+
+[[permission]]
+identifier = "deny-config-set-partial"
+description = "Denies the config_set_partial command without any pre-configured scope."
+commands.deny = ["config_set_partial"]
