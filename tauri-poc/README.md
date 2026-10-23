@@ -32,7 +32,7 @@ renderer 會同步讀 `window.mainConfig.get()`，但 Tauri IPC 只有非同步�
 
 ### 插件
 
-有 backend 的 23 個插件在 shim 裡強制停用（`UNPORTED_BACKEND_PLUGINS`）。另外 `performance-improvement` 在 PoC 中**預設停用**（`POC_DEFAULT_OVERRIDES`，原因見下方「卡頓的原因」）；這只是預設值，在 `config.json` 寫入 `{"plugins":{"performance-improvement":{"enabled":true}}}` 仍可重新啟用。沒有 backend 的 `ipcRenderer.send/invoke` 只會印 debug log。
+有 backend 的 23 個插件在 shim 裡強制停用（`UNPORTED_BACKEND_PLUGINS`），其餘插件沿用各自的預設值。`performance-improvement` 曾在 PoC 中預設停用，它造成的卡頓已在插件本身修正，現在恢復預設開啟（見下方「卡頓的原因」）。沒有 backend 的 `ipcRenderer.send/invoke` 只會印 debug log。
 
 **CSS：** renderer 的 `import 'mdui/mdui.css'` 會被 Vite 抽成獨立 CSS 檔，但 Electron 的 `get-renderer-script` 只讀 `<script>`，所以這份 CSS 在 Electron 裡從未套用。PoC 一度把它內嵌注入，結果 mdui 的 `:root { background-color }` 在 YTM 半透明背景後面畫出灰色色塊；現在改為直接丟棄，行為與 Electron 一致。
 
@@ -96,7 +96,18 @@ cd tauri-poc/src-tauri && pnpm dlx @tauri-apps/cli@2.12.4 android build --debug 
 
 `src/plugins/performance-improvement/scripts/cpu-tamer/cpu-tamer-by-animationframe.js` 會在頁面插入一個隱藏的 `<a-f>` 元素，跑一個 1 ms、無限循環的 CSS 動畫，拿它的 `animationiteration` 事件當時脈（每個 frame 觸發一次），並改寫全域的 `setTimeout`/`setInterval`：媒體播放中時，YTM 的計時器會被延到下一個時脈才執行。在高更新率螢幕（例如 165 Hz）上，主執行緒每個 frame 都要被喚醒一次，捲動時就會掉幀，感覺像是「動一下、卡一下」，容易誤以為是 GC。
 
-因此 PoC 預設停用這個插件。停用後已確認：沒有 `<a-f>` 元素、`setTimeout` 恢復為原生函式、其他插件與登入狀態不受影響。同樣的開銷在 Electron 版也存在（見上表），是否要在 Electron 版也調整，值得另外評估。
+**已修正**（[pear-devs/pear-desktop#4772](https://github.com/pear-devs/pear-desktop/pull/4772)，已合併進 `tauri-poc`）：時脈改用 `requestAnimationFrame`，只有在有計時器等待時才要求下一個 frame。計時器的延後與合併行為不變（播放中 1 ms `setInterval` 每秒仍約 164 次）。因此 PoC 不再預設停用這個插件。
+
+修正後在 PoC 重新量測（Windows、WebView2、已登入、未播放、165 Hz、視窗 1100×700 置頂；與 Electron 相同的模擬滾輪：每 33 ms 一格 120 px、每 2 秒反向；每種情況 15 秒 × 2 次取平均；以 `PEAR_POC_INJECT_FILE` 切換 bundle）：
+
+| 情況 | 插件關閉 | 修正前（CSS 動畫時脈） | 修正後（rAF 時脈） |
+|---|---|---|---|
+| 模擬捲動：掉幀 | 64 | 684 | 73 |
+| 模擬捲動：主執行緒忙碌 | 62.9% | 87.3% | 60.3% |
+| 靜置：主執行緒忙碌 | 4.3% | 33.0% | 4.3% |
+| 靜置：`animationiteration` / main frame | 0 / 4 | 2,555 / 2,518 | 0 / 4 |
+
+播放中的情況沒有在 PoC 量（會寫入帳號的播放紀錄）；Electron 版未登入播放時的量測見 #4772。
 
 ## 手動驗證清單
 

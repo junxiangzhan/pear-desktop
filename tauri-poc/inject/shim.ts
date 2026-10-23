@@ -55,14 +55,6 @@ const UNPORTED_BACKEND_PLUGINS = new Set([
   'tuna-obs',
 ]);
 
-// PoC defaults that differ from the plugins' own. Unlike the list above these
-// are only defaults: an explicit entry in config.json still wins.
-// performance-improvement: its cpu-tamer wakes the main thread every frame via
-// a 1ms CSS animation and dropped 550 frames in 20s of scrolling (0 when off).
-const POC_DEFAULT_OVERRIDES: Record<string, Partial<PluginConfig>> = {
-  'performance-improvement': { enabled: false },
-};
-
 const deepmerge = deepmergeCustom({ mergeArrays: false });
 
 let store = deepmerge(
@@ -108,7 +100,6 @@ const pluginConfig = async (id: string) => {
   const stub = (await pluginStubs)[id];
   const config = deepmerge(
     stub?.config ?? { enabled: false },
-    POC_DEFAULT_OVERRIDES[id] ?? {},
     storedPlugins()[id] ?? {},
   ) as PluginConfig;
   if (UNPORTED_BACKEND_PLUGINS.has(id)) config.enabled = false;
@@ -215,9 +206,6 @@ const mainConfig = {
   plugins: {
     getPlugins() {
       const plugins = { ...storedPlugins() };
-      for (const [id, override] of Object.entries(POC_DEFAULT_OVERRIDES)) {
-        plugins[id] = { ...override, ...plugins[id] };
-      }
       for (const id of UNPORTED_BACKEND_PLUGINS) {
         plugins[id] = { ...plugins[id], enabled: false };
       }
