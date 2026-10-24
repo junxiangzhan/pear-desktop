@@ -3,8 +3,10 @@
 //! The page finds the stream and the metadata with youtubei.js, which needs
 //! BotGuard (`tauri-poc/inject/downloader.ts`); this side downloads, tags and
 //! saves the file. There is no ffmpeg, so files keep YouTube's own audio
-//! format (AAC in MP4, `.m4a`) whatever preset is chosen, and are tagged
-//! with lofty (MP4 ilst) instead of ID3.
+//! format (AAC in MP4, `.m4a`) whatever preset is chosen, rewritten from
+//! YouTube's fragmented MP4 into a regular one (`remux.rs`; Windows' player
+//! can't play the fragmented file), and are tagged with lofty (MP4 ilst)
+//! instead of ID3.
 //!
 //! - `downloader:save` (invoke): downloads one song; progress goes back as
 //!   `downloader:progress` `[id, ratio]`
@@ -36,6 +38,8 @@ use crate::{
     ipc::{send_to_page, Ipc},
     song_info::{cleanup_name, SongInfo, SongInfoEvent, SongInfoProvider},
 };
+
+mod remux;
 
 const ID: &str = "downloader";
 /// googlevideo throttles long unranged reads; youtubei.js reads 10 MB ranges
@@ -216,9 +220,15 @@ async fn save(app: &AppHandle, request: SaveRequest) -> Result<Value, String> {
             cover,
         };
         let path = part.clone();
-        tauri::async_runtime::spawn_blocking(move || write_tags(&path, metadata))
-            .await
-            .map_err(|error| error.to_string())??;
+        tauri::async_runtime::spawn_blocking(move || {
+            let data = std::fs::read(&path).map_err(|error| error.to_string())?;
+            if let Some(regular) = remux::remux(&data).map_err(|error| format!("remuxing failed: {error}"))? {
+                std::fs::write(&path, regular).map_err(|error| error.to_string())?;
+            }
+            write_tags(&path, metadata)
+        })
+        .await
+        .map_err(|error| error.to_string())??;
         #[cfg(desktop)]
         {
             std::fs::rename(&part, &target).map_err(|error| error.to_string())?;
