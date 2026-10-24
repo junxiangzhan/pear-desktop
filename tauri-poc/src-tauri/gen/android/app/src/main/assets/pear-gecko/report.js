@@ -48,7 +48,15 @@ const parts = () => {
   const appLayout = document.querySelector('ytmusic-app-layout');
   const playerPage = document.querySelector('ytmusic-player-page');
   const guideEntry = document.querySelector('#mini-guide ytmusic-guide-entry-renderer, ytmusic-guide-renderer[mini] ytmusic-guide-entry-renderer');
+  const attributes = (selector) => {
+    const element = document.querySelector(selector);
+    return element ? [...element.attributes].map((a) => `${a.name}=${a.value}`.slice(0, 80)) : null;
+  };
   return {
+    appAttributes: attributes('ytmusic-app'),
+    navBarAttributes: attributes("ytmusic-app-layout > [slot='nav-bar']"),
+    playerBarAttributes: attributes("ytmusic-app-layout > [slot='player-bar']"),
+    contentAttributes: attributes("ytmusic-app-layout > [slot='content']"),
     layoutAttributes: appLayout ? [...appLayout.attributes].map((a) => a.name) : null,
     layoutChildren: appLayout ? [...appLayout.children].map(describe) : null,
     miniGuideFirstEntry: guideEntry && describe(guideEntry),

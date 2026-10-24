@@ -58,4 +58,30 @@ const sheet = new CSSStyleSheet();
 sheet.replaceSync(musicPlayerCss);
 document.adoptedStyleSheets = [...document.adoptedStyleSheets, sheet];
 
+// YTM bug: with the player page open in its narrow layout, it hides the nav
+// bar and the player bar (inline `visibility: hidden`), and one jump to a
+// wide layout leaves them hidden until the size crosses another of its
+// breakpoints. Android floating windows jump like that (phone size, then the
+// full size scaled down). Once a resize settles in the wide layout, show them
+// again as YTM would; video full screen hides them on purpose.
+let resizeSettled: ReturnType<typeof setTimeout> | undefined;
+window.addEventListener('resize', () => {
+  clearTimeout(resizeSettled);
+  resizeSettled = setTimeout(() => {
+    const layout = document.querySelector('ytmusic-app-layout');
+    const playerPage = document.querySelector('ytmusic-player-page');
+    if (
+      !layout ||
+      playerPage?.hasAttribute('is-mweb-modernization-enabled') ||
+      layout.getAttribute('player-ui-state') === 'FULLSCREEN'
+    ) {
+      return;
+    }
+    for (const slot of ['nav-bar', 'player-bar']) {
+      const bar = layout.querySelector<HTMLElement>(`:scope > [slot="${slot}"]`);
+      if (bar?.style.visibility === 'hidden') bar.style.visibility = '';
+    }
+  }, 500);
+});
+
 console.log('[pear-tauri]', 'shim installed');
