@@ -16,6 +16,8 @@ mod plugins;
 mod prompt;
 mod song_controls;
 mod song_info;
+#[cfg(target_os = "android")]
+mod system_bars;
 #[cfg(desktop)]
 mod tray;
 mod window;
@@ -154,7 +156,10 @@ pub fn run() {
     }
     #[cfg(target_os = "android")]
     {
-        builder = builder.plugin(android_media::init()).plugin(gecko_bridge::init());
+        builder = builder
+            .plugin(android_media::init())
+            .plugin(gecko_bridge::init())
+            .plugin(system_bars::init());
     }
 
     builder = builder.invoke_handler(tauri::generate_handler![
@@ -225,6 +230,7 @@ pub fn run() {
             #[cfg(target_os = "android")]
             {
                 android_media::register(app.handle());
+                system_bars::register(app.handle());
                 if page::in_gecko() {
                     gecko_bridge::register(app.handle());
                 }

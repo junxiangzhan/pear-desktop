@@ -152,6 +152,12 @@ Tauri 版的 loader 用同步 XHR 從 `pear` 協定拿「設定快照 + bundle�
 
 **途中修正**：YTM 播放時會要求離開頁面前確認（`beforeunload`），GeckoView 沒有 prompt delegate 時會直接拒絕，選單的重新整理因此沒有作用。`GeckoPage` 現在一律允許離開，和 Electron 版在 `src/index.ts` 對 `will-prevent-unload` 的處理相同。
 
+**之後的修正**
+
+- viewport 改為 `VIEWPORT_MODE_MOBILE`（UA 仍是桌面版）：桌面 viewport 模式至少以 980 CSS px 排版，視窗縮小時不會切換到 YTM 的窄版面。改後浮動視窗（381 dp）的 viewport 是 385 px，全寬時不變（1173 px）。
+- 「關於」改成和 Electron 一樣的子選單：in-app-menu 的頂層按鈕只會開子選單，原本直接放在頂層的項目點了沒反應（Windows 開 in-app-menu 時也一樣）。
+- Android 的「檢視」選單加了「切換全螢幕」（隱藏系統列，記在 `options.fullscreen`）。
+
 **留給第 3 階段**
 
 - 背景播放：`MainActivity` 讓 WebView 在背景保持「可見」的處理還是針對 WebView；GeckoView 在 activity 停止後是否繼續播放要驗證，必要時讓 `GeckoSession` 保持 active。

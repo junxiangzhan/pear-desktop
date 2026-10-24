@@ -397,6 +397,17 @@ fn build(app: &AppHandle, data: &MenuData) -> tauri::Result<NativeMenu> {
             b.separator(),
             b.item("act:toggleFullscreen", &b.label("view.submenu.toggle-fullscreen"), true, Some("F11")),
         ]);
+    } else {
+        // Hides the status and navigation bars (Android immersive mode); remembered
+        view_items.extend([
+            b.separator(),
+            b.check(
+                "opt:fullscreen",
+                &b.label("view.submenu.toggle-fullscreen"),
+                config.get_bool("options.fullscreen"),
+                true,
+            ),
+        ]);
     }
     let view = b.submenu(&b.label("view.label"), view_items);
 
@@ -414,7 +425,11 @@ fn build(app: &AppHandle, data: &MenuData) -> tauri::Result<NativeMenu> {
     }
     let navigation = b.submenu(&b.label("navigation.label"), navigation_items);
 
-    let about = b.item("act:about", &b.label("about"), true, None);
+    // A submenu like Electron's (`submenu: [{ role: 'about' }]`): in-app-menu's
+    // top-level buttons only open submenus
+    let about_label = b.label("about");
+    let about_item = b.item("act:about", &format!("{about_label} Pear Desktop"), true, None);
+    let about = b.submenu(&about_label, vec![about_item]);
 
     let top = [plugins, options, view, navigation, about];
     #[cfg(desktop)]
@@ -608,6 +623,8 @@ fn dispatch(app: &AppHandle, id: &str) {
                 }
             }
             "startAtLogin" => crate::window::set_start_at_login(app, checked),
+            #[cfg(target_os = "android")]
+            "fullscreen" => crate::system_bars::set_fullscreen(app, checked),
             "trayClickPlayPause" => {}
             _ => {}
         }

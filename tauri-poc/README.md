@@ -132,6 +132,8 @@ cd tauri-poc/src-tauri && pnpm dlx @tauri-apps/cli@2.12.4 android build --debug 
 - **Google 登入：** 在 WebView 裡無法登入，PoC 不打算繞過。登入頁本身送出的 POST（`AccountsSignInUi/data/batchexecute`、`browserinfo`）都帶 `X-Requested-With`，而 `shouldInterceptRequest` 拿不到 POST 內容，無法不帶標頭重送；`browserinfo` 也會回傳瀏覽器指紋。WebView 版目前只能未登入使用；可行的方向是換成 GeckoView（見下一節）。
 - 實機平板請改用 `--target aarch64`。
 - **頁面引擎：** 預設是 GeckoView（Google 登入可用，見「GeckoView 可行性驗證」）。`adb shell am start -n com.github.pear_devs.tauri_poc/.MainActivity --es engine webview` 改回 WebView，`--es engine gecko` 切回；選擇會記住。`MainActivity` 在 Rust 啟動前把它寫進環境變數 `PEAR_ENGINE`（`src/page.rs` 讀取）。下面關於 WebView 的說明只適用於 WebView 引擎。
+- **GeckoView 的 viewport：** UA 是桌面版 Firefox（插件需要桌面版網站），但 viewport 用 `VIEWPORT_MODE_MOBILE`，依 YTM 自己的 `<meta name="viewport" content="width=device-width">` 排版，和 WebView 一樣。`VIEWPORT_MODE_DESKTOP` 會把頁面至少排成 980 CSS px 寬，視窗縮小（分割畫面、浮動視窗、手機）時就不會切換到 YTM 的窄版面；平板浮動視窗（381 dp）實測 viewport 為 385 px。
+- **全螢幕：** Android 版的「檢視」選單有「切換全螢幕」勾選項，隱藏狀態列與導覽列（三鍵或手勢提示條），從邊緣滑動會暫時顯示；選擇存在 `options.fullscreen`，下次啟動沿用（`src/system_bars.rs`、`SystemBarsPlugin.kt`）。
 - **init script 執行兩次：** wry 產生的 Android 程式碼會用 `addDocumentStartJavaScript` 注入 init script，但 `RustWebViewClient.onPageStarted` 又對所有沒被 Rust 攔截的頁面再 `evaluateJavascript` 一次，沒有檢查前者是否可用（wry 的 bug；`generated/` 每次建置都會重新產生，不能直接改）。PoC 的 loader 以 `window.__pearRendererLoaded` 確保每個文件只載入一次 bundle；Tauri 自己的腳本仍會跑兩次，console 會出現無害的 `Cannot redefine property`。
 - **已知問題：** 偶爾啟動後頁面停在空白（`about:blank`），強制停止再開就會恢復，還沒追查。
 - debug APK 帶完整除錯資訊時約 374 MB（`.so` 240 MB），模擬器空間不足會裝不上；測試時可在建置前設 `CARGO_PROFILE_DEV_DEBUG=0 CARGO_PROFILE_DEV_STRIP=debuginfo`（約 134 MB）。

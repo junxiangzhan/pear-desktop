@@ -22,10 +22,13 @@ import org.mozilla.geckoview.GeckoView
 class GeckoPage(activity: Activity) {
   val view = GeckoView(activity)
   private val session = GeckoSession(
-    // Desktop Firefox: the renderer plugins need the desktop site
+    // Desktop Firefox: the renderer plugins need the desktop site. The
+    // viewport follows the page's meta tag (width=device-width), like the
+    // WebView: the desktop viewport mode lays pages out at least 980 CSS px
+    // wide, so narrow windows never got YTM's narrow layouts
     GeckoSessionSettings.Builder()
       .userAgentMode(GeckoSessionSettings.USER_AGENT_MODE_DESKTOP)
-      .viewportMode(GeckoSessionSettings.VIEWPORT_MODE_DESKTOP)
+      .viewportMode(GeckoSessionSettings.VIEWPORT_MODE_MOBILE)
       .build()
   )
   var canGoBack = false
