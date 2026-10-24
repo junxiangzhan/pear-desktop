@@ -31,7 +31,7 @@ tauri-poc/
 │  ├─ menu-runtime.ts        # 執行插件 menu()、序列化給 Rust、處理點擊；順便送出 Rust 對話框要用的翻譯
 │  ├─ plugin-glue.ts         # 只有 UI 的 backend（提示框、PiP 按鍵、無邊框視窗拖曳、like 狀態）
 │  └─ crossfade.ts           # crossfade 的 `audio-url`（youtubei.js 在頁面裡跑）
-├─ plugin-support.json       # 尚未移植的插件清單（Vite 與 Rust 共用）
+├─ plugin-support.json       # 強制停用的插件清單（Vite 與 Rust 共用）
 ├─ placeholder/prompt.html   # 提示框視窗（取代 custom-electron-prompt）
 └─ src-tauri/
    ├─ src/                   # Rust 主行程（見上圖）；menu_mobile.rs 是行動版的 `menu`（只保留翻譯）
@@ -58,21 +58,36 @@ Rust 擁有 `config.json`（`config.rs`，`defaults.ts` 的移植）。renderer 
 | 狀態 | 插件 |
 |---|---|
 | 純 renderer，原本就能用 | album-actions、album-color-theme、ambient-mode、clock、equalizer、navigation、performance-improvement、playback-speed、video-toggle、visualizer 等 |
-| backend 已移植到 Rust | sponsorblock、synced-lyrics（`synced-lyrics:fetch`）、lumiastream、tuna-obs、notifications（基本模式）、picture-in-picture、transparent-player、scrobbler、shortcuts（全域／視窗內快捷鍵、媒體鍵）、precise-volume、discord、api-server、amuse、in-app-menu、taskbar-mediacontrol（Windows） |
-| backend 改在頁面處理 | captions-selector、quality-changer、music-together（只有 UI，`plugin-glue.ts`）、crossfade（`crossfade.ts`）、do-not-track（只有 In player 模式） |
-| 尚未移植（強制停用、選單變灰） | auth-proxy-adapter、downloader、touchbar |
+| backend 已移植到 Rust | sponsorblock、synced-lyrics（`synced-lyrics:fetch`）、lumiastream、tuna-obs、notifications、picture-in-picture、transparent-player、scrobbler、shortcuts（全域／視窗內快捷鍵、媒體鍵）、precise-volume、discord、api-server、amuse、in-app-menu、taskbar-mediacontrol（Windows）、auth-proxy-adapter（桌面）、do-not-track 的 With blocklists 模式 |
+| backend 分在頁面與 Rust | downloader（頁面找串流，Rust 下載存檔） |
+| backend 改在頁面處理 | captions-selector、quality-changer、music-together（只有 UI，`plugin-glue.ts`）、crossfade（`crossfade.ts`）、do-not-track 的 In player 模式 |
+| 不支援（強制停用、選單變灰） | touchbar（見「這個環境無法建置測試的平台功能」） |
 
-- **crossfade：** `audio-url` 改在頁面裡用 youtubei.js 取得串流網址（與 `src/plugins/utils/main/youtubei.ts` 相同的做法：`new Function` 直譯器、BotGuard 在隱藏 iframe 裡跑、PO token minter 快取），跨網域請求經 `net_fetch`（白名單加了 `www.youtube.com`、`jnn-pa.googleapis.com`）。
+- **crossfade：** `audio-url` 改在頁面裡用 youtubei.js 取得串流網址（與 `src/plugins/utils/main/youtubei.ts` 相同的做法：`new Function` 直譯器、BotGuard 在隱藏 iframe 裡跑、PO token minter 快取，共用的部分在 `inject/youtubei.ts`），跨網域請求經 `net_fetch`（白名單加了 `www.youtube.com`、`jnn-pa.googleapis.com`）。
+- **downloader：** 頁面（`inject/downloader.ts`）用 youtubei.js 取得歌曲資訊、專輯、封面與串流網址（同 crossfade 的 BotGuard／PO token），Rust（`plugins/downloader.rs`）以 10 MB 分段下載、用 lofty 寫入標籤（標題、演出者、專輯、曲序、封面；1280×720 的封面照 Electron 裁成 720×720）後存檔，檔名 `演出者 - 標題.m4a`。**沒有 ffmpeg，所以一律存 YouTube 原始的 AAC（`.m4a`，DASH 格式，Windows 檔案總管、ffprobe 都讀得到標籤）**，選 mp3 或 Custom 預設也一樣，預設選單最上面有註明。播放清單、專輯（曲序）、跳過已存在的檔案、下載完成時下載、工作列進度條、錯誤與開始下載的對話框與 Electron 相同。youtubei.js 用的是未登入的工作階段（與 crossfade 相同），所以 Premium 的 256 kbps 格式、年齡限制與私人播放清單（例如「喜歡的音樂」）抓不到。**Android：** 存到共用的「音樂/Pear Desktop」（MediaStore，Android 10 以上不需要權限；Android 8、9 存在 app 自己的音樂資料夾，移除 app 時會一起刪掉），選單裡的資料夾選項會隱藏。選單在頁面執行，`compat/downloader-menu.ts` 包住原本的選單：資料夾選擇改用非同步對話框（`pear:show-open-dialog` 加了 `openDirectory`），`main/index.ts`、`main/utils.ts` 換成 `compat/downloader.ts`。
+- **proxy 與 auth-proxy-adapter：** 選項 › 進階新增「設定 Proxy」（`options.proxy`，Electron 的 `--proxy-server`），改完要重新啟動。Windows 在 WebView2 啟動時套用（`proxy_url`），Rust 自己的請求（歌詞、封面、下載等）也走同一個 proxy；Chromium 不能帶 SOCKS 帳密，所以 auth-proxy-adapter 開啟時 WebView2 改連它在本機開的 SOCKS5 中繼（`plugins/auth_proxy_adapter.rs`），由中繼帶帳密連到上游。**Android（GeckoView）** 由 pear-gecko extension 的 `browser.proxy.onRequest` 直接套用，SOCKS 帳密也能帶，改了立即生效，不需要中繼。
 - **discord：** Rust 直接講 Discord 的本機 IPC（Windows named pipe `discord-ipc-N`、Unix socket），取代 `@xhayper/discord-rpc`；節流、暫停逾時清除、自動重連照搬 `DiscordService`。選單在頁面執行，它 import 的 `main.ts` 在打包時換成 `compat/discord.ts`（透過 IPC 讀連線狀態、連線、清除）。
-- **api-server：** axum 重寫，路由、JWT（HS256，與 hono/jwt 互通）、CORS、WebSocket 事件與 Electron 版相同；`AUTH_AT_FIRST` 的 Allow/Deny 對話框用頁面送來的翻譯。沒有移植 `/doc`（OpenAPI）與 `/swagger`。預設 secret 是頁面載入時的 `Date.now()`，Rust 第一次啟動時把它存進設定，token 才不會在重新整理後失效。HTTPS 用 rustls（ring）。
+- **api-server：** axum 重寫，路由、JWT（HS256，與 hono/jwt 互通）、CORS、WebSocket 事件與 Electron 版相同；`AUTH_AT_FIRST` 的 Allow/Deny 對話框用頁面送來的翻譯。`/doc`（OpenAPI）與 `/swagger` 來自 zod 路由定義，Rust 跑不了，所以由打包步驟產生（`scripts/api-openapi.mts` 在 Vite SSR 裡載入真正的路由模組、把主行程模組換成空殼，照 `backend/main.ts` 註冊後取出 Hono 的回應），Rust 原樣回傳；Swagger UI 和 Electron 一樣從 jsDelivr 載入。預設 secret 是頁面載入時的 `Date.now()`，Rust 第一次啟動時把它存進設定，token 才不會在重新整理後失效。HTTPS 用 rustls（ring）。
 - **amuse：** 9863 埠的 `/`、`/query`、`/api`，axum。
 - **in-app-menu：** 啟用時（Windows 預設）主視窗無邊框，選單與視窗按鈕由頁面畫，Rust 回答 `get-menu`／`peard:menu-event`／`window-*`。`app-region: drag` 由 `plugin-glue.ts` 轉成 `start_dragging`（雙擊最大化）。window-state 插件不還原 decorations／visible，否則會蓋掉這個設定。Android 上它是唯一的選單：啟動時一律開啟（頁面依 UA 判斷的預設值在「Linux」上是關閉），不畫視窗按鈕（`__pearNoWindowControls`），選單裡也拿掉 Android 用不到的項目（置頂、開機啟動、系統匣、縮放、全螢幕、DevTools、自訂視窗標題、重新啟動／結束）。
-- **系統媒體控制：** Windows 的 SMTC 由 WebView2 自己提供（顯示名稱是 `msedgewebview2.exe`，設定 AppUserModelID 也不會變）；taskbar-mediacontrol 的縮圖按鈕用 `ITaskbarList3`。Linux 的 MPRIS 與 macOS Now Playing 尚未移植（無法在 Windows 上建置測試）。Android 見下方「背景播放」。
-- **notifications：** 互動式 Windows toast（附播放按鈕）尚未移植；`interactive` 開啟時退回基本通知。
-- **do-not-track（廣告阻擋）：** 預設的 **In player** 模式完全在頁面裡執行（包住 `JSON.parse` 與 `Response.json`，刪掉播放器回應裡的 `playerAds`／`adPlacements`／`adSlots`），Windows 與 Android 都可用。**With blocklists 模式沒有移植**：它靠 Electron 的 `session.webRequest` 依清單攔截網路請求，Tauri 沒有跨平台的對應 API（`on_web_resource_request` 只涵蓋 app 自己的協定）；要做得在 Windows 用 WebView2 的 `WebResourceRequested`、Android 改 WebViewClient 的 `shouldInterceptRequest`，再配一個比對引擎（例如 `adblock` crate）。選了這個模式時，頁面只會印出警告，不會阻擋任何東西。打包時 `blocker.ts` 與 Ghostery 的 preload 由 `compat/do-not-track.ts` 取代。
+- **系統媒體控制：** Windows 的 SMTC 由 WebView2 自己提供（顯示名稱是 `msedgewebview2.exe`，設定 AppUserModelID 也不會變）；taskbar-mediacontrol 的縮圖按鈕用 `ITaskbarList3`。Linux 的 MPRIS 與 macOS Now Playing 沒有移植（見「這個環境無法建置測試的平台功能」）。Android 見下方「背景播放」。
+- **notifications：** `interactive` 開啟時，Windows 顯示附上一首／播放暫停／下一首按鈕的 WinRT toast，七種 `toastStyle` 都有（`plugins/notifications/toast.rs`，`interactive.ts` 的移植）。按鈕用 toast 自己的 `Activated` 事件在程式內處理（Electron 用 `peard://` 協定啟動第二個實例），所以 app 要在執行中；和 Electron 一樣 5 秒後收起，`refreshOnPlayPause` 會重新顯示，`trayControls` 讓按系統匣圖示顯示／收起 toast（雙擊切換視窗）。和 Electron 不同的地方：標題有做 XML 跳脫（Electron 遇到 `&` 會顯示失敗）、每首歌的封面用不同檔名（Windows 依路徑快取 toast 圖片）、切換模式不必重新啟動。未安裝的開發版（`target\debug`）沒有註冊 AppUserModelID，toast 會顯示成 PowerShell 的，和 tauri-plugin-notification 相同；安裝版用 app 的 identifier。其他平台與 `interactive` 關閉時是基本通知。
+- **do-not-track（廣告阻擋）：** 預設的 **In player** 模式完全在頁面裡執行（包住 `JSON.parse` 與 `Response.json`，刪掉播放器回應裡的 `playerAds`／`adPlacements`／`adSlots`），Windows 與 Android 都可用。**With blocklists** 模式改用 Brave 的 adblock-rust（`plugins/do_not_track.rs`），清單與 Electron 相同（tb.json 列出的預設清單，除非 `disableDefaultLists`，加上 `additionalBlockLists`），scriptlet 與 redirect 用 Ghostery 那份 uBlock Origin 資源；`cache` 開啟且沒有額外清單時快取引擎（和 Electron 一樣不會自動更新）。只有預設清單能用 `trusted-*` scriptlet。**Windows** 在主 webview 的 `WebResourceRequested` 比對每個請求（含 service worker 與 iframe），擋下的回空的 403，redirect 回對應的資源；app 自己的 `*.localhost` 不比對。**Android** 由 pear-gecko extension 的 `webRequest`（blocking）透過 native messaging 問 Rust（`dnt_check`）。兩邊的頁面都在 Electron 載入 Ghostery preload 的地方向 Rust 要這個網址的隱藏 CSS（每個 selector 一條規則，瀏覽器不接受的只會丟掉那一條）與 scriptlet。沒有移植的：Ghostery preload 依 DOM 計算的通用 class/id 隱藏、procedural 過濾、`removeparam`。和 Electron 不同，切回 In player 時引擎會卸載（Electron 要停用插件才會）。打包時 `blocker.ts` 與 Ghostery 的 preload 由 `compat/do-not-track.ts` 取代。
 - **啟用時要求播放器事件：** Electron 的 backend 只在 `peard:player-api-loaded` 時要求 `peard:setup-*-listener`，執行中才啟用的插件會錯過；Rust 版（`plugins::request_player_listeners`）啟動時也會立刻要求一次（頁面端是 singleton，重複要求沒有影響）。
 
 **CSS：** renderer 的 `import 'mdui/mdui.css'` 會被 Vite 抽成獨立 CSS 檔，但 Electron 的 `get-renderer-script` 只讀 `<script>`，所以這份 CSS 在 Electron 裡從未套用。PoC 一度把它內嵌注入，結果 mdui 的 `:root { background-color }` 在 YTM 半透明背景後面畫出灰色色塊；現在改為直接丟棄，行為與 Electron 一致。
+
+### 這個環境無法建置測試的平台功能
+
+PoC 只在 Windows 與 Android 上建置、測試，以下功能需要 Linux 或 macOS，沒有實作，只記下移植方向：
+
+- **Linux MPRIS（shortcuts 插件的媒體控制）：** Electron 版在 `src/plugins/shortcuts/mpris.ts`。Rust 可用 zbus（已在 lockfile 裡，tauri 的相依）在 session bus 註冊 `org.mpris.MediaPlayer2.*`，屬性與方法對應到 `song_info`（Metadata、PlaybackStatus、Position）與 `song_controls`（Play、Pause、Next、Previous、Seek、Volume、Shuffle、LoopStatus），`Seeked` 訊號接 `peard:seeked`。WebKitGTK 自己是否也會註冊 MPRIS 需要實測，避免出現兩個播放器。
+- **macOS Now Playing：** 用 objc2-media-player 的 `MPNowPlayingInfoCenter`（標題、演出者、專輯、封面、長度、目前時間、播放速率）與 `MPRemoteCommandCenter`（播放、暫停、上一首、下一首、拖動進度）。WKWebView 可能也會回報媒體資訊，同樣要實測。
+- **Touch Bar（touchbar 插件）：** 不支援。Tauri 沒有 Touch Bar API，Apple 也已停產有 Touch Bar 的機型；`plugin-support.json` 繼續把它強制停用。
+
+### 尚未移植的 Electron 選項
+
+選單裡除了「設定 Proxy」，下列 Electron 選項沒有移植（選單裡不會出現）：覆寫 user agent（`overrideUserAgent`）、停用硬體加速（`disableHardwareAcceleration`）、啟動時重設快取（`autoResetAppCache`）、隱藏選單列（`hideMenu`）、單一實例開關（PoC 一律是單一實例）、自訂主題 CSS（`themes`）、自動更新（`autoUpdates`；PoC 不打算做）。
 
 ### 移植時踩到的坑
 
@@ -212,6 +227,22 @@ cd tauri-poc/src-tauri && pnpm dlx @tauri-apps/cli@2.12.4 android build --debug 
 
 未驗證：真正的 Discord 用戶端、api-server 的 Allow/Deny 對話框與 HTTPS、HTTPS 憑證選檔對話框、Android 上的 api-server／discord。
 
+## 第三輪移植的驗證結果（Windows，2026-10-24）
+
+未登入的獨立設定檔（`PEAR_POC_PROFILE_DIR`），用 WebView2 的除錯埠操作頁面。Android 部分都能編譯，但還沒有在實機上跑過（見「手動驗證清單」）。
+
+| 項目 | 結果 |
+|---|---|
+| proxy | ✅ 帶帳密的 SOCKS5 測試伺服器：auth-proxy-adapter 開啟時頁面經本機中繼載入（31 個連線），密碼錯誤時 0 個連線、21 次驗證失敗；log 裡的密碼顯示為 `***` |
+| downloader：單曲 | ✅ 3.8 MB 的 `.m4a` 不到 2 秒；ffprobe 讀到標題、演出者、專輯與 544×544 封面，整首能完整解碼；檔案總管顯示標題、演出者、專輯、長度 |
+| downloader：專輯 | ✅ 建立專輯資料夾，兩首曲序 1、2 |
+| downloader：跳過已存在 | ✅ 重跑專輯與單曲都沒有重新下載 |
+| downloader：下載完成時下載 | ✅ 跳到下一首時自動存下前一首 |
+| downloader：選單 | ✅ 預設選單有「一律存原始音訊」說明，兩個資料夾選項改用非同步對話框 |
+| notifications（互動式） | ✅ 樣式 4（封面、專輯、時間）與樣式 1（256×256 封面）從 Windows 通知歷程讀回，三個圖示按鈕都在，5 秒後收起；七種樣式的 XML 都能被 WinRT 解析。按鈕的實際點按未測 |
+| api-server `/doc`、`/swagger` | ✅ `/doc` 26 個路徑，標題與 bearer 驗證和 Electron 相同；`/swagger` 在瀏覽器顯示全部路由；`/api` 仍需要 token |
+| do-not-track With blocklists | ✅ 12 份清單 3 秒建好引擎，之後從快取載入；頁面載入時擋下 doubleclick 的請求；套用 716 條隱藏規則；播放正常 |
+
 ## Android 實機平板（Xiaomi 25091RP04G，Android 16，WebView 143，2026-10-24）
 
 arm64 debug APK 61.6 MB（不含除錯資訊）。小米需要在開發者選項開啟「USB 安裝」。
@@ -302,3 +333,8 @@ Android 版預設的頁面引擎。release APK（arm64）213 MB，壓縮後 99 M
 - [ ] discord：實際 Discord 用戶端顯示 Rich Presence
 - [ ] api-server：新 client 的 Allow/Deny 對話框、HTTPS
 - [ ] taskbar-mediacontrol：縮圖按鈕外觀
+- [ ] notifications：互動式 toast 的三個按鈕實際按下（toast 的顯示、樣式與 5 秒後收起已用通知歷程驗證）、系統匣 trayControls
+- [ ] downloader：Android 存到「音樂/Pear Desktop」、音樂 app 看得到標籤與封面；Windows 的資料夾選擇對話框
+- [ ] proxy：Android 的原生輸入對話框、extension 的 proxy（電腦上的 SOCKS5 測試伺服器 + `adb reverse`）
+- [ ] do-not-track With blocklists：Android（`webRequest` 經 native messaging 的延遲與阻擋）
+- [ ] 從頁面執行 `location.reload()` 會讓 Windows 版的頁面停住（停用這輪新增的請求過濾後仍然如此；瀏覽器層級的重新整理，也就是 CDP `Page.reload`，等同「檢視 › 重新整理」用的 WebView2 `Reload`，則正常），原因未查

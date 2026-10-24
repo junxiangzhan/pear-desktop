@@ -1,5 +1,5 @@
 {
-  "$comment": "Plugins whose Electron backend has no Tauri implementation yet. They are forced off, and their menu is left out of the page bundle (it imports main-process code). Read by vite.inject.config.mts and src-tauri/src/config.rs; remove an id once its backend is ported.",
+  "$comment": "Plugins the Tauri build cannot run (no backend implementation). They are forced off, and their menu is left out of the page bundle (it imports main-process code). Read by vite.inject.config.mts and src-tauri/src/config.rs; remove an id once it is ported.",
   "unavailable": [
     "touchbar"
   ]
