@@ -57,6 +57,9 @@ const parts = () => {
     navBarAttributes: attributes("ytmusic-app-layout > [slot='nav-bar']"),
     playerBarAttributes: attributes("ytmusic-app-layout > [slot='player-bar']"),
     contentAttributes: attributes("ytmusic-app-layout > [slot='content']"),
+    guideAttributes: attributes("ytmusic-app-layout > [slot='guide']"),
+    guideRendererAttributes: attributes("[slot='guide'] ytmusic-guide-renderer"),
+    guideParts: [...document.querySelectorAll("[slot='guide'] #contentContainer > *, [slot='guide'] ytmusic-guide-renderer > *")].map(describe),
     layoutAttributes: appLayout ? [...appLayout.attributes].map((a) => a.name) : null,
     layoutChildren: appLayout ? [...appLayout.children].map(describe) : null,
     miniGuideFirstEntry: guideEntry && describe(guideEntry),
@@ -72,6 +75,27 @@ const resizes = [];
 addEventListener('resize', () => {
   resizes.push(`${Math.round(performance.now())}ms ${innerWidth}x${innerHeight}@${devicePixelRatio.toFixed(2)}`);
   if (resizes.length > 12) resizes.shift();
+});
+
+// YTM's viewport size classes (its media query table); which change
+// events Gecko delivers to lists that are kept referenced
+const mediaEvents = [];
+const mediaLists = [
+  '(max-width: 479px)',
+  '(min-width: 480px) and (max-width: 615px)',
+  '(min-width: 616px) and (max-width: 935px)',
+  '(min-width: 936px) and (max-width: 1149px)',
+  '(min-width: 1150px) and (max-width: 1363px)',
+  '(min-width: 1364px) and (max-width: 1577px)',
+  '(min-width: 1578px) and (max-width: 1799px)',
+  '(min-width: 1800px)',
+].map((query, index) => {
+  const list = matchMedia(query);
+  list.addListener((event) => {
+    mediaEvents.push(`${Math.round(performance.now())}ms class ${index - 4} ${event.matches}`);
+    if (mediaEvents.length > 12) mediaEvents.shift();
+  });
+  return list;
 });
 
 // Per command: count, average and maximum round trip (ms)
@@ -98,6 +122,8 @@ const report = () => {
     layout: layout(),
     parts: parts(),
     resizes,
+    mediaEvents,
+    ytmViewport: document.querySelector('ytmusic-app')?.hasAttribute('is-guide-persistent'),
   });
 };
 report();
