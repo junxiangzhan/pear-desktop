@@ -249,6 +249,28 @@ Android 版預設的頁面引擎。release APK（arm64）213 MB，壓縮後 99 M
 | 選單 | ✅ 開啟、外掛開關即時生效、重新整理、複製目前網址、重新啟動、關於 |
 | YouTube Music 連結 | ✅ 執行中與冷啟動 |
 
+## 手機驗證（POCO F7 Pro，HyperOS，Android 16，GeckoView 153，2026-10-24）
+
+直向 384×763 CSS px（DPR 3.75），頁面是 YTM 的窄版面。release APK 與平板相同。
+
+| 項目 | 結果 |
+|---|---|
+| 安裝、啟動 | ✅ 需要開發者選項的「USB 安裝」；以 adb 操作需要「USB 偵錯（安全設定）」 |
+| Google 登入 | ✅ 使用者在手機上登入 |
+| 選單 | ✅ 選單列一行放得下；**第二層選單原本超出畫面**，已修正（見下） |
+| 導覽列 | ⚠️ 384 px 寬時「登入」按鈕被擠到邊界；上一頁／下一頁箭頭來自 Navigation 插件，在「外掛功能」關掉即可（不需重新啟動） |
+| 播放、標題語言 | ✅ 〈我不難過〉在第一個事件是「I Am Fine」，約 1.5 秒後更正 |
+| 廣告阻擋 | ✅ do-not-track 預設是關的，新安裝會有廣告；開啟後 0 則 |
+| 背景播放 | ✅ 修正後背景 2.5 分鐘持續播放（修正前約 60 秒後停住，見下） |
+| 系統媒體鍵 | ⚠️ 這支手機上 Telecom 的 `HeadsetMediaButton` 一直是 global priority session，adb 送出的媒體鍵到不了 app；通知與鎖定畫面的按鈕待使用者實測 |
+
+- **第二層選單：** 子選單開在父選單右側，左右都放不下時 floating-ui 退回右側而超出畫面。`src/plugins/in-app-menu/renderer/Panel.tsx` 加上 `shift({ crossAxis: true })`，放不下時推回畫面內、疊在父選單上（Electron 的窄視窗也適用）。
+- **背景播放停住，三個原因**（GeckoView 的設定檔 `files/geckoview-config.yaml`，由 `GeckoPage` 在啟動時寫入）：
+  1. Gecko 在 app 進入背景時把 utility 與 GPU 行程降為 IDLE 優先權，手機約 30 秒內就把它們結束，音訊或影片解碼器跟著消失，YTM 重設播放器。設定 `media.utility-process.enabled: false`、`layers.gpu-process.enabled: false`，解碼改在不會被結束的行程（播放音訊的內容行程、有 `PlaybackService` 的主行程）。
+  2. renderer 讓影片經過 AudioContext 輸出，而 Gecko 的 autoplay 政策讓沒有使用者手勢時建立的 AudioContext 停在 suspended，**輸出是靜音**（app 自動續播時，第一次點擊前都沒有聲音）。HyperOS 的 PowerKeeper 會在背景 app 連續 60 秒輸出靜音後暫停它的音訊（logcat：`isLongTimeZeroData out of time 60S`、`pause zero data process`），播放就停在原地。設定 `media.autoplay.default: 0`（含 Web Audio），AudioContext 一建立就是 running。
+  3. 平板（MIUI Pad）沒有遇到，推測是兩台的系統策略不同。
+- 這三個設定也套用在平板上，平板尚未重測。
+
 ## GeckoView 可行性驗證（Android，2026-10-24）
 
 為了在 Android 上登入 Google，測試把 Android WebView 換成 GeckoView（Firefox 的引擎）。驗證時用的是同一個 app 裡獨立的入口 `GeckoActivity`（第 2 階段已移除，GeckoView 改到 `MainActivity` 裡）；`assets/pear-gecko/` 是內建的 WebExtension：`probe.js` 以 `world: "MAIN"`、`document_start` 注入頁面主世界，`report.js` 經 native messaging 把結果回報給 app（logcat tag `PearGecko`）。

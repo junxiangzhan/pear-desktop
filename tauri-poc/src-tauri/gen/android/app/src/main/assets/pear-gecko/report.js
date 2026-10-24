@@ -182,6 +182,10 @@ const report = () => {
         at: new Date().toISOString().slice(11, 19),
         time: Math.round(video.currentTime),
         paused: video.paused,
+        readyState: video.readyState,
+        bufferedEnd: video.buffered.length ? Math.round(video.buffered.end(video.buffered.length - 1)) : null,
+        segmentRequests: performance.getEntriesByType('resource')
+          .filter((entry) => entry.name.includes('googlevideo.com')).length,
         visibility: document.visibilityState,
       };
     })(),

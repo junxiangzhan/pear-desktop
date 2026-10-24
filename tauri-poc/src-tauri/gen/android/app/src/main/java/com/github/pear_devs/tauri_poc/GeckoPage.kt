@@ -149,7 +149,32 @@ class GeckoPage(activity: Activity) {
         activity.applicationContext,
         GeckoRuntimeSettings.Builder()
           .consoleOutput(true)
+          .configFilePath(writeConfig(activity))
           .build(),
       ).also { sharedRuntime = it }
+
+    /**
+     * Gecko preferences, through GeckoView's config file. For background
+     * playback on phones (a POCO F7 Pro):
+     * - No utility and GPU processes: Gecko drops them to idle priority once
+     *   the app is in the background, and the phone killed them within 30 s,
+     *   taking the audio or video decoder along (YTM reset the player).
+     *   Their work then runs in processes that stay alive: the content
+     *   process playing the audio, and this one (PlaybackService).
+     * - Autoplay allowed, including Web Audio: the renderer plays the video
+     *   through an AudioContext, which otherwise stayed suspended until the
+     *   first tap. Its output was silence, and MIUI pauses an app's silent
+     *   audio after 60 s in the background, which stopped playback.
+     */
+    private fun writeConfig(activity: Activity): String {
+      val file = java.io.File(activity.filesDir, "geckoview-config.yaml")
+      file.writeText(
+        "prefs:\n" +
+          "  media.utility-process.enabled: false\n" +
+          "  layers.gpu-process.enabled: false\n" +
+          "  media.autoplay.default: 0\n"
+      )
+      return file.absolutePath
+    }
   }
 }
