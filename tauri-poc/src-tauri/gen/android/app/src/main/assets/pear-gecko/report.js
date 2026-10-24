@@ -31,6 +31,41 @@ const layout = () => {
   };
 };
 
+const describe = (element) => {
+  const box = element.getBoundingClientRect();
+  const style = getComputedStyle(element);
+  const name = element.localName + (element.id ? `#${element.id}` : '') +
+    (element.slot ? `[slot=${element.slot}]` : '') +
+    (element.classList.length ? `.${[...element.classList].slice(0, 2).join('.')}` : '');
+  return [name, Math.round(box.left), Math.round(box.top), Math.round(box.width), Math.round(box.height),
+    style.position, style.display, style.visibility, style.opacity, style.zIndex].join(' ');
+};
+
+// The app layout's parts and the player page's, as
+// "name left top width height position display visibility opacity z-index"
+// (GeckoView's messages take no arrays of mixed types)
+const parts = () => {
+  const appLayout = document.querySelector('ytmusic-app-layout');
+  const playerPage = document.querySelector('ytmusic-player-page');
+  const guideEntry = document.querySelector('#mini-guide ytmusic-guide-entry-renderer, ytmusic-guide-renderer[mini] ytmusic-guide-entry-renderer');
+  return {
+    layoutAttributes: appLayout ? [...appLayout.attributes].map((a) => a.name) : null,
+    layoutChildren: appLayout ? [...appLayout.children].map(describe) : null,
+    miniGuideFirstEntry: guideEntry && describe(guideEntry),
+    playerPageAttributes: playerPage ? [...playerPage.attributes].map((a) => `${a.name}=${a.value}`.slice(0, 60)) : null,
+    playerPageParts: playerPage
+      ? [...playerPage.querySelectorAll(':scope > *, :scope #main-panel > *, :scope .side-panel, :scope #player')].map(describe)
+      : null,
+  };
+};
+
+// The last window sizes, to follow floating window and rotation changes
+const resizes = [];
+addEventListener('resize', () => {
+  resizes.push(`${Math.round(performance.now())}ms ${innerWidth}x${innerHeight}@${devicePixelRatio.toFixed(2)}`);
+  if (resizes.length > 12) resizes.shift();
+});
+
 // Per command: count, average and maximum round trip (ms)
 const bridgeStats = () => {
   const page = window.wrappedJSObject;
@@ -53,7 +88,15 @@ const report = () => {
     signedIn: !!document.querySelector('ytmusic-settings-button img') && !signInButton,
     bridge: bridgeStats(),
     layout: layout(),
+    parts: parts(),
+    resizes,
   });
 };
 report();
 setInterval(report, 10000);
+// Also shortly after a resize settles
+let resizeTimer;
+addEventListener('resize', () => {
+  clearTimeout(resizeTimer);
+  resizeTimer = setTimeout(report, 1500);
+});

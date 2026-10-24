@@ -1,6 +1,7 @@
 package com.github.pear_devs.tauri_poc
 
 import android.content.Intent
+import android.content.res.Configuration
 import android.graphics.Color
 import android.os.Bundle
 import android.system.Os
@@ -90,6 +91,12 @@ class MainActivity : TauriActivity() {
     super.onNewIntent(intent)
     val url = linkUrl(intent) ?: return
     gecko?.open(url) ?: webView?.loadUrl(url)
+  }
+
+  // Diagnostics for floating windows: which changes arrive without a restart
+  override fun onConfigurationChanged(newConfig: Configuration) {
+    super.onConfigurationChanged(newConfig)
+    Log.i(TAG, "configuration: ${newConfig.screenWidthDp}x${newConfig.screenHeightDp}dp ${newConfig.densityDpi}dpi")
   }
 
   override fun onDestroy() {
