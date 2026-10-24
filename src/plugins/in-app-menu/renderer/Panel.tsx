@@ -30,12 +30,7 @@ const panelStyle = cacheNoArgs(
     padding: 4px;
     box-sizing: border-box;
     border-radius: 8px;
-    /* Thin, and no horizontal scrollbar when the vertical one narrows it */
-    overflow-x: hidden;
-    overflow-y: auto;
-    scrollbar-width: thin;
-    scrollbar-color: var(--yt-sys-color-baseline--text-secondary, #aaa)
-      transparent;
+    overflow: auto;
 
     background-color: color-mix(
       in srgb,
