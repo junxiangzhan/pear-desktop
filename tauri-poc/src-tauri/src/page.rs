@@ -54,6 +54,16 @@ pub fn navigate(app: &AppHandle, url: &str) {
     }
 }
 
+/// The page's URL. Blocks on Android (asks Kotlin), so not on the main thread.
+pub fn url(app: &AppHandle) -> Option<String> {
+    #[cfg(target_os = "android")]
+    if in_gecko() {
+        return crate::gecko_bridge::page_url(app);
+    }
+    let window = app.get_webview_window(MAIN_WEBVIEW)?;
+    window.url().ok().map(|url| url.to_string())
+}
+
 pub fn reload(app: &AppHandle) {
     if in_gecko() {
         return eval(app, "location.reload()");

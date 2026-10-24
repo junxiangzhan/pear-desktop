@@ -135,7 +135,7 @@ cd tauri-poc/src-tauri && pnpm dlx @tauri-apps/cli@2.12.4 android build --debug 
 - **GeckoView 的 viewport：** UA 是桌面版 Firefox（插件需要桌面版網站），但 viewport 用 `VIEWPORT_MODE_MOBILE`，依 YTM 自己的 `<meta name="viewport" content="width=device-width">` 排版，和 WebView 一樣。`VIEWPORT_MODE_DESKTOP` 會把頁面至少排成 980 CSS px 寬，視窗縮小（分割畫面、浮動視窗、手機）時就不會切換到 YTM 的窄版面；平板浮動視窗（381 dp）實測 viewport 為 385 px。
 - **浮動視窗：** 這台 MIUI 平板把 app 拖成浮動視窗時，先給手機大小的視窗（420×750 dp），約 0.5 秒後改成**整個平板大小的視窗再縮小顯示**（logcat 的 `mFreeFormScale=0.526`，configuration 回到 1164×777 dp）。所以浮動視窗裡是縮小的平板版面，也拉不回手機比例：這是 MIUI 對這個 app 的浮動視窗做法，不是 app 限制的（以 `am start --windowingMode 5` 開啟時可以是手機比例，頁面也會切到窄版面）。
 - **浮動視窗後版面卡在窄版（已處理）：** 播放頁元件消失、側欄出現第二個 YouTube Music 標誌，都是 YTM 的 bug：它用一組 media query 追蹤版面大小級別（-4 到 3），套用時寫成 `size && size >= -1`（側欄常駐）、`size && size >= -2`（播放頁開啟時顯示導覽列與播放列），而級別 0（寬 1150–1363 px，這台平板正好 1173 px）是 falsy，所以從窄版面**直接跳進級別 0** 時什麼都不會更新，版面停在窄版（導覽列、播放列 `visibility: hidden`、側欄維持窄版的覆蓋式抽屜與標頭）。拖曳視窗會先經過級別 -1 所以平常看不到；MIUI 浮動視窗是一次跳過去。Electron 版把窄視窗直接最大化到這個寬度時應該也會遇到。`inject/shim.ts` 包住 `MediaQueryList.addListener`：級別 0 的 query 開始成立時，先對 YTM 的級別 -1 listener 回報一次，100 ms 後才送出級別 0，等同拖曳經過 -1。以 `am task resize`（手機大小載入 → 平板大小 → 手機 → 平板）驗證：側欄常駐、標頭隱藏、導覽列與播放列顯示，縮回窄版時照 YTM 原本的方式隱藏。`MainActivity` 會在 logcat（tag `PearMainActivity`）記錄 configuration 變更，`report.js` 記錄最近的視窗大小、devicePixelRatio 與這組 media query 的變化。
-- **全螢幕：** Android 版的「檢視」選單有「切換全螢幕」勾選項，隱藏狀態列與導覽列（三鍵或手勢提示條），從邊緣滑動會暫時顯示；選擇存在 `options.fullscreen`，下次啟動沿用（`src/system_bars.rs`、`SystemBarsPlugin.kt`）。
+- **全螢幕：** Android 版的「檢視」選單有「切換全螢幕」勾選項，隱藏狀態列與導覽列（三鍵或手勢提示條），從邊緣滑動會暫時顯示；選擇存在 `options.fullscreen`，下次啟動沿用（`src/android_app.rs`、`AndroidAppPlugin.kt`）。
 - **init script 執行兩次：** wry 產生的 Android 程式碼會用 `addDocumentStartJavaScript` 注入 init script，但 `RustWebViewClient.onPageStarted` 又對所有沒被 Rust 攔截的頁面再 `evaluateJavascript` 一次，沒有檢查前者是否可用（wry 的 bug；`generated/` 每次建置都會重新產生，不能直接改）。PoC 的 loader 以 `window.__pearRendererLoaded` 確保每個文件只載入一次 bundle；Tauri 自己的腳本仍會跑兩次，console 會出現無害的 `Cannot redefine property`。
 - **已知問題：** 偶爾啟動後頁面停在空白（`about:blank`），強制停止再開就會恢復，還沒追查。
 - debug APK 帶完整除錯資訊時約 374 MB（`.so` 240 MB），模擬器空間不足會裝不上；測試時可在建置前設 `CARGO_PROFILE_DEV_DEBUG=0 CARGO_PROFILE_DEV_STRIP=debuginfo`（約 134 MB）。
@@ -246,6 +246,7 @@ arm64 debug APK 61.6 MB（不含除錯資訊）。小米需要在開發者選項
 - 改用 GeckoView 的完整計畫（IPC 橋接、bundle 與設定的注入、Tauri 的角色、體積）見 [GECKOVIEW-PLAN.md](GECKOVIEW-PLAN.md)。
 - **第 1 階段（bundle 在 Gecko 裡跑）已完成：** 全部插件打開時，GeckoView 與 WebView 載入的插件相同（28 個）；找到並修正兩個 Firefox 才有的問題（`pear-trans` 元素建構失敗、AudioContext 被 autoplay 政策暫停而沒有聲音）。細節見計畫文件的「第 1 階段結果」。
 - **第 2 階段（IPC 橋接）已完成：** Android 版現在預設用 GeckoView 顯示頁面，頁面與 Rust 之間走 native messaging（`inject/tauri.ts` → extension → `GeckoBridgePlugin` → `src/gecko_bridge.rs`）。平板上驗證了設定讀寫、歌曲資訊、選單（開啟、點擊、外掛開關即時生效）、`net_fetch`（歌詞）、Rust 在頁面執行腳本（重新整理）與設定變更後的重新載入。細節與延遲見計畫文件的「第 2 階段結果」。
+- **第 3 階段（取代 WebView）已完成：** GeckoView 在背景繼續播放（`PlaybackService` 讓行程存活即可），系統媒體控制、連結（執行中與冷啟動）、從最近任務滑掉後重開都正常。在第一頁按返回鍵改成退到背景繼續播放（原本會結束行程）；「重新啟動」在 Android 上改由 Kotlin 重新開啟 app（Tauri 的 `restart()` 在 Android 上只會結束行程），導覽列選單也顯示了；「複製目前網址」改讀 GeckoView 的網址。記憶體約 1.25 GB（PSS），背景空白 WebView 的 renderer 只佔 5.9 MB。鎖定畫面上的媒體控制尚待實機確認。細節見計畫文件的「第 3 階段結果」。
 
 ## 手動驗證清單
 

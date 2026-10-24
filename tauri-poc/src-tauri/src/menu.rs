@@ -416,12 +416,13 @@ fn build(app: &AppHandle, data: &MenuData) -> tauri::Result<NativeMenu> {
         b.item("act:goForward", &b.label("navigation.submenu.go-forward"), true, Some("Alt+Right")),
         b.item("act:copyUrl", &b.label("navigation.submenu.copy-current-url"), true, Some("CmdOrCtrl+L")),
     ];
+    navigation_items.extend([
+        b.separator(),
+        b.item("act:restart", &b.label("navigation.submenu.restart"), true, None),
+    ]);
+    // Android apps are left with Back or Home, not quit
     if desktop {
-        navigation_items.extend([
-            b.separator(),
-            b.item("act:restart", &b.label("navigation.submenu.restart"), true, None),
-            b.item("act:quit", &b.label("navigation.submenu.quit"), true, Some("CmdOrCtrl+Q")),
-        ]);
+        navigation_items.push(b.item("act:quit", &b.label("navigation.submenu.quit"), true, Some("CmdOrCtrl+Q")));
     }
     let navigation = b.submenu(&b.label("navigation.label"), navigation_items);
 
@@ -624,7 +625,7 @@ fn dispatch(app: &AppHandle, id: &str) {
             }
             "startAtLogin" => crate::window::set_start_at_login(app, checked),
             #[cfg(target_os = "android")]
-            "fullscreen" => crate::system_bars::set_fullscreen(app, checked),
+            "fullscreen" => crate::android_app::set_fullscreen(app, checked),
             "trayClickPlayPause" => {}
             _ => {}
         }
@@ -685,10 +686,14 @@ fn dispatch(app: &AppHandle, id: &str) {
         "act:goBack" => page::eval(app, "history.back()"),
         "act:goForward" => page::eval(app, "history.forward()"),
         "act:copyUrl" => {
-            if let Some(url) = window.as_ref().and_then(|w| w.url().ok()) {
-                use tauri_plugin_clipboard_manager::ClipboardExt;
-                let _ = app.clipboard().write_text(url.to_string());
-            }
+            // Off the main thread: on Android the URL may come from Kotlin
+            let app = app.clone();
+            tauri::async_runtime::spawn_blocking(move || {
+                if let Some(url) = page::url(&app) {
+                    use tauri_plugin_clipboard_manager::ClipboardExt;
+                    let _ = app.clipboard().write_text(url);
+                }
+            });
         }
         "act:restart" => app_controls::restart(app),
         "act:quit" => app.exit(0),

@@ -123,6 +123,16 @@ const report = () => {
     parts: parts(),
     resizes,
     mediaEvents,
+    // Playback, to tell whether it continues in the background
+    media: (() => {
+      const video = document.querySelector('video');
+      return video && {
+        at: new Date().toISOString().slice(11, 19),
+        time: Math.round(video.currentTime),
+        paused: video.paused,
+        visibility: document.visibilityState,
+      };
+    })(),
     ytmViewport: document.querySelector('ytmusic-app')?.hasAttribute('is-guide-persistent'),
   });
 };

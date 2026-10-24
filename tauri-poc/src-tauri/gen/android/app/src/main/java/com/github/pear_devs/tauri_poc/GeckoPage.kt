@@ -43,6 +43,16 @@ class GeckoPage(activity: Activity) {
       override fun onCanGoBack(session: GeckoSession, canGoBack: Boolean) {
         this@GeckoPage.canGoBack = canGoBack
       }
+
+      // Also for YTM's in-page navigation (history.pushState)
+      override fun onLocationChange(
+        session: GeckoSession,
+        url: String?,
+        perms: MutableList<GeckoSession.PermissionDelegate.ContentPermission>,
+        hasUserGesture: Boolean,
+      ) {
+        GeckoBridge.pageUrl = url
+      }
     }
     // Let the page start audio without a gesture, like the WebView build
     // (mediaPlaybackRequiresUserGesture = false); YTM autoplays on resume

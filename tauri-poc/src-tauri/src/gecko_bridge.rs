@@ -30,6 +30,9 @@ const BACKGROUND: &str = "background";
 /// until Kotlin answers, and the per-second song updates must not reorder.
 struct Outbox(mpsc::Sender<(&'static str, Value)>);
 
+/// For calls that answer, outside the delivery order.
+struct Plugin(PluginHandle<Wry>);
+
 #[derive(Deserialize)]
 struct Request {
     id: Option<u64>,
@@ -43,6 +46,7 @@ pub fn init() -> TauriPlugin<Wry> {
         .setup(|app, api| {
             let handle: PluginHandle<Wry> =
                 api.register_android_plugin("com.github.pear_devs.tauri_poc", "GeckoBridgePlugin")?;
+            app.manage(Plugin(handle.clone()));
             let (sender, receiver) = mpsc::channel::<(&'static str, Value)>();
             std::thread::Builder::new()
                 .name("gecko-bridge".into())
@@ -94,6 +98,21 @@ pub fn emit(app: &AppHandle, event: &str, payload: impl Serialize) {
         send(app, BACKGROUND, message.clone());
     }
     send(app, PAGE, message);
+}
+
+/// The URL GeckoView shows (blocks until Kotlin answers).
+pub fn page_url(app: &AppHandle) -> Option<String> {
+    #[derive(Deserialize)]
+    struct PageUrl {
+        url: Option<String>,
+    }
+    match app.state::<Plugin>().0.run_mobile_plugin::<PageUrl>("pageUrl", json!({})) {
+        Ok(answer) => answer.url,
+        Err(error) => {
+            log::warn!("gecko bridge: reading the page URL failed: {error}");
+            None
+        }
+    }
 }
 
 pub fn eval(app: &AppHandle, script: &str) {

@@ -2,6 +2,8 @@
 //! bundle injected, and reimplements the Electron main process in Rust.
 
 #[cfg(target_os = "android")]
+mod android_app;
+#[cfg(target_os = "android")]
 mod android_media;
 mod app_controls;
 mod config;
@@ -16,8 +18,6 @@ mod plugins;
 mod prompt;
 mod song_controls;
 mod song_info;
-#[cfg(target_os = "android")]
-mod system_bars;
 #[cfg(desktop)]
 mod tray;
 mod window;
@@ -159,7 +159,7 @@ pub fn run() {
         builder = builder
             .plugin(android_media::init())
             .plugin(gecko_bridge::init())
-            .plugin(system_bars::init());
+            .plugin(android_app::init());
     }
 
     builder = builder.invoke_handler(tauri::generate_handler![
@@ -230,7 +230,7 @@ pub fn run() {
             #[cfg(target_os = "android")]
             {
                 android_media::register(app.handle());
-                system_bars::register(app.handle());
+                android_app::register(app.handle());
                 if page::in_gecko() {
                     gecko_bridge::register(app.handle());
                 }

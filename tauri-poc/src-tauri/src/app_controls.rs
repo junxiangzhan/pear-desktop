@@ -9,6 +9,9 @@ use crate::{config::Config, ipc::Ipc};
 
 /// Like `restart()`: relaunches the app.
 pub fn restart(app: &AppHandle) {
+    #[cfg(target_os = "android")]
+    return crate::android_app::restart(app);
+    #[cfg(not(target_os = "android"))]
     app.restart();
 }
 

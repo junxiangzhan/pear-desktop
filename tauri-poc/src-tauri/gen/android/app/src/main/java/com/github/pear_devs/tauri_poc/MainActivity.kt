@@ -60,9 +60,12 @@ class MainActivity : TauriActivity() {
       val page = GeckoPage(this)
       gecko = page
       linkUrl(intent)?.let(page::open)
+      // On the first page, leave like the YouTube Music app: to the
+      // background, still playing. Finishing would end the process (Tauri
+      // exits with its last activity), stopping playback
       onBackPressedDispatcher.addCallback(this, object : OnBackPressedCallback(true) {
         override fun handleOnBackPressed() {
-          if (page.canGoBack) page.goBack() else finish()
+          if (page.canGoBack) page.goBack() else moveTaskToBack(true)
         }
       })
     }
@@ -168,14 +171,15 @@ class MainActivity : TauriActivity() {
   // Chromium pauses media with a video track once the WebView is paused or
   // its window hidden (YTM always plays through <video>). While
   // PlaybackService holds the session, keep the WebView looking visible.
+  // GeckoView keeps playing on its own (the WebView is blank then).
   override fun onPause() {
     super.onPause()
-    if (PlaybackService.isRunning) webView?.onResume()
+    if (PlaybackService.isRunning && gecko == null) webView?.onResume()
   }
 
   override fun onStop() {
     super.onStop()
-    if (!PlaybackService.isRunning) return
+    if (!PlaybackService.isRunning || gecko != null) return
     // The window turns invisible after onStop; report it visible again then
     webView?.postDelayed({
       if (PlaybackService.isRunning) webView?.dispatchWindowVisibilityChanged(View.VISIBLE)

@@ -40,6 +40,11 @@ class GeckoBridgePlugin(activity: Activity) : Plugin(activity) {
   }
 
   @Command
+  fun pageUrl(invoke: Invoke) {
+    invoke.resolve(JSObject().apply { put("url", GeckoBridge.pageUrl) })
+  }
+
+  @Command
   fun deliver(invoke: Invoke) {
     val args = invoke.parseArgs(DeliverArgs::class.java)
     GeckoBridge.deliver(args.port, args.message, args.eval)
@@ -59,6 +64,8 @@ object GeckoBridge {
   private const val TAG = "PearGeckoBridge"
 
   private val main = Handler(Looper.getMainLooper())
+  /** What GeckoPage shows, for the menu's Copy current URL. */
+  @Volatile var pageUrl: String? = null
   private val ports = HashMap<String, WebExtension.Port>()
   private var channel: Channel? = null
   /** Messages that arrived before Rust registered its channel. */

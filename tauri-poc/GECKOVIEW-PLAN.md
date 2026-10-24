@@ -1,6 +1,6 @@
 # Android 版改用 GeckoView 的計畫
 
-狀態：第 2 階段完成（2026-10-24），結果見「第 1 階段結果」與「第 2 階段結果」。前提是 [可行性驗證](README.md#geckoview-可行性驗證android2026-10-24) 的結果：GeckoView 裡可以登入 Google 並保持登入，WebExtension 能在頁面腳本之前注入主世界。桌面版不受影響，仍用 Tauri 的 WebView2／WebKit。
+狀態：第 3 階段完成（2026-10-24），結果見各階段的「結果」一節；鎖定畫面控制待實機確認。前提是 [可行性驗證](README.md#geckoview-可行性驗證android2026-10-24) 的結果：GeckoView 裡可以登入 Google 並保持登入，WebExtension 能在頁面腳本之前注入主世界。桌面版不受影響，仍用 Tauri 的 WebView2／WebKit。
 
 ## 目標與範圍
 
@@ -32,7 +32,7 @@ Tauri 的 WebView 仍存在（Tauri 的生命週期需要它），但只載入 `
   - `presentAsDesktopChrome`：不再需要，GeckoView 用 `USER_AGENT_MODE_DESKTOP`／`VIEWPORT_MODE_DESKTOP`。
   - 背景播放時讓 WebView 保持「可見」的處理：改成讓 `GeckoSession` 保持 active（需驗證 Gecko 在 activity 停止時是否暫停媒體）。
   - 連結開啟、返回鍵、系統列 inset：改用 `GeckoSession.loadUri`／`goBack` 與 GeckoView 的 padding（驗證版已實作）。
-- 待確認：背景閒置的 Chromium WebView（`about:blank`）佔多少記憶體。若太多，第二步再研究讓 wry 不建立 WebView。
+- ~~待確認：背景閒置的 Chromium WebView（`about:blank`）佔多少記憶體。~~ 第 3 階段實測 renderer 只有 5.9 MB，不需要處理。
 
 ## 2. IPC 橋接
 
@@ -158,11 +158,26 @@ Tauri 版的 loader 用同步 XHR 從 `pear` 協定拿「設定快照 + bundle�
 - 「關於」改成和 Electron 一樣的子選單：in-app-menu 的頂層按鈕只會開子選單，原本直接放在頂層的項目點了沒反應（Windows 開 in-app-menu 時也一樣）。
 - Android 的「檢視」選單加了「切換全螢幕」（隱藏系統列，記在 `options.fullscreen`）。
 
-**留給第 3 階段**
+**留給第 3 階段**：背景播放、複製目前網址、從最近任務滑掉後重開、`app_restart`（見「第 3 階段結果」）。
 
-- 背景播放：`MainActivity` 讓 WebView 在背景保持「可見」的處理還是針對 WebView；GeckoView 在 activity 停止後是否繼續播放要驗證，必要時讓 `GeckoSession` 保持 active。
-- 選單的「複製目前網址」讀的是 Tauri 視窗的網址，GeckoView 模式下會是 `about:blank`；要改成讀 GeckoView 的網址。
-- 從最近任務滑掉後重開、`app_restart` 在 GeckoView 模式下的行為還沒測。
+## 第 3 階段結果（2026-10-24，Xiaomi 平板，GeckoView 153）
+
+畫面換成 GeckoView、Tauri WebView 改 `about:blank`、連結與返回鍵已在第 2 階段完成；這個階段補上其餘部分並在平板上驗證（GeckoView 引擎，已登入）。
+
+| 項目 | 結果 |
+|---|---|
+| 背景播放 | ✅ 按 Home 後兩分鐘內播放位置持續前進（每 30 秒前進 30 秒）並換到下一首；`PlaybackService` 讓行程存活，Gecko 在 activity 停止後不會暫停媒體，不需要 WebView 那種「保持可見」的處理（已改成只在 WebView 引擎時做） |
+| 系統媒體控制 | ✅ 背景時經 media session 送出暫停、播放、下一首（`cmd media_session dispatch`，與通知、鎖定畫面按鈕同一條路），頁面都照做 |
+| 鎖定畫面控制 | ⏳ 與上一項同一條路，尚未在鎖定畫面實際按過 |
+| 連結 | ✅ 執行中開啟 `music.youtube.com` 連結會載入該頁；冷啟動時的連結取代起始網址。載入新頁面會中斷正在播放的歌（WebView 版相同） |
+| 返回鍵 | ✅ 頁面有上一頁時回上一頁；在第一頁時**退到背景繼續播放**（像 YouTube Music app），原本的 `finish()` 會讓 Tauri 結束整個行程、播放中斷，且結束時 Gecko 的音訊執行緒碰到已銷毀的 mutex 而 abort |
+| 從最近任務滑掉 | ✅ MIUI 直接結束行程，重開是冷啟動：仍保持登入、頁面與橋接正常 |
+| 重新啟動 | ✅ Tauri 的 `restart()` 在 Android 上只會結束行程；改由 `AndroidAppPlugin` 以 `Intent.makeRestartActivityTask` 重新開啟並結束行程（kill，避開上面的 abort）。「導覽列 › 重新啟動應用程式」在 Android 上也顯示了；實測換了行程、仍登入、繼續播放 |
+| 複製目前網址 | ✅ 讀 GeckoView 的網址（`onLocationChange`，含 YTM 頁內切換），貼上得到目前的 `watch?v=…` 網址 |
+
+**記憶體（PSS，播放中）**：主行程 302 MB（Rust、Tauri、Gecko 主行程、背景 WebView 的瀏覽器端）、YTM 的內容行程 405 MB、另外兩個 Gecko 內容行程各約 106 MB、GPU 139 MB、utility 74 MB、media 50 MB、crash helper 63 MB，合計約 1.25 GB。背景 `about:blank` WebView 的 renderer 只有 5.9 MB，所以不需要研究讓 wry 不建立 WebView；記憶體主要是 Gecko 本身。
+
+**仍待確認**：鎖定畫面上實際操作媒體控制。
 
 ## 7. 風險與待確認事項
 
