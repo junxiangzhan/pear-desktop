@@ -318,6 +318,8 @@ fn create_main_window(app: &tauri::App) -> tauri::Result<()> {
     let window = builder.build()?;
     window::apply_title(&window, None);
     window::install_close_to_tray(&window);
+    #[cfg(windows)]
+    plugins::do_not_track::install(&window);
     if std::env::var_os("PEAR_POC_DEVTOOLS").is_some() {
         window.open_devtools();
     }

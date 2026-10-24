@@ -105,12 +105,34 @@ browser.proxy.onRequest.addListener(
   { urls: ['<all_urls>'] },
 );
 
+// do-not-track "With blocklists": Rust's engine decides on each request
+// (src-tauri/src/plugins/do_not_track.rs), like Electron's webRequest filter
+const checkRequest = (details) =>
+  invoke('dnt_check', {
+    url: details.url,
+    source: details.documentUrl ?? details.originUrl ?? '',
+    type: details.type,
+  }).catch(() => ({}));
+let blocking = false;
+const syncBlocking = (config) => {
+  const plugin = config.plugins?.['do-not-track'];
+  const wanted = Boolean(plugin?.enabled && plugin.blocker === 'With blocklists');
+  if (wanted === blocking) return;
+  blocking = wanted;
+  if (wanted) {
+    browser.webRequest.onBeforeRequest.addListener(checkRequest, { urls: ['<all_urls>'] }, ['blocking']);
+  } else {
+    browser.webRequest.onBeforeRequest.removeListener(checkRequest);
+  }
+};
+
 port.onMessage.addListener(({ m }) => {
   const message = JSON.parse(m);
   if ('event' in message) {
     if (message.event === 'pear:config' && payload) {
       payload.config = message.payload;
       setProxy(payload.config.options?.proxy);
+      syncBlocking(payload.config);
       register().catch(report);
     }
     return;
@@ -128,6 +150,7 @@ const report = (error) =>
 const start = async () => {
   payload = await invoke('gecko_payload');
   setProxy(payload.config.options?.proxy);
+  syncBlocking(payload.config);
   await register();
   // GeckoPage loads the page once this arrives
   await browser.runtime.sendNativeMessage('pear', { ready: true, startUrl: payload.startUrl });

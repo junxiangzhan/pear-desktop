@@ -173,6 +173,8 @@ fn run_sync(app: AppHandle, cmd: &str, args: &Value) -> Result<Value, String> {
         // Rust pushes every event over the bridge (see `emit`)
         "plugin:event|listen" => {}
         "gecko_payload" => return Ok(payload(&app)),
+        // The extension's webRequest blocking (do-not-track "With blocklists")
+        "dnt_check" => return Ok(crate::plugins::do_not_track::check_for_gecko(args)),
         _ => return Err(format!("unknown command '{cmd}'")),
     }
     Ok(Value::Null)
