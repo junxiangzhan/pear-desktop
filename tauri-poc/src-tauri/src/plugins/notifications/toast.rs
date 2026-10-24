@@ -61,10 +61,16 @@ impl Toaster {
     }
 
     /// Like `sendNotification`: replaces the current toast.
-    pub async fn show(self: &Arc<Self>, app: &AppHandle, song: SongInfo, style: u64, on_action: OnAction) {
+    pub async fn show(
+        self: &Arc<Self>,
+        app: &AppHandle,
+        song: SongInfo,
+        style: u64,
+        hide_text: bool,
+        on_action: OnAction,
+    ) {
         let image = self.image_file(app, &song, style).await;
-        let icons = media_icons(app);
-        let xml = toast_xml(&song, style, image.as_deref(), icons.as_deref());
+        let xml = toast_xml(&song, style, image.as_deref(), &Buttons::new(app, hide_text));
         let generation = self.generation.fetch_add(1, Ordering::SeqCst) + 1;
         let toaster = self.clone();
         let app_for_toast = app.clone();
@@ -211,16 +217,51 @@ fn init_com() {
     let _ = unsafe { CoInitializeEx(None, COINIT_MULTITHREADED) };
 }
 
-/// The button icons (`assets/media-icons-black`), written once next to the
-/// covers so the toast can load them.
-fn media_icons(app: &AppHandle) -> Option<PathBuf> {
-    let dir = app.path().app_cache_dir().ok()?.join("toasts").join("media-icons");
-    let icons: [(&str, &[u8]); 4] = [
-        ("play.png", include_bytes!("../../../../../assets/media-icons-black/play.png")),
-        ("pause.png", include_bytes!("../../../../../assets/media-icons-black/pause.png")),
-        ("next.png", include_bytes!("../../../../../assets/media-icons-black/next.png")),
-        ("previous.png", include_bytes!("../../../../../assets/media-icons-black/previous.png")),
-    ];
+/// Whether toasts are light: they follow the Windows (not the app) theme.
+fn light_theme() -> bool {
+    use windows::{
+        core::w,
+        Win32::System::Registry::{RegGetValueW, HKEY_CURRENT_USER, RRF_RT_REG_DWORD},
+    };
+
+    let mut value = 0u32;
+    let mut size = std::mem::size_of::<u32>() as u32;
+    // SAFETY: the buffer is a u32 and `size` says so
+    let result = unsafe {
+        RegGetValueW(
+            HKEY_CURRENT_USER,
+            w!("Software\\Microsoft\\Windows\\CurrentVersion\\Themes\\Personalize"),
+            w!("SystemUsesLightTheme"),
+            RRF_RT_REG_DWORD,
+            None,
+            Some(std::ptr::from_mut(&mut value).cast()),
+            Some(&mut size),
+        )
+    };
+    // Without the value Windows is dark
+    result.is_ok() && value != 0
+}
+
+/// The button icons (`assets/media-icons-black` on light toasts, `-white`
+/// on dark ones), written once next to the covers so the toast can load them.
+fn media_icons(app: &AppHandle, light: bool) -> Option<PathBuf> {
+    let colour = if light { "black" } else { "white" };
+    let dir = app.path().app_cache_dir().ok()?.join("toasts").join(format!("media-icons-{colour}"));
+    let icons: [(&str, &[u8]); 4] = if light {
+        [
+            ("play.png", include_bytes!("../../../../../assets/media-icons-black/play.png")),
+            ("pause.png", include_bytes!("../../../../../assets/media-icons-black/pause.png")),
+            ("next.png", include_bytes!("../../../../../assets/media-icons-black/next.png")),
+            ("previous.png", include_bytes!("../../../../../assets/media-icons-black/previous.png")),
+        ]
+    } else {
+        [
+            ("play.png", include_bytes!("../../../../../assets/media-icons-white/play.png")),
+            ("pause.png", include_bytes!("../../../../../assets/media-icons-white/pause.png")),
+            ("next.png", include_bytes!("../../../../../assets/media-icons-white/next.png")),
+            ("previous.png", include_bytes!("../../../../../assets/media-icons-white/previous.png")),
+        ]
+    };
     std::fs::create_dir_all(&dir).ok()?;
     for (name, bytes) in icons {
         let path = dir.join(name);
@@ -245,23 +286,62 @@ fn minutes(seconds: f64) -> String {
     format!("{}:{:02}", seconds / 60, seconds % 60)
 }
 
-fn button(kind: &str, style: u64, icons: Option<&Path>) -> String {
-    let display = if style == LEGACY || icons.is_none() {
-        let icon = match kind {
-            "play" => "\u{1405}",
-            "pause" => "\u{2016}",
-            "next" => "\u{1433}",
-            _ => "\u{1438}",
-        };
-        format!(r#"content="{icon}""#)
-    } else {
-        let path = icons.unwrap_or(Path::new("")).join(format!("{kind}.png"));
-        format!(r#"content="" imageUri="file:///{}""#, escape(&path.display().to_string()))
+/// How the playback buttons look.
+#[derive(Default)]
+pub struct Buttons {
+    /// The folder with the icons in the colour that suits the toast
+    pub icons: Option<PathBuf>,
+    /// Previous, play/pause and next, unless `hideButtonText` is on
+    pub labels: Option<[String; 3]>,
+}
+
+impl Buttons {
+    /// Electron's buttons only ever had an icon (black, which disappears on
+    /// a dark toast): its check for `hideButtonText` tested `toastStyle`
+    /// instead. These follow the setting and the Windows theme.
+    pub fn new(app: &AppHandle, hide_text: bool) -> Self {
+        use crate::menu::label;
+
+        let labels = (!hide_text).then(|| {
+            [
+                label(app, "main.tray.previous", "Previous"),
+                label(app, "main.tray.play-pause", "Play/Pause"),
+                label(app, "main.tray.next", "Next"),
+            ]
+        });
+        Self { icons: media_icons(app, light_theme()), labels }
+    }
+}
+
+fn button(kind: &str, style: u64, buttons: &Buttons) -> String {
+    let label = buttons.labels.as_ref().map(|labels| match kind {
+        "previous" => labels[0].as_str(),
+        "next" => labels[2].as_str(),
+        _ => labels[1].as_str(),
+    });
+    let display = match (&buttons.icons, style) {
+        (Some(icons), style) if style != LEGACY => {
+            let path = icons.join(format!("{kind}.png"));
+            format!(
+                r#"content="{}" imageUri="file:///{}""#,
+                escape(label.unwrap_or_default()),
+                escape(&path.display().to_string())
+            )
+        }
+        _ => {
+            let icon = match kind {
+                "play" => "\u{1405}",
+                "pause" => "\u{2016}",
+                "next" => "\u{1433}",
+                _ => "\u{1438}",
+            };
+            format!(r#"content="{icon}""#)
+        }
     };
     format!(r#"<action {display} activationType="foreground" arguments="{kind}"/>"#)
 }
 
-fn toast(content: &str, paused: bool, style: u64, icons: Option<&Path>) -> String {
+fn toast(content: &str, paused: bool, style: u64, buttons: &Buttons) -> String {
     format!(
         r#"<toast>
     <audio silent="true" />
@@ -276,9 +356,9 @@ fn toast(content: &str, paused: bool, style: u64, icons: Option<&Path>) -> Strin
         {}
     </actions>
 </toast>"#,
-        button("previous", style, icons),
-        button(if paused { "play" } else { "pause" }, style, icons),
-        button("next", style, icons),
+        button("previous", style, buttons),
+        button(if paused { "play" } else { "pause" }, style, buttons),
+        button("next", style, buttons),
     )
 }
 
@@ -292,7 +372,7 @@ fn title_style(title: &str) -> &'static str {
     }
 }
 
-fn toast_xml(song: &SongInfo, style: u64, image: Option<&Path>, icons: Option<&Path>) -> String {
+fn toast_xml(song: &SongInfo, style: u64, image: Option<&Path>, buttons: &Buttons) -> String {
     let title = escape(&song.title);
     let artist = escape(&song.artist);
     let image = escape(&image.map(|path| path.display().to_string()).unwrap_or_default());
@@ -306,7 +386,7 @@ fn toast_xml(song: &SongInfo, style: u64, image: Option<&Path>, icons: Option<&P
             ),
             paused,
             style,
-            icons,
+            buttons,
         )
     };
     let centered = |title_style: &str| {
@@ -357,7 +437,7 @@ fn toast_xml(song: &SongInfo, style: u64, image: Option<&Path>, icons: Option<&P
                 ),
                 paused,
                 style,
-                icons,
+                buttons,
             )
         }
         BANNER_CENTERED_BOTTOM => toast(
@@ -368,7 +448,7 @@ fn toast_xml(song: &SongInfo, style: u64, image: Option<&Path>, icons: Option<&P
             ),
             paused,
             style,
-            icons,
+            buttons,
         ),
         BANNER_CENTERED_TOP => toast(
             &format!(
@@ -378,7 +458,7 @@ fn toast_xml(song: &SongInfo, style: u64, image: Option<&Path>, icons: Option<&P
             ),
             paused,
             style,
-            icons,
+            buttons,
         ),
         // LOGO, LEGACY and unknown values
         _ => with_image(r#"placement="appLogoOverride""#),
@@ -399,14 +479,22 @@ mod tests {
             elapsed_seconds: Some(65.4),
             ..SongInfo::default()
         };
+        let buttons = Buttons {
+            icons: Some(PathBuf::from("C:\\icons")),
+            labels: Some(["Previous".into(), "Play & pause".into(), "Next".into()]),
+        };
         for style in 1..=7 {
-            let xml = toast_xml(&song, style, Some(Path::new("C:\\covers\\a&b.png")), Some(Path::new("C:\\icons")));
+            let xml = toast_xml(&song, style, Some(Path::new("C:\\covers\\a&b.png")), &buttons);
             assert!(xml.contains("Rock &amp; Roll &lt;Live&gt;"), "style {style}");
             assert!(!xml.contains("a&b"), "style {style}");
             XmlDocument::new().unwrap().LoadXml(&HSTRING::from(xml)).unwrap();
         }
-        assert!(toast_xml(&song, BANNER_TOP_CUSTOM, None, None).contains("1:05 / 4:05"));
-        assert!(toast_xml(&song, LEGACY, None, None).contains("content=\"\u{2016}\""));
+        let logo = toast_xml(&song, LOGO, None, &buttons);
+        assert!(logo.contains(r#"content="Play &amp; pause" imageUri="file:///C:\icons\pause.png""#), "{logo}");
+        let no_text = Buttons { labels: None, ..buttons };
+        assert!(toast_xml(&song, LOGO, None, &no_text).contains(r#"content="" imageUri"#));
+        assert!(toast_xml(&song, BANNER_TOP_CUSTOM, None, &no_text).contains("1:05 / 4:05"));
+        assert!(toast_xml(&song, LEGACY, None, &no_text).contains("content=\"\u{2016}\""));
     }
 
     #[test]

@@ -75,7 +75,13 @@ fn interactive(config: &Value) -> bool {
 /// protocol handler (`changeProtocolHandler` in interactive.ts).
 #[cfg(windows)]
 fn show_toast(app: &AppHandle, state: &Arc<Mutex<State>>, toaster: &Arc<toast::Toaster>, song: SongInfo) {
-    let style = state.lock().unwrap().config["toastStyle"].as_u64().unwrap_or(1);
+    let (style, hide_text) = {
+        let config = &state.lock().unwrap().config;
+        (
+            config["toastStyle"].as_u64().unwrap_or(1),
+            config["hideButtonText"].as_bool().unwrap_or(false),
+        )
+    };
     let on_action: toast::OnAction = {
         let state = state.clone();
         let toaster = toaster.clone();
@@ -114,7 +120,7 @@ fn show_toast(app: &AppHandle, state: &Arc<Mutex<State>>, toaster: &Arc<toast::T
         })
     };
     let (app, toaster) = (app.clone(), toaster.clone());
-    tauri::async_runtime::spawn(async move { toaster.show(&app, song, style, on_action).await });
+    tauri::async_runtime::spawn(async move { toaster.show(&app, song, style, hide_text, on_action).await });
 }
 
 /// `trayControls`: a tray click hides the toast or shows it again.
