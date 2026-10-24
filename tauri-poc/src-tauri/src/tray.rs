@@ -19,6 +19,18 @@ use crate::{
 
 const TRAY_ID: &str = "main";
 
+pub type ClickHandler = std::sync::Arc<dyn Fn(&AppHandle) + Send + Sync>;
+
+/// `setTrayOnClick` / `setTrayOnDoubleClick` for notifications' tray
+/// controls: while set, a click runs it and a double click shows or hides
+/// the window.
+static CLICK_OVERRIDE: std::sync::Mutex<Option<ClickHandler>> = std::sync::Mutex::new(None);
+
+#[cfg_attr(not(windows), allow(dead_code))]
+pub fn set_click_override(handler: Option<ClickHandler>) {
+    *CLICK_OVERRIDE.lock().unwrap() = handler;
+}
+
 fn icon(paused: bool) -> Image<'static> {
     let bytes: &'static [u8] = if paused {
         include_bytes!("../../../assets/tray-paused.png")
@@ -82,18 +94,26 @@ fn create(app: &AppHandle) -> tauri::Result<()> {
             _ => {}
         })
         .on_tray_icon_event(|tray, event| {
-            if let TrayIconEvent::Click {
-                button: MouseButton::Left,
-                button_state: MouseButtonState::Up,
-                ..
-            } = event
-            {
-                let app = tray.app_handle();
-                if app.state::<Config>().get_bool("options.trayClickPlayPause") {
-                    song_controls::play_pause(app);
-                } else {
+            let app = tray.app_handle();
+            let click_override = CLICK_OVERRIDE.lock().unwrap().clone();
+            match event {
+                TrayIconEvent::Click {
+                    button: MouseButton::Left,
+                    button_state: MouseButtonState::Up,
+                    ..
+                } => {
+                    if let Some(handler) = click_override {
+                        handler(app);
+                    } else if app.state::<Config>().get_bool("options.trayClickPlayPause") {
+                        song_controls::play_pause(app);
+                    } else {
+                        toggle_window(app);
+                    }
+                }
+                TrayIconEvent::DoubleClick { button: MouseButton::Left, .. } if click_override.is_some() => {
                     toggle_window(app);
                 }
+                _ => {}
             }
         })
         .build(app)?;
