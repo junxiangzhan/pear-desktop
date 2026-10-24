@@ -168,6 +168,43 @@ cd tauri-poc/src-tauri && pnpm dlx @tauri-apps/cli@2.12.4 android build --debug 
 - **A foreground service alone isn't enough:** when the WebView gets `onPause()` (which `WryActivity` calls) or the window becomes invisible, Chromium pauses media with a video track, and YTM always plays through `<video>`. While the service runs, `MainActivity` calls `webView.onResume()` right after `onPause`, and reports the window visibility back as `VISIBLE` after `onStop`.
 - The notification stays put while paused (the service doesn't leave the foreground), to avoid Android 12's "no foreground service from the background" restriction when playback resumes from the background later. Swiping the app away from recents stops the service (the WebView goes with the activity).
 
+## Releases (GitHub Actions)
+
+`.github/workflows/tauri-poc-release.yml` builds, on Windows runners, the Windows installer (NSIS, not code-signed) and the Android arm64 APK (signed with the key below), and publishes them as a GitHub Release (pre-release).
+
+- **Releasing:** push a `tauri-vX.Y.Z` tag on the `tauri-poc` branch; X.Y.Z becomes the version (Android's versionCode is derived from it):
+
+  ```bash
+  git tag tauri-v0.2.0 && git push origin tauri-v0.2.0
+  ```
+
+- **Building without releasing:** run it by hand from the Actions page; the files are attached to that run. Manual runs need this workflow file on the default branch (`master`); releasing by tag doesn't.
+- **Android signing key (set up once before the first release):** create a release key (`keytool` asks for the passwords), then store it as repository secrets. Back up the key file and its passwords separately: without them, no further update can install over an existing one.
+
+  ```bash
+  keytool -genkeypair -keystore pear-release.jks -alias pear -keyalg RSA -keysize 4096 -validity 10000
+  ```
+
+  ```bash
+  base64 -w0 pear-release.jks | gh secret set ANDROID_KEYSTORE_BASE64 --repo junxiangzhan/pear-desktop
+  ```
+
+  ```bash
+  gh secret set ANDROID_KEY_ALIAS --body pear --repo junxiangzhan/pear-desktop
+  ```
+
+  ```bash
+  gh secret set ANDROID_KEYSTORE_PASSWORD --repo junxiangzhan/pear-desktop
+  ```
+
+  ```bash
+  gh secret set ANDROID_KEY_PASSWORD --repo junxiangzhan/pear-desktop
+  ```
+
+  The last two prompt for the passwords (if you didn't set a separate key password, both are the same). Without the secrets, the Android build fails at the signing step and says why.
+- **Changing keys:** test builds signed with the debug key can't be updated to a release build in place; uninstall them first (this signs out of YouTube Music). Later releases install over each other.
+- **Not included:** auto-update, Windows code signing (SmartScreen warns on first run), macOS / Linux, the Play Store.
+
 ## Verification results (2026-10-23)
 
 | Item | Windows (WebView2 157) | Android emulator (API 34, WebView 125) |

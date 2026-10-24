@@ -168,6 +168,43 @@ cd tauri-poc/src-tauri && pnpm dlx @tauri-apps/cli@2.12.4 android build --debug 
 - **只有 foreground service 還不夠：** WebView 被 `onPause()`（`WryActivity` 會呼叫）或視窗變成不可見時，Chromium 會暫停有影像軌的媒體，而 YTM 一律用 `<video>` 播放。`MainActivity` 在 service 執行期間於 `onPause` 後立刻 `webView.onResume()`、`onStop` 後把視窗可見度報回 `VISIBLE`。
 - 暫停時通知仍是常駐的（service 不離開前景），避免之後從背景恢復播放時受 Android 12 起的「背景不可啟動前景服務」限制。從最近任務滑掉 app 會停止 service（WebView 跟著 activity 消失）。
 
+## 發佈（GitHub Actions）
+
+`.github/workflows/tauri-poc-release.yml` 在 Windows runner 上建置 Windows 安裝檔（NSIS，未做程式碼簽章）與 Android arm64 APK（用下面的金鑰簽名），並發佈成 GitHub Release（pre-release）。
+
+- **發佈：** 在 `tauri-poc` 分支上打 `tauri-vX.Y.Z` 的 tag 並推送，版本號就是 X.Y.Z（Android 的 versionCode 由它算出）：
+
+  ```bash
+  git tag tauri-v0.2.0 && git push origin tauri-v0.2.0
+  ```
+
+- **只建置不發佈：** 在 Actions 頁手動執行，檔案附在那次執行上。手動執行需要這個 workflow 檔在預設分支（`master`）上；只用 tag 發佈的話不需要。
+- **Android 簽名金鑰（第一次發佈前設定一次）：** 建立正式金鑰（`keytool` 會詢問密碼），再存成 repository secrets。金鑰檔與密碼要另外備份：遺失後就無法再發佈能覆蓋安裝的更新。
+
+  ```bash
+  keytool -genkeypair -keystore pear-release.jks -alias pear -keyalg RSA -keysize 4096 -validity 10000
+  ```
+
+  ```bash
+  base64 -w0 pear-release.jks | gh secret set ANDROID_KEYSTORE_BASE64 --repo junxiangzhan/pear-desktop
+  ```
+
+  ```bash
+  gh secret set ANDROID_KEY_ALIAS --body pear --repo junxiangzhan/pear-desktop
+  ```
+
+  ```bash
+  gh secret set ANDROID_KEYSTORE_PASSWORD --repo junxiangzhan/pear-desktop
+  ```
+
+  ```bash
+  gh secret set ANDROID_KEY_PASSWORD --repo junxiangzhan/pear-desktop
+  ```
+
+  後兩個指令會提示輸入密碼（沒有另設金鑰密碼時，兩者相同）。沒有設定 secrets 時，Android 的建置會在簽名這步失敗並說明原因。
+- **換金鑰的影響：** 先前用除錯金鑰簽名的測試版無法直接更新成正式版，要先解除安裝（會登出 YouTube Music）。之後的正式版都能直接覆蓋安裝。
+- **不包含：** 自動更新、Windows 程式碼簽章（第一次執行時 SmartScreen 會警告）、macOS／Linux、Play 商店。
+
 ## 驗證結果（2026-10-23）
 
 | 項目 | Windows（WebView2 157） | Android 模擬器（API 34, WebView 125） |

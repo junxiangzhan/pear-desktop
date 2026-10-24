@@ -1,0 +1,254 @@
+# Builds the Tauri port (tauri-poc/) for Windows and Android and publishes
+# both to a GitHub Release.
+#
+# - Push a tag `tauri-vX.Y.Z` (on the tauri-poc branch) to build and release
+#   version X.Y.Z as a pre-release.
+# - Or run it by hand (Actions › Tauri PoC release › Run workflow) to only
+#   build; the files are attached to the run. Manual runs need this file on
+#   the default branch.
+#
+# The Android APK is signed with the key in these repository secrets (see
+# tauri-poc/README.md, "Releases"): ANDROID_KEYSTORE_BASE64,
+# ANDROID_KEYSTORE_PASSWORD, ANDROID_KEY_ALIAS, ANDROID_KEY_PASSWORD.
+# The Windows installer is not code-signed.
+
+name: Tauri PoC release
+
+on:
+  push:
+    tags: ["tauri-v*"]
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Version to build, e.g. 0.2.0 (empty: tauri.conf.json's)"
+        required: false
+
+permissions: {}
+
+env:
+  NODE_VERSION: "24.x"
+  TAURI_CLI: "@tauri-apps/cli@2.12.4"
+  NDK_VERSION: "28.0.13004108"
+  # Only the Tauri build runs here; Electron's binary isn't needed
+  ELECTRON_SKIP_BINARY_DOWNLOAD: "1"
+
+jobs:
+  version:
+    name: Version
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.version.outputs.version }}
+    steps:
+      - id: version
+        env:
+          REF_NAME: ${{ github.ref_name }}
+          INPUT: ${{ inputs.version }}
+        run: |
+          if [ "$GITHUB_EVENT_NAME" = "push" ]; then
+            version="${REF_NAME#tauri-v}"
+          else
+            version="$INPUT"
+          fi
+          if [ -n "$version" ] && ! echo "$version" | grep -Eq '^[0-9]+\.[0-9]+\.[0-9]+$'; then
+            echo "::error::Version '$version' is not X.Y.Z"
+            exit 1
+          fi
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+
+  windows:
+    name: Windows installer
+    needs: version
+    runs-on: windows-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd
+
+      - name: Install pnpm
+        uses: pnpm/action-setup@fc06bc1257f339d1d5d8b3a19a8cae5388b55320
+        with:
+          version: 11
+          run_install: false
+
+      - name: Setup NodeJS
+        uses: actions/setup-node@53b83947a5a98c8d113130e565377fae1a50d02f
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: "pnpm"
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Update Rust
+        run: rustup update stable --no-self-update
+
+      - name: Cache Cargo
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            tauri-poc/src-tauri/target
+          key: cargo-windows-${{ hashFiles('tauri-poc/src-tauri/Cargo.lock') }}
+          restore-keys: cargo-windows-
+
+      - name: Build the page bundle
+        run: pnpm exec vite build -c tauri-poc/vite.inject.config.mts
+
+      - name: Rust tests
+        run: cargo test --manifest-path tauri-poc/src-tauri/Cargo.toml --lib
+
+      - name: Build the installer
+        shell: pwsh
+        working-directory: tauri-poc/src-tauri
+        env:
+          VERSION: ${{ needs.version.outputs.version }}
+        run: |
+          $config = @()
+          if ($env:VERSION) {
+            @{ version = $env:VERSION } | ConvertTo-Json | Set-Content ci-version.json
+            $config = @('--config', 'ci-version.json')
+          }
+          pnpm dlx $env:TAURI_CLI build @config
+          if ($LASTEXITCODE) { exit $LASTEXITCODE }
+
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
+        with:
+          name: windows
+          path: tauri-poc/src-tauri/target/release/bundle/nsis/*.exe
+          if-no-files-found: error
+
+  android:
+    name: Android APK
+    needs: version
+    # Same host as the documented local builds (see .cargo/config.toml)
+    runs-on: windows-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd
+
+      - name: Install pnpm
+        uses: pnpm/action-setup@fc06bc1257f339d1d5d8b3a19a8cae5388b55320
+        with:
+          version: 11
+          run_install: false
+
+      - name: Setup NodeJS
+        uses: actions/setup-node@53b83947a5a98c8d113130e565377fae1a50d02f
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: "pnpm"
+
+      - name: Setup Java
+        uses: actions/setup-java@b843ebf9b913146b38da2eaa7aeddf76074ae1ad
+        with:
+          distribution: temurin
+          java-version: "21"
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Install the Android SDK parts
+        shell: pwsh
+        run: |
+          $sdkmanager = "$env:ANDROID_HOME\cmdline-tools\latest\bin\sdkmanager.bat"
+          "y`n" * 20 | & $sdkmanager --licenses | Out-Null
+          & $sdkmanager --install "platforms;android-37.0" "build-tools;36.0.0" "ndk;$env:NDK_VERSION"
+          if ($LASTEXITCODE) { exit $LASTEXITCODE }
+          "NDK_HOME=$env:ANDROID_HOME\ndk\$env:NDK_VERSION" | Out-File $env:GITHUB_ENV -Append
+
+      - name: Update Rust
+        run: |
+          rustup update stable --no-self-update
+          rustup target add aarch64-linux-android
+
+      - name: Cache Cargo
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            tauri-poc/src-tauri/target
+          key: cargo-android-${{ hashFiles('tauri-poc/src-tauri/Cargo.lock') }}
+          restore-keys: cargo-android-
+
+      - name: Build the page bundle
+        run: pnpm exec vite build -c tauri-poc/vite.inject.config.mts
+
+      - name: Build the APK
+        shell: pwsh
+        working-directory: tauri-poc/src-tauri
+        env:
+          VERSION: ${{ needs.version.outputs.version }}
+        run: |
+          $config = @()
+          if ($env:VERSION) {
+            @{ version = $env:VERSION } | ConvertTo-Json | Set-Content ci-version.json
+            $config = @('--config', 'ci-version.json')
+          }
+          pnpm dlx $env:TAURI_CLI android build --apk --target aarch64 @config
+          if ($LASTEXITCODE) { exit $LASTEXITCODE }
+
+      - name: Sign the APK
+        shell: pwsh
+        env:
+          VERSION: ${{ needs.version.outputs.version }}
+          KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+          KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+        run: |
+          if (-not $env:KEYSTORE_BASE64) {
+            Write-Output "::error::The Android signing secrets are not set (see tauri-poc/README.md, Releases)"
+            exit 1
+          }
+          $keystore = Join-Path $env:RUNNER_TEMP release.jks
+          [IO.File]::WriteAllBytes($keystore, [Convert]::FromBase64String($env:KEYSTORE_BASE64))
+          $unsigned = "tauri-poc/src-tauri/gen/android/app/build/outputs/apk/universal/release/app-universal-release-unsigned.apk"
+          $name = if ($env:VERSION) { "pear-tauri-poc-$env:VERSION-android-arm64.apk" } else { "pear-tauri-poc-android-arm64.apk" }
+          New-Item -ItemType Directory -Force dist | Out-Null
+          & "$env:ANDROID_HOME\build-tools\36.0.0\apksigner.bat" sign `
+            --ks $keystore --ks-pass env:KEYSTORE_PASSWORD `
+            --ks-key-alias $env:KEY_ALIAS --key-pass env:KEY_PASSWORD `
+            --out "dist/$name" $unsigned
+          $code = $LASTEXITCODE
+          Remove-Item $keystore
+          exit $code
+
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
+        with:
+          name: android
+          path: dist/*.apk
+          if-no-files-found: error
+
+  release:
+    name: GitHub Release
+    if: github.event_name == 'push'
+    needs: [version, windows, android]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333
+        with:
+          path: dist
+          merge-multiple: true
+
+      - name: Publish the release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAG: ${{ github.ref_name }}
+          VERSION: ${{ needs.version.outputs.version }}
+        run: |
+          cat > notes.md <<EOF
+          An unofficial, experimental Tauri port of Pear Desktop. Details and known gaps: [tauri-poc/README-en.md](https://github.com/${GITHUB_REPOSITORY}/blob/${TAG}/tauri-poc/README-en.md).
+
+          - **Windows:** the installer isn't code-signed, so SmartScreen warns on first run (More info › Run anyway). Needs WebView2, which comes with Windows 10/11.
+          - **Android (arm64, Android 8+):** if you installed an earlier test build signed with a different key, uninstall it first (this signs out of YouTube Music on that device).
+          EOF
+          gh release create "$TAG" dist/* \
+            --repo "$GITHUB_REPOSITORY" \
+            --title "Pear Tauri PoC $VERSION" \
+            --notes-file notes.md \
+            --prerelease
