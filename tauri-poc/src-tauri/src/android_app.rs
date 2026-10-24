@@ -7,6 +7,8 @@
 //!   on Android only ends the process.
 //! - prompt: a native dialog for `prompt::open`, which has no prompt
 //!   windows on Android.
+//! - audioExists / saveAudio: the downloader's files in the shared
+//!   Music/Pear Desktop collection (MediaStore).
 
 use tauri::{
     plugin::{Builder, PluginHandle, TauriPlugin},
@@ -53,21 +55,53 @@ pub fn restart(app: &AppHandle) {
     call(app, "restart", serde_json::json!({}));
 }
 
-/// Shows a prompt (`custom-electron-prompt` options) and waits for the
-/// answer: the value, or `null` when cancelled.
-pub async fn prompt(app: &AppHandle, options: serde_json::Value) -> Result<serde_json::Value, String> {
-    #[derive(serde::Deserialize)]
-    struct Answer {
-        value: serde_json::Value,
-    }
+#[derive(serde::Deserialize)]
+struct Answer<T> {
+    value: T,
+}
+
+/// A plugin call that waits for Kotlin's `{ value }` answer.
+async fn ask<T: serde::de::DeserializeOwned + Send + 'static>(
+    app: &AppHandle,
+    command: &'static str,
+    args: serde_json::Value,
+) -> Result<T, String> {
     let app = app.clone();
     tauri::async_runtime::spawn_blocking(move || {
         app.state::<AndroidApp>()
             .0
-            .run_mobile_plugin::<Answer>("prompt", options)
+            .run_mobile_plugin::<Answer<T>>(command, args)
             .map(|answer| answer.value)
             .map_err(|error| error.to_string())
     })
     .await
     .map_err(|error| error.to_string())?
+}
+
+/// Shows a prompt (`custom-electron-prompt` options) and waits for the
+/// answer: the value, or `null` when cancelled.
+pub async fn prompt(app: &AppHandle, options: serde_json::Value) -> Result<serde_json::Value, String> {
+    ask(app, "prompt", options).await
+}
+
+/// Whether the downloader already saved `name` into Music/Pear Desktop (and
+/// `subfolder`).
+pub async fn audio_exists(app: &AppHandle, name: &str, subfolder: Option<&str>) -> Result<bool, String> {
+    ask(app, "audioExists", serde_json::json!({ "name": name, "subfolder": subfolder })).await
+}
+
+/// Copies a downloaded file into Music/Pear Desktop (and `subfolder`),
+/// replacing a file of the same name; returns its content URI.
+pub async fn save_audio(
+    app: &AppHandle,
+    path: &std::path::Path,
+    name: &str,
+    subfolder: Option<&str>,
+) -> Result<String, String> {
+    ask(
+        app,
+        "saveAudio",
+        serde_json::json!({ "path": path, "name": name, "subfolder": subfolder }),
+    )
+    .await
 }

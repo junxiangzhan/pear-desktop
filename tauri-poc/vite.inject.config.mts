@@ -47,6 +47,10 @@ const backendProxies: Record<string, string> = {
   // do-not-track: only the page-side "In player" mode is ported
   'src/plugins/do-not-track/blocker.ts': compat('do-not-track.ts'),
   'src/plugins/do-not-track/injectors/inject-cliqz-preload.ts': compat('do-not-track.ts'),
+  // downloader: the page finds the stream, Rust saves it (inject/downloader.ts)
+  'src/plugins/downloader/main/index.ts': compat('downloader.ts'),
+  'src/plugins/downloader/main/utils.ts': compat('downloader.ts'),
+  'src/plugins/downloader/menu.ts': compat('downloader-menu.ts'),
 };
 const proxyBackends = (): Plugin => {
   const targets = new Map(
@@ -55,15 +59,23 @@ const proxyBackends = (): Plugin => {
       proxy,
     ]),
   );
-  // Only resolve imports whose last segment names a proxied module
+  const proxies = new Set(
+    Object.values(backendProxies).map((proxy) => proxy.replaceAll('\\', '/')),
+  );
+  // Only resolve imports whose last segment names a proxied module (its
+  // directory, for an index.ts)
   const names = new Set(
-    Object.keys(backendProxies).map((file) => basename(file, '.ts')),
+    Object.keys(backendProxies).map((file) =>
+      basename(file, '.ts') === 'index' ? basename(dirname(file)) : basename(file, '.ts'),
+    ),
   );
   return {
     name: 'pear-proxy-backends',
     enforce: 'pre',
     async resolveId(source, importer, options) {
       if (!importer || !names.has(basename(source, '.ts'))) return null;
+      // A proxy may wrap the module it stands in for
+      if (proxies.has(importer.replaceAll('\\', '/'))) return null;
       const resolved = await this.resolve(source, importer, {
         ...options,
         skipSelf: true,

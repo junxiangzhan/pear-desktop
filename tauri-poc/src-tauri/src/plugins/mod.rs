@@ -100,6 +100,7 @@ mod api_server;
 pub mod auth_proxy_adapter;
 pub mod in_app_menu;
 mod discord;
+mod downloader;
 mod notifications;
 mod now_playing_post;
 #[cfg(desktop)]
@@ -126,6 +127,7 @@ pub fn all() -> Vec<Arc<dyn Plugin>> {
         Arc::new(notifications::Notifications::new()),
         Arc::new(scrobbler::Scrobbler::new()),
         Arc::new(discord::Discord::new()),
+        Arc::new(downloader::Downloader),
         Arc::new(api_server::ApiServer::new()),
         Arc::new(amuse::Amuse::new()),
         // The only menu on Android, where there is no native one

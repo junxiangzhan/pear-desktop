@@ -1,8 +1,15 @@
 package com.github.pear_devs.tauri_poc
 
 import android.app.Activity
+import android.content.ContentUris
+import android.content.ContentValues
 import android.content.Intent
+import android.media.MediaScannerConnection
+import android.net.Uri
+import android.os.Build
+import android.os.Environment
 import android.os.Process
+import android.provider.MediaStore
 import android.text.InputType
 import android.widget.EditText
 import android.widget.LinearLayout
@@ -10,6 +17,7 @@ import android.widget.RadioButton
 import android.widget.RadioGroup
 import android.widget.ScrollView
 import android.widget.TextView
+import androidx.annotation.RequiresApi
 import androidx.appcompat.app.AlertDialog
 import androidx.core.view.WindowCompat
 import androidx.core.view.WindowInsetsCompat
@@ -20,12 +28,21 @@ import app.tauri.annotation.TauriPlugin
 import app.tauri.plugin.Invoke
 import app.tauri.plugin.JSObject
 import app.tauri.plugin.Plugin
+import java.io.File
+import java.io.IOException
 import org.json.JSONArray
 import org.json.JSONObject
 
 @InvokeArg
 class FullscreenArgs {
   var fullscreen: Boolean = false
+}
+
+@InvokeArg
+class AudioArgs {
+  var path: String? = null
+  lateinit var name: String
+  var subfolder: String? = null
 }
 
 /** App-level commands for `src/android_app.rs`. */
@@ -156,6 +173,96 @@ class AndroidAppPlugin(private val activity: Activity) : Plugin(activity) {
         .setNegativeButton(android.R.string.cancel, null)
         .setOnDismissListener { if (!answered) invoke.resolve(JSObject().put("value", JSONObject.NULL)) }
         .show()
+    }
+  }
+
+  // The downloader's files (src/plugins/downloader.rs). Android 10+ puts them
+  // in the shared Music/Pear Desktop collection through MediaStore, which
+  // needs no storage permission. Android 8 and 9 would need one, so there
+  // they go to the app's own Music folder (removed with the app).
+
+  @RequiresApi(Build.VERSION_CODES.Q)
+  private fun relativePath(subfolder: String?) =
+    listOfNotNull(Environment.DIRECTORY_MUSIC, "Pear Desktop", subfolder).joinToString("/") + "/"
+
+  @RequiresApi(Build.VERSION_CODES.Q)
+  private fun audioCollection() = MediaStore.Audio.Media.getContentUri(MediaStore.VOLUME_EXTERNAL_PRIMARY)
+
+  /** Android 10+: this app's file of that name in the collection. */
+  @RequiresApi(Build.VERSION_CODES.Q)
+  private fun findAudio(name: String, subfolder: String?): Uri? {
+    val collection = audioCollection()
+    activity.contentResolver.query(
+      collection,
+      arrayOf(MediaStore.MediaColumns._ID),
+      "${MediaStore.MediaColumns.RELATIVE_PATH} = ? AND ${MediaStore.MediaColumns.DISPLAY_NAME} = ?",
+      arrayOf(relativePath(subfolder), name),
+      null,
+    )?.use { cursor ->
+      if (cursor.moveToFirst()) return ContentUris.withAppendedId(collection, cursor.getLong(0))
+    }
+    return null
+  }
+
+  private fun legacyFile(name: String, subfolder: String?): File {
+    val root = activity.getExternalFilesDir(Environment.DIRECTORY_MUSIC) ?: throw IOException("No music folder")
+    return File(listOfNotNull("Pear Desktop", subfolder).fold(root) { dir, part -> File(dir, part) }, name)
+  }
+
+  /** Runs `work` off the UI thread and answers `{ value }`. */
+  private fun answer(invoke: Invoke, work: () -> Any) {
+    Thread {
+      try {
+        invoke.resolve(JSObject().put("value", work()))
+      } catch (error: Exception) {
+        invoke.reject(error.message ?: error.toString())
+      }
+    }.start()
+  }
+
+  @Command
+  fun audioExists(invoke: Invoke) {
+    val args = invoke.parseArgs(AudioArgs::class.java)
+    answer(invoke) {
+      if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) findAudio(args.name, args.subfolder) != null
+      else legacyFile(args.name, args.subfolder).exists()
+    }
+  }
+
+  /** Copies the downloaded file in, replacing one of the same name. */
+  @Command
+  fun saveAudio(invoke: Invoke) {
+    val args = invoke.parseArgs(AudioArgs::class.java)
+    answer(invoke) {
+      val source = File(args.path ?: throw IOException("No file"))
+      if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+        val resolver = activity.contentResolver
+        val existing = findAudio(args.name, args.subfolder)
+        val uri = existing ?: resolver.insert(
+          audioCollection(),
+          ContentValues().apply {
+            put(MediaStore.MediaColumns.DISPLAY_NAME, args.name)
+            put(MediaStore.MediaColumns.MIME_TYPE, "audio/mp4")
+            put(MediaStore.MediaColumns.RELATIVE_PATH, relativePath(args.subfolder))
+            put(MediaStore.MediaColumns.IS_PENDING, 1)
+          },
+        ) ?: throw IOException("MediaStore did not accept ${args.name}")
+        try {
+          val output = resolver.openOutputStream(uri, "wt") ?: throw IOException("Cannot write ${args.name}")
+          output.use { out -> source.inputStream().use { it.copyTo(out) } }
+        } catch (error: Exception) {
+          if (existing == null) resolver.delete(uri, null, null)
+          throw error
+        }
+        resolver.update(uri, ContentValues().apply { put(MediaStore.MediaColumns.IS_PENDING, 0) }, null, null)
+        uri.toString()
+      } else {
+        val target = legacyFile(args.name, args.subfolder)
+        target.parentFile?.mkdirs()
+        source.copyTo(target, overwrite = true)
+        MediaScannerConnection.scanFile(activity, arrayOf(target.path), arrayOf("audio/mp4"), null)
+        Uri.fromFile(target).toString()
+      }
     }
   }
 }

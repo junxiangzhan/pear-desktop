@@ -47,10 +47,11 @@ type OpenDialogOptions = {
   title?: string;
   filters?: { name: string; extensions: string[] }[];
   properties?: string[];
+  defaultPath?: string;
 };
 
-// Menus pick files (api-server's HTTPS certificate); the Rust side opens the
-// native dialog. Only single-file picking, the one use so far.
+// Menus pick a file (api-server's HTTPS certificate) or a folder (downloader,
+// with `openDirectory`); the Rust side opens the native dialog.
 export const dialog = new Proxy(
   {
     showOpenDialog: async (

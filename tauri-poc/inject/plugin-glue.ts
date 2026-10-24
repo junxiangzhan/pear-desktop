@@ -4,6 +4,7 @@
 // the Electron backends they replace.
 import prompt from './compat/prompt';
 import './crossfade';
+import './downloader';
 import { emitLocal, handleLocally, ipcRenderer } from './ipc';
 import { invoke } from './tauri';
 

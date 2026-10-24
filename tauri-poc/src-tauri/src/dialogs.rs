@@ -53,7 +53,8 @@ pub fn need_restart(app: &AppHandle, plugin_id: &str) {
 }
 
 /// `dialog.showOpenDialog` for page-side menus (`inject/compat/electron.ts`):
-/// title and filters, one file, answered like Electron.
+/// title, filters and `defaultPath`, one file or one folder
+/// (`openDirectory`), answered like Electron.
 pub fn register_ipc(ipc: &Ipc) {
     ipc.handle("core", "pear:show-open-dialog", |app, args| async move {
         let options = args.into_iter().next().unwrap_or(Value::Null);
@@ -61,6 +62,12 @@ pub fn register_ipc(ipc: &Ipc) {
         if let Some(title) = options["title"].as_str() {
             dialog = dialog.set_title(title);
         }
+        if let Some(path) = options["defaultPath"].as_str().filter(|path| !path.is_empty()) {
+            dialog = dialog.set_directory(path);
+        }
+        let folder = options["properties"]
+            .as_array()
+            .is_some_and(|properties| properties.iter().any(|p| p == "openDirectory"));
         for filter in options["filters"].as_array().into_iter().flatten() {
             let extensions: Vec<&str> = filter["extensions"]
                 .as_array()
@@ -71,9 +78,21 @@ pub fn register_ipc(ipc: &Ipc) {
             dialog = dialog.add_filter(filter["name"].as_str().unwrap_or_default(), &extensions);
         }
         let (tx, rx) = oneshot::channel();
-        dialog.pick_file(move |path| {
+        let answer = move |path| {
             let _ = tx.send(path);
-        });
+        };
+        #[cfg(desktop)]
+        if folder {
+            dialog.pick_folder(answer);
+        } else {
+            dialog.pick_file(answer);
+        }
+        // No folder picker on mobile; the downloader hides its folder items
+        #[cfg(mobile)]
+        {
+            let _ = folder;
+            dialog.pick_file(answer);
+        }
         let path = rx.await.ok().flatten().and_then(|path| path.into_path().ok());
         Ok(match path {
             Some(path) => json!({ "canceled": false, "filePaths": [path] }),
