@@ -7,13 +7,13 @@ use tokio::sync::oneshot;
 
 use crate::ipc::Ipc;
 
-/// The "About" menu item (Electron's `role: 'about'`).
-#[cfg_attr(mobile, allow(dead_code))] // no native menu on mobile
+/// The "About" menu item (Electron's `role: 'about'`). Says it is not an
+/// official Pear Desktop release, so problems aren't reported there.
 pub fn about(app: &AppHandle) {
     let info = app.package_info();
     app.dialog()
         .message(format!(
-            "{} {}\nRunning on Tauri {}",
+            "{} {}\nUnofficial experimental Tauri port of Pear Desktop\nRunning on Tauri {}",
             info.name,
             info.version,
             tauri::VERSION
