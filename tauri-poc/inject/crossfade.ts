@@ -137,6 +137,7 @@ handleLocally('audio-url', async (videoId) => {
       await info.chooseFormat({ type: 'audio', quality: 'best' }).decipher(yt.session.player),
     );
     url.searchParams.set('pot', poToken);
+    console.log(LOG_PREFIX, `[crossfade] Stream URL of ${String(videoId)} ready`);
     return url.toString();
   } catch (error) {
     // Like the Electron handler: an empty URL makes crossfade fall back to a hard cut

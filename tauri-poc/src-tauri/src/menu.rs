@@ -50,10 +50,12 @@ impl CheckItem {
 #[cfg(mobile)]
 type NativeMenu = ();
 
+#[cfg(desktop)]
+use crate::ipc::MAIN_WEBVIEW;
 use crate::{
     app_controls,
     config::Config,
-    ipc::{self, MAIN_WEBVIEW},
+    ipc,
     page,
 };
 
@@ -596,6 +598,8 @@ fn dispatch(app: &AppHandle, id: &str) {
     let id = id.to_owned();
     let checked = settle_check(app, &id);
     let config = app.state::<Config>();
+    // The window items (always on top, devtools, full screen) are desktop-only
+    #[cfg(desktop)]
     let window = app.get_webview_window(MAIN_WEBVIEW);
 
     if let Some(command_id) = id.strip_prefix("cmd:") {

@@ -107,6 +107,47 @@ const mediaLists = [
   return list;
 });
 
+// Ad blocking: how often the player showed an ad, and whether the player
+// response the page holds still lists any
+let adsShown = 0;
+const watchAds = () => {
+  const player = document.getElementById('movie_player');
+  if (!player) return setTimeout(watchAds, 2000);
+  let showing = player.classList.contains('ad-showing');
+  new MutationObserver(() => {
+    const now = player.classList.contains('ad-showing');
+    if (now && !showing) adsShown += 1;
+    showing = now;
+  }).observe(player, { attributes: true, attributeFilter: ['class'] });
+};
+watchAds();
+const responseAds = () => {
+  try {
+    const response = window.wrappedJSObject.document.getElementById('movie_player')?.getPlayerResponse?.();
+    if (!response) return null;
+    return (response.adPlacements?.length ?? 0) + (response.playerAds?.length ?? 0);
+  } catch {
+    return null;
+  }
+};
+
+// SponsorBlock: forward jumps of the video (seeks), with the song
+const seeks = [];
+let lastTime = 0;
+const watchSeeks = () => {
+  const video = document.querySelector('video');
+  if (!video) return setTimeout(watchSeeks, 2000);
+  video.addEventListener('timeupdate', () => {
+    if (!video.seeking) lastTime = video.currentTime;
+  });
+  video.addEventListener('seeked', () => {
+    const id = new URL(location.href).searchParams.get('v');
+    seeks.push(`${id} ${Math.round(lastTime)}s->${Math.round(video.currentTime)}s`);
+    if (seeks.length > 8) seeks.shift();
+  });
+};
+watchSeeks();
+
 // Per command: count, average and maximum round trip (ms)
 const bridgeStats = () => {
   const page = window.wrappedJSObject;
@@ -132,6 +173,8 @@ const report = () => {
     parts: parts(),
     resizes,
     mediaEvents,
+    ads: { shown: adsShown, inResponse: responseAds() },
+    seeks,
     // Playback, to tell whether it continues in the background
     media: (() => {
       const video = document.querySelector('video');

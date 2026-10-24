@@ -47,7 +47,7 @@ pub fn need_restart(app: &AppHandle, plugin_id: &str) {
         ))
         .show(move |restart| {
             if restart {
-                app_for_answer.restart();
+                crate::app_controls::restart(&app_for_answer);
             }
         });
 }

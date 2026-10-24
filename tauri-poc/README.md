@@ -230,6 +230,25 @@ arm64 debug APK 61.6 MB（不含除錯資訊）。小米需要在開發者選項
 | YouTube Music 連結 | ✅ 指定本 app 的連結 intent：執行中與冷啟動都會開到該首歌 |
 | 登入狀態保存 | 未登入時關閉再開會還原上次的畫面，cookie 與頁面狀態有寫入 |
 
+## GeckoView 版的平板驗證（Xiaomi 25091RP04G，Android 16，GeckoView 153，2026-10-24）
+
+Android 版預設的頁面引擎。release APK（arm64）213 MB，壓縮後 99 MB；記憶體（PSS，播放中）900 MB，WebView 引擎是 521 MB。細節見 [GECKOVIEW-PLAN.md](GECKOVIEW-PLAN.md) 的「第 4 階段結果」。
+
+| 項目 | 結果 |
+|---|---|
+| 頁面、注入 | ✅ 桌面版 YTM（UA 為桌面版 Firefox），bundle 經內建 extension 在頁面腳本之前載入；版面隨視窗寬度切換（分割畫面、浮動視窗） |
+| 播放、背景播放 | ✅ 回到桌面兩分鐘內持續播放並換歌；在第一頁按返回鍵退到背景繼續播放 |
+| 媒體控制 | ✅ 通知與鎖定畫面（使用者實測）；media session 的暫停／播放／下一首 |
+| 廣告阻擋（do-not-track） | ✅ 熱門 MV 播出 0 則廣告，播放器回應 0 則 |
+| SponsorBlock | ✅ 跳過 `music_offtopic` 片段（Despacito 開頭 0–22 s） |
+| crossfade | ✅ 串流網址取得成功，結束前 10 秒開始交接 |
+| 歌詞（synced-lyrics） | ✅ |
+| 狀態列、全螢幕 | ✅ 頁面不被系統列遮住；「檢視 › 切換全螢幕」隱藏系統列 |
+| 標題語言 | ✅ 歌曲資訊使用頁面語言的標題 |
+| Google 登入 | ✅ 使用者實測可以登入，重開、重新啟動、從最近任務滑掉後仍保持登入 |
+| 選單 | ✅ 開啟、外掛開關即時生效、重新整理、複製目前網址、重新啟動、關於 |
+| YouTube Music 連結 | ✅ 執行中與冷啟動 |
+
 ## GeckoView 可行性驗證（Android，2026-10-24）
 
 為了在 Android 上登入 Google，測試把 Android WebView 換成 GeckoView（Firefox 的引擎）。驗證時用的是同一個 app 裡獨立的入口 `GeckoActivity`（第 2 階段已移除，GeckoView 改到 `MainActivity` 裡）；`assets/pear-gecko/` 是內建的 WebExtension：`probe.js` 以 `world: "MAIN"`、`document_start` 注入頁面主世界，`report.js` 經 native messaging 把結果回報給 app（logcat tag `PearGecko`）。
@@ -247,6 +266,7 @@ arm64 debug APK 61.6 MB（不含除錯資訊）。小米需要在開發者選項
 - **第 1 階段（bundle 在 Gecko 裡跑）已完成：** 全部插件打開時，GeckoView 與 WebView 載入的插件相同（28 個）；找到並修正兩個 Firefox 才有的問題（`pear-trans` 元素建構失敗、AudioContext 被 autoplay 政策暫停而沒有聲音）。細節見計畫文件的「第 1 階段結果」。
 - **第 2 階段（IPC 橋接）已完成：** Android 版現在預設用 GeckoView 顯示頁面，頁面與 Rust 之間走 native messaging（`inject/tauri.ts` → extension → `GeckoBridgePlugin` → `src/gecko_bridge.rs`）。平板上驗證了設定讀寫、歌曲資訊、選單（開啟、點擊、外掛開關即時生效）、`net_fetch`（歌詞）、Rust 在頁面執行腳本（重新整理）與設定變更後的重新載入。細節與延遲見計畫文件的「第 2 階段結果」。
 - **第 3 階段（取代 WebView）已完成：** GeckoView 在背景繼續播放（`PlaybackService` 讓行程存活即可），系統媒體控制、連結（執行中與冷啟動）、從最近任務滑掉後重開都正常。在第一頁按返回鍵改成退到背景繼續播放（原本會結束行程）；「重新啟動」在 Android 上改由 Kotlin 重新開啟 app（Tauri 的 `restart()` 在 Android 上只會結束行程），導覽列選單也顯示了；「複製目前網址」改讀 GeckoView 的網址。記憶體約 1.25 GB（PSS），背景空白 WebView 的 renderer 只佔 5.9 MB。鎖定畫面上的媒體控制也已實機確認。分割畫面由寬變窄時播放頁專輯圖被壓扁（YTM 在版面切換中量測置中的 margin），`inject/shim.ts` 在 resize 結束後再送一次 `resize` 讓它重新量測。細節見計畫文件的「第 3 階段結果」。
+- **第 4 階段（全面驗證）已完成：** 平板驗證表格以 GeckoView 重測都通過（見上方「GeckoView 版的平板驗證」），廣告阻擋、SponsorBlock、crossfade、歌詞都正常；修正「需要重新啟動」對話框在 Android 上只會結束 app 的問題。release APK 213 MB（壓縮後 99 MB），記憶體比 WebView 引擎多約 380 MB。
 
 ## 手動驗證清單
 

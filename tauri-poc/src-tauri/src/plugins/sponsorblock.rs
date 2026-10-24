@@ -61,6 +61,7 @@ impl Plugin for SponsorBlock {
                 (app.clone(), api_url.clone(), categories.clone(), video_id.to_owned());
             tauri::async_runtime::spawn(async move {
                 let segments = fetch_segments(&api_url, &categories, &video_id).await;
+                log::info!("sponsorblock: {} segment(s) for {video_id}", segments.len());
                 send_to_page(&app, "sponsorblock-skip", &[json!(segments)]);
             });
         });

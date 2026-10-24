@@ -1,6 +1,6 @@
 # Android 版改用 GeckoView 的計畫
 
-狀態：第 3 階段完成（2026-10-24），結果見各階段的「結果」一節。前提是 [可行性驗證](README.md#geckoview-可行性驗證android2026-10-24) 的結果：GeckoView 裡可以登入 Google 並保持登入，WebExtension 能在頁面腳本之前注入主世界。桌面版不受影響，仍用 Tauri 的 WebView2／WebKit。
+狀態：四個階段都已完成（2026-10-24），結果見各階段的「結果」一節。前提是 [可行性驗證](README.md#geckoview-可行性驗證android2026-10-24) 的結果：GeckoView 裡可以登入 Google 並保持登入，WebExtension 能在頁面腳本之前注入主世界。桌面版不受影響，仍用 Tauri 的 WebView2／WebKit。
 
 ## 目標與範圍
 
@@ -89,7 +89,7 @@ Tauri 版的 loader 用同步 XHR 從 `pear` 協定拿「設定快照 + bundle�
 
 - 新版 Android 打包會讓 native library **不壓縮**存放（可直接載入），所以 GeckoView 在裝置上約多佔 **190 MB**，下載量約多 **90 MB**。改用壓縮打包（`useLegacyPackaging`）只會讓安裝時解壓縮出同樣大小，裝置佔用不會變小。
 - 主要來源是 Gecko 引擎本身，沒有實際可行的裁減方式；只出 arm64 已經是最小的組合。
-- release 版的實際大小（含 release 編譯、較小的 Rust 函式庫）在第 4 階段量測。
+- release 版實測見「第 4 階段結果」：APK 213 MB、壓縮後 99 MB。
 - 對照：桌面版 Tauri 15.9 MB vs Electron 397 MB 的優勢在 Android 上不成立；Android 版的價值在於能用插件與登入，而不是體積。
 
 ## 6. 階段與驗證
@@ -178,6 +178,43 @@ Tauri 版的 loader 用同步 XHR 從 `pear` 協定拿「設定快照 + bundle�
 **記憶體（PSS，播放中）**：主行程 302 MB（Rust、Tauri、Gecko 主行程、背景 WebView 的瀏覽器端）、YTM 的內容行程 405 MB、另外兩個 Gecko 內容行程各約 106 MB、GPU 139 MB、utility 74 MB、media 50 MB、crash helper 63 MB，合計約 1.25 GB。背景 `about:blank` WebView 的 renderer 只有 5.9 MB，所以不需要研究讓 wry 不建立 WebView；記憶體主要是 Gecko 本身。
 
 **之後的修正**：左右分割畫面把視窗從寬變窄時，播放頁的專輯圖只剩幾 px 寬。YTM 的窄版播放頁以 inline `margin: auto Xpx` 讓方形專輯圖置中，X 在 resize 當下量測，版面還在切換，量到的容器寬度是舊的（582 px 的視窗量成約 837 px）；之後任何一次 resize 都會重新量對。`inject/shim.ts` 在 resize 結束 500 ms 後再送一次 `resize` 事件。以 `am task resize`（582 → 寬 → 582 px）驗證：margin 從 285 px 回到 158 px，專輯圖恢復 266×266。
+
+## 第 4 階段結果（2026-10-24，Xiaomi 平板，GeckoView 153）
+
+**README 的平板驗證表格以 GeckoView 重測**（見 README「GeckoView 版的平板驗證」）：頁面與注入、播放與背景播放、媒體與鎖定畫面控制、廣告阻擋、狀態列、標題語言、Google 登入（現在可以）、選單、連結、登入狀態保存都通過。
+
+**插件**
+
+| 插件 | 結果 |
+|---|---|
+| 廣告阻擋（do-not-track，In player） | ✅ 播放熱門 MV（未訂閱 Premium 的帳號）時播出 0 則廣告（`#movie_player` 沒有進入 `ad-showing`），頁面拿到的播放器回應列出 0 則廣告；WebView 版測過原始回應 5/5 都含廣告 |
+| SponsorBlock | ✅ Despacito（`kJQP7kiw5Fk`，0–22 s 與 249–282 s 是 `music_offtopic`）：Rust 取得 2 段，開始播放就跳到 22 s；下一首也跳過了開頭 |
+| crossfade | ✅ 頁面內的 audio-url backend（youtubei.js + BotGuard 的 PO token）在 Firefox 上可用，約 2 秒取得串流網址；Con Calma（211 s）在 199 s 換到下一首，也就是照預設在結束前 10 秒開始交接。淡入淡出的聽感要用耳朵確認 |
+| synced-lyrics | ✅ 第 2 階段已驗證（`net_fetch` 取得歌詞、同步捲動） |
+| in-app-menu | ✅ 前幾個階段已驗證（選單、外掛開關、重新整理、複製網址、重新啟動） |
+
+另外第 1 階段確認了 28 個有 renderer 部分的插件在 GeckoView 都能載入。
+
+**途中修正**
+
+- 「需要重新啟動」對話框的「Restart now」直接呼叫 Tauri 的 `restart()`，在 Android 上只會結束行程；改走 `app_controls::restart`（Android 由 `AndroidAppPlugin` 重新開啟）。實測換了行程、沒有當掉。
+- Android 編譯的兩個 unused 警告（`menu.rs` 的 `window`、`MAIN_WEBVIEW` 只在桌面版用到）。
+
+**release APK（arm64，GeckoView）**
+
+| 項目 | 大小 |
+|---|---|
+| APK 檔 | 213 MB（native library 不壓縮存放，可直接載入） |
+| └ `libxul.so`（Gecko） | 153 MB |
+| └ `libpear_tauri_poc_lib.so`（Rust，release） | 17 MB |
+| └ `omni.ja`（Gecko 資源） | 15 MB |
+| └ `renderer.js`（bundle，extension 用；Rust 函式庫裡也嵌了一份給 WebView 引擎） | 7 MB |
+| 壓縮後（約等於下載量） | 99 MB |
+| 安裝後 | APK 原樣保留（213 MB，不解出 native library）；這台平板的檔案系統壓縮後佔 148 MB |
+
+**記憶體（release，播放中，PSS）**：GeckoView 引擎 900 MB；WebView 引擎 521 MB（app 242 MB + WebView renderer 279 MB；未登入）。GeckoView 約多 380 MB。
+
+**結論**：GeckoView 版可以登入、主要插件都正常，代價是 APK 多約 150 MB（下載多約 90 MB）、記憶體多約 380 MB。
 
 ## 7. 風險與待確認事項
 
