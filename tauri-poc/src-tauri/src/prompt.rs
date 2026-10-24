@@ -47,10 +47,16 @@ fn default_size(options: &Value) -> (f64, f64) {
     )
 }
 
-/// Android and iOS have the main webview only.
-#[cfg(mobile)]
+/// Android has the main webview only: a native dialog asks instead
+/// (`android_app::prompt`; input, counter and select prompts).
+#[cfg(target_os = "android")]
+pub async fn open(app: &AppHandle, options: Value) -> Result<Value, String> {
+    crate::android_app::prompt(app, options).await
+}
+
+#[cfg(all(mobile, not(target_os = "android")))]
 pub async fn open(_app: &AppHandle, _options: Value) -> Result<Value, String> {
-    Err("prompt windows are not available on mobile".into())
+    Err("prompt windows are not available on this platform".into())
 }
 
 /// Opens a prompt and waits for its result (`null` if dismissed).

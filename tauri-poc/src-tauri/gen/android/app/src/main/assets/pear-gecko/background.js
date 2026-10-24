@@ -78,11 +78,39 @@ const register = () => {
   return queue;
 };
 
+// options.proxy, like Electron's --proxy-server but with SOCKS credentials
+// (src-tauri/src/proxy.rs), so auth-proxy-adapter's relay isn't needed here;
+// changes apply to new requests at once
+let proxy = null;
+const LOCAL_HOSTS = new Set(['localhost', '127.0.0.1', '[::1]']);
+const setProxy = (value) => {
+  proxy = null;
+  if (!value) return;
+  try {
+    const url = new URL(value);
+    const port = Number(url.port);
+    const type = { 'socks5:': 'socks', 'socks4:': 'socks4', 'socks:': 'socks', 'http:': 'http', 'https:': 'https' }[url.protocol];
+    if (!type || !url.hostname || !port) throw new Error('unsupported');
+    proxy = { type, host: url.hostname.replace(/^\[|\]$/g, ''), port, proxyDNS: type.startsWith('socks') };
+    if (type === 'socks' && url.username) {
+      proxy.username = decodeURIComponent(url.username);
+      proxy.password = decodeURIComponent(url.password);
+    }
+  } catch {
+    report(`ignoring options.proxy ${value}`);
+  }
+};
+browser.proxy.onRequest.addListener(
+  (request) => (proxy && !LOCAL_HOSTS.has(new URL(request.url).hostname) ? proxy : { type: 'direct' }),
+  { urls: ['<all_urls>'] },
+);
+
 port.onMessage.addListener(({ m }) => {
   const message = JSON.parse(m);
   if ('event' in message) {
     if (message.event === 'pear:config' && payload) {
       payload.config = message.payload;
+      setProxy(payload.config.options?.proxy);
       register().catch(report);
     }
     return;
@@ -99,6 +127,7 @@ const report = (error) =>
 
 const start = async () => {
   payload = await invoke('gecko_payload');
+  setProxy(payload.config.options?.proxy);
   await register();
   // GeckoPage loads the page once this arrives
   await browser.runtime.sendNativeMessage('pear', { ready: true, startUrl: payload.startUrl });

@@ -97,6 +97,7 @@ impl Plugins {
 
 mod amuse;
 mod api_server;
+pub mod auth_proxy_adapter;
 pub mod in_app_menu;
 mod discord;
 mod notifications;
@@ -133,6 +134,7 @@ pub fn all() -> Vec<Arc<dyn Plugin>> {
     // Window and keyboard features of the desktop shell
     #[cfg(desktop)]
     {
+        list.push(Arc::new(auth_proxy_adapter::AuthProxyAdapter));
         list.push(Arc::new(picture_in_picture::PictureInPicture::new()));
         list.push(Arc::new(transparent_player::TransparentPlayer));
         list.push(Arc::new(shortcuts::Shortcuts::new()));

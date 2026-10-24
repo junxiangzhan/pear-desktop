@@ -17,6 +17,11 @@ pub fn shared_webview_options<'a, R: tauri::Runtime, M: Manager<R>>(
 ) -> tauri::WebviewWindowBuilder<'a, R, M> {
     #[allow(unused_mut)]
     let mut builder = builder.use_https_scheme(true);
+    // `options.proxy`, or auth-proxy-adapter's relay (`proxy::init`)
+    #[cfg(desktop)]
+    if let Some(proxy) = crate::proxy::webview_proxy() {
+        builder = builder.proxy_url(proxy.clone());
+    }
     // Diagnostic switch: a separate profile (see `profile_dir`)
     #[cfg(desktop)]
     if let Some(dir) = profile_dir() {
@@ -26,8 +31,10 @@ pub fn shared_webview_options<'a, R: tauri::Runtime, M: Manager<R>>(
     // Setting browser args replaces wry's defaults, so they are repeated here.
     #[cfg(windows)]
     if let Ok(port) = std::env::var("PEAR_POC_DEBUG_PORT") {
+        // wry drops `proxy_url` once browser args are set
+        let proxy = crate::proxy::webview_proxy().map(|url| format!(" --proxy-server={url}")).unwrap_or_default();
         return builder.additional_browser_args(&format!(
-            "--disable-features=msWebOOUI,msPdfOOUI,msSmartScreenProtection --remote-debugging-port={port}"
+            "--disable-features=msWebOOUI,msPdfOOUI,msSmartScreenProtection --remote-debugging-port={port}{proxy}"
         ));
     }
     builder

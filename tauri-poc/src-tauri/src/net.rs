@@ -23,13 +23,27 @@ const PAGE_FETCH_HOSTS: &[&str] = &[
     "jnn-pa.googleapis.com",
 ];
 
+static PROXY: OnceLock<Option<String>> = OnceLock::new();
+
+/// `options.proxy` for Rust's own requests, set once at startup (`proxy::init`)
+/// before the client is built. SOCKS5 resolves names through the proxy, as
+/// Chromium does.
+pub fn set_proxy(proxy: Option<String>) {
+    let _ = PROXY.set(proxy.map(|url| url.replacen("socks5://", "socks5h://", 1)));
+}
+
 pub fn client() -> &'static reqwest::Client {
     static CLIENT: OnceLock<reqwest::Client> = OnceLock::new();
     CLIENT.get_or_init(|| {
-        reqwest::Client::builder()
-            .user_agent(concat!("PearDesktop-Tauri/", env!("CARGO_PKG_VERSION")))
-            .build()
-            .expect("building the HTTP client")
+        let mut builder = reqwest::Client::builder()
+            .user_agent(concat!("PearDesktop-Tauri/", env!("CARGO_PKG_VERSION")));
+        if let Some(Some(url)) = PROXY.get() {
+            match reqwest::Proxy::all(url) {
+                Ok(proxy) => builder = builder.proxy(proxy),
+                Err(error) => log::error!("invalid proxy {}: {error}", crate::plugins::auth_proxy_adapter::redact(url)),
+            }
+        }
+        builder.build().expect("building the HTTP client")
     })
 }
 

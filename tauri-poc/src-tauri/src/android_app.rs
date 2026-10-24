@@ -5,6 +5,8 @@
 //!   a moment. The choice is kept in `options.fullscreen`.
 //! - restart: Tauri's `restart()` spawns the binary like a desktop app, which
 //!   on Android only ends the process.
+//! - prompt: a native dialog for `prompt::open`, which has no prompt
+//!   windows on Android.
 
 use tauri::{
     plugin::{Builder, PluginHandle, TauriPlugin},
@@ -49,4 +51,23 @@ pub fn set_fullscreen(app: &AppHandle, fullscreen: bool) {
 
 pub fn restart(app: &AppHandle) {
     call(app, "restart", serde_json::json!({}));
+}
+
+/// Shows a prompt (`custom-electron-prompt` options) and waits for the
+/// answer: the value, or `null` when cancelled.
+pub async fn prompt(app: &AppHandle, options: serde_json::Value) -> Result<serde_json::Value, String> {
+    #[derive(serde::Deserialize)]
+    struct Answer {
+        value: serde_json::Value,
+    }
+    let app = app.clone();
+    tauri::async_runtime::spawn_blocking(move || {
+        app.state::<AndroidApp>()
+            .0
+            .run_mobile_plugin::<Answer>("prompt", options)
+            .map(|answer| answer.value)
+            .map_err(|error| error.to_string())
+    })
+    .await
+    .map_err(|error| error.to_string())?
 }

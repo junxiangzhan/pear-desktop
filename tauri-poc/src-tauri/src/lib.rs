@@ -16,6 +16,7 @@ mod net;
 mod page;
 mod plugins;
 mod prompt;
+mod proxy;
 mod song_controls;
 mod song_info;
 #[cfg(desktop)]
@@ -206,6 +207,7 @@ pub fn run() {
             };
             let config_path = config_dir.join("config.json");
             app.manage(Config::load(config_path));
+            proxy::init(&app.state::<Config>());
             app.manage(Ipc::default());
             app.manage(SongInfoProvider::default());
             app.manage(Plugins::new(plugins::all()));

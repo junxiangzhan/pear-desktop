@@ -343,6 +343,7 @@ fn build(app: &AppHandle, data: &MenuData) -> tauri::Result<NativeMenu> {
     );
 
     let mut advanced = vec![
+        b.item("act:setProxy", &b.label("options.submenu.advanced-options.submenu.set-proxy.label"), true, None),
         b.check(
             "opt:restartOnConfigChanges",
             &b.label("options.submenu.advanced-options.submenu.restart-on-config-changes"),
@@ -566,7 +567,7 @@ fn settle_check(app: &AppHandle, id: &str) -> Option<bool> {
 }
 
 /// `config.setMenuOption`: also restarts when `restartOnConfigChanges` is on.
-fn set_menu_option(app: &AppHandle, key: &str, value: Value) {
+pub fn set_menu_option(app: &AppHandle, key: &str, value: Value) {
     let config = app.state::<Config>();
     config.set(app, key, value);
     if config.get_bool("options.restartOnConfigChanges") {
@@ -658,6 +659,7 @@ fn dispatch(app: &AppHandle, id: &str) {
 
     match id.as_str() {
         "act:customWindowTitle" => crate::window::prompt_custom_title(app),
+        "act:setProxy" => crate::proxy::prompt_proxy(app),
         "act:editConfig" => {
             if let Err(error) = crate::config::config_edit(app.clone()) {
                 log::error!("opening config.json failed: {error}");
