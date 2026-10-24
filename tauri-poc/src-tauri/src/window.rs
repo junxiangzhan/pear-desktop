@@ -18,7 +18,7 @@ pub fn shared_webview_options<'a, R: tauri::Runtime, M: Manager<R>>(
     #[allow(unused_mut)]
     let mut builder = builder.use_https_scheme(true);
     // `options.proxy`, or auth-proxy-adapter's relay (`proxy::init`)
-    #[cfg(desktop)]
+    #[cfg(all(desktop, not(windows)))]
     if let Some(proxy) = crate::proxy::webview_proxy() {
         builder = builder.proxy_url(proxy.clone());
     }
@@ -27,17 +27,36 @@ pub fn shared_webview_options<'a, R: tauri::Runtime, M: Manager<R>>(
     if let Some(dir) = profile_dir() {
         builder = builder.data_directory(dir.join("webview"));
     }
-    // Diagnostic switch: expose the Chrome DevTools Protocol on this port.
-    // Setting browser args replaces wry's defaults, so they are repeated here.
     #[cfg(windows)]
-    if let Ok(port) = std::env::var("PEAR_POC_DEBUG_PORT") {
-        // wry drops `proxy_url` once browser args are set
-        let proxy = crate::proxy::webview_proxy().map(|url| format!(" --proxy-server={url}")).unwrap_or_default();
-        return builder.additional_browser_args(&format!(
-            "--disable-features=msWebOOUI,msPdfOOUI,msSmartScreenProtection --remote-debugging-port={port}{proxy}"
-        ));
+    {
+        builder = builder.additional_browser_args(&windows_browser_args());
     }
     builder
+}
+
+/// WebView2's Chromium switches. Setting them replaces wry's defaults, which
+/// come first, and makes wry ignore `proxy_url`, so the proxy goes here too.
+#[cfg(windows)]
+fn windows_browser_args() -> String {
+    // Like Electron's switches in src/index.ts: overlay scrollbars, which
+    // take no room (classic ones squeeze YTM's song menus and the in-app
+    // menu's panels into a horizontal scrollbar), and no Fluent scrollbars
+    let mut args = String::from(
+        "--disable-features=msWebOOUI,msPdfOOUI,msSmartScreenProtection,FluentScrollbar \
+         --enable-features=OverlayScrollbar",
+    );
+    // `options.proxy`, or auth-proxy-adapter's relay (`proxy::init`).
+    // Chromium takes no credentials here (that's what the relay is for).
+    if let Some(proxy) = crate::proxy::webview_proxy() {
+        if let (Some(host), Some(port)) = (proxy.host_str(), proxy.port_or_known_default()) {
+            args.push_str(&format!(" --proxy-server={}://{host}:{port}", proxy.scheme()));
+        }
+    }
+    // Diagnostic switch: expose the Chrome DevTools Protocol on this port
+    if let Ok(port) = std::env::var("PEAR_POC_DEBUG_PORT") {
+        args.push_str(&format!(" --remote-debugging-port={port}"));
+    }
+    args
 }
 
 /// Diagnostic switch: `PEAR_POC_PROFILE_DIR` keeps the WebView data and
