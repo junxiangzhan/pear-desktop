@@ -57,6 +57,15 @@ const parts = () => {
     navBarAttributes: attributes("ytmusic-app-layout > [slot='nav-bar']"),
     playerBarAttributes: attributes("ytmusic-app-layout > [slot='player-bar']"),
     contentAttributes: attributes("ytmusic-app-layout > [slot='content']"),
+    playerAttributes: attributes('ytmusic-player-page #player'),
+    playerWrapperAttributes: attributes('ytmusic-player-page #music-player-wrapper'),
+    playerSizing: (() => {
+      const player = document.querySelector('ytmusic-player-page #player');
+      if (!player) return null;
+      const style = getComputedStyle(player);
+      return ['width', 'height', 'max-width', 'min-width', 'aspect-ratio', 'flex', '--ytmusic-player-page-player-height']
+        .map((name) => `${name}: ${style.getPropertyValue(name).trim()}`).join('; ');
+    })(),
     guideAttributes: attributes("ytmusic-app-layout > [slot='guide']"),
     guideRendererAttributes: attributes("[slot='guide'] ytmusic-guide-renderer"),
     guideParts: [...document.querySelectorAll("[slot='guide'] #contentContainer > *, [slot='guide'] ytmusic-guide-renderer > *")].map(describe),

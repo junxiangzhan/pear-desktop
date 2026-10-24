@@ -90,4 +90,16 @@ Object.defineProperty(MediaQueryList.prototype, 'addListener', {
   },
 });
 
+// YTM bug: its narrow player page centers the album art with an inline
+// margin measured on resize, while the layout is still switching; after a
+// wide-to-narrow change (e.g. a split screen narrowing the window) the art
+// was a few pixels wide. Any later resize measures again, so send one once
+// the layout has settled.
+let resizeSettled: ReturnType<typeof setTimeout> | undefined;
+window.addEventListener('resize', (event) => {
+  if (!event.isTrusted) return;
+  clearTimeout(resizeSettled);
+  resizeSettled = setTimeout(() => window.dispatchEvent(new Event('resize')), 500);
+});
+
 console.log('[pear-tauri]', 'shim installed');

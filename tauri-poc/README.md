@@ -246,7 +246,7 @@ arm64 debug APK 61.6 MB（不含除錯資訊）。小米需要在開發者選項
 - 改用 GeckoView 的完整計畫（IPC 橋接、bundle 與設定的注入、Tauri 的角色、體積）見 [GECKOVIEW-PLAN.md](GECKOVIEW-PLAN.md)。
 - **第 1 階段（bundle 在 Gecko 裡跑）已完成：** 全部插件打開時，GeckoView 與 WebView 載入的插件相同（28 個）；找到並修正兩個 Firefox 才有的問題（`pear-trans` 元素建構失敗、AudioContext 被 autoplay 政策暫停而沒有聲音）。細節見計畫文件的「第 1 階段結果」。
 - **第 2 階段（IPC 橋接）已完成：** Android 版現在預設用 GeckoView 顯示頁面，頁面與 Rust 之間走 native messaging（`inject/tauri.ts` → extension → `GeckoBridgePlugin` → `src/gecko_bridge.rs`）。平板上驗證了設定讀寫、歌曲資訊、選單（開啟、點擊、外掛開關即時生效）、`net_fetch`（歌詞）、Rust 在頁面執行腳本（重新整理）與設定變更後的重新載入。細節與延遲見計畫文件的「第 2 階段結果」。
-- **第 3 階段（取代 WebView）已完成：** GeckoView 在背景繼續播放（`PlaybackService` 讓行程存活即可），系統媒體控制、連結（執行中與冷啟動）、從最近任務滑掉後重開都正常。在第一頁按返回鍵改成退到背景繼續播放（原本會結束行程）；「重新啟動」在 Android 上改由 Kotlin 重新開啟 app（Tauri 的 `restart()` 在 Android 上只會結束行程），導覽列選單也顯示了；「複製目前網址」改讀 GeckoView 的網址。記憶體約 1.25 GB（PSS），背景空白 WebView 的 renderer 只佔 5.9 MB。鎖定畫面上的媒體控制尚待實機確認。細節見計畫文件的「第 3 階段結果」。
+- **第 3 階段（取代 WebView）已完成：** GeckoView 在背景繼續播放（`PlaybackService` 讓行程存活即可），系統媒體控制、連結（執行中與冷啟動）、從最近任務滑掉後重開都正常。在第一頁按返回鍵改成退到背景繼續播放（原本會結束行程）；「重新啟動」在 Android 上改由 Kotlin 重新開啟 app（Tauri 的 `restart()` 在 Android 上只會結束行程），導覽列選單也顯示了；「複製目前網址」改讀 GeckoView 的網址。記憶體約 1.25 GB（PSS），背景空白 WebView 的 renderer 只佔 5.9 MB。鎖定畫面上的媒體控制也已實機確認。分割畫面由寬變窄時播放頁專輯圖被壓扁（YTM 在版面切換中量測置中的 margin），`inject/shim.ts` 在 resize 結束後再送一次 `resize` 讓它重新量測。細節見計畫文件的「第 3 階段結果」。
 
 ## 手動驗證清單
 

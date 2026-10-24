@@ -1,6 +1,6 @@
 # Android 版改用 GeckoView 的計畫
 
-狀態：第 3 階段完成（2026-10-24），結果見各階段的「結果」一節；鎖定畫面控制待實機確認。前提是 [可行性驗證](README.md#geckoview-可行性驗證android2026-10-24) 的結果：GeckoView 裡可以登入 Google 並保持登入，WebExtension 能在頁面腳本之前注入主世界。桌面版不受影響，仍用 Tauri 的 WebView2／WebKit。
+狀態：第 3 階段完成（2026-10-24），結果見各階段的「結果」一節。前提是 [可行性驗證](README.md#geckoview-可行性驗證android2026-10-24) 的結果：GeckoView 裡可以登入 Google 並保持登入，WebExtension 能在頁面腳本之前注入主世界。桌面版不受影響，仍用 Tauri 的 WebView2／WebKit。
 
 ## 目標與範圍
 
@@ -168,7 +168,7 @@ Tauri 版的 loader 用同步 XHR 從 `pear` 協定拿「設定快照 + bundle�
 |---|---|
 | 背景播放 | ✅ 按 Home 後兩分鐘內播放位置持續前進（每 30 秒前進 30 秒）並換到下一首；`PlaybackService` 讓行程存活，Gecko 在 activity 停止後不會暫停媒體，不需要 WebView 那種「保持可見」的處理（已改成只在 WebView 引擎時做） |
 | 系統媒體控制 | ✅ 背景時經 media session 送出暫停、播放、下一首（`cmd media_session dispatch`，與通知、鎖定畫面按鈕同一條路），頁面都照做 |
-| 鎖定畫面控制 | ⏳ 與上一項同一條路，尚未在鎖定畫面實際按過 |
+| 鎖定畫面控制 | ✅ 使用者在鎖定畫面實際操作，可以使用 |
 | 連結 | ✅ 執行中開啟 `music.youtube.com` 連結會載入該頁；冷啟動時的連結取代起始網址。載入新頁面會中斷正在播放的歌（WebView 版相同） |
 | 返回鍵 | ✅ 頁面有上一頁時回上一頁；在第一頁時**退到背景繼續播放**（像 YouTube Music app），原本的 `finish()` 會讓 Tauri 結束整個行程、播放中斷，且結束時 Gecko 的音訊執行緒碰到已銷毀的 mutex 而 abort |
 | 從最近任務滑掉 | ✅ MIUI 直接結束行程，重開是冷啟動：仍保持登入、頁面與橋接正常 |
@@ -177,7 +177,7 @@ Tauri 版的 loader 用同步 XHR 從 `pear` 協定拿「設定快照 + bundle�
 
 **記憶體（PSS，播放中）**：主行程 302 MB（Rust、Tauri、Gecko 主行程、背景 WebView 的瀏覽器端）、YTM 的內容行程 405 MB、另外兩個 Gecko 內容行程各約 106 MB、GPU 139 MB、utility 74 MB、media 50 MB、crash helper 63 MB，合計約 1.25 GB。背景 `about:blank` WebView 的 renderer 只有 5.9 MB，所以不需要研究讓 wry 不建立 WebView；記憶體主要是 Gecko 本身。
 
-**仍待確認**：鎖定畫面上實際操作媒體控制。
+**之後的修正**：左右分割畫面把視窗從寬變窄時，播放頁的專輯圖只剩幾 px 寬。YTM 的窄版播放頁以 inline `margin: auto Xpx` 讓方形專輯圖置中，X 在 resize 當下量測，版面還在切換，量到的容器寬度是舊的（582 px 的視窗量成約 837 px）；之後任何一次 resize 都會重新量對。`inject/shim.ts` 在 resize 結束 500 ms 後再送一次 `resize` 事件。以 `am task resize`（582 → 寬 → 582 px）驗證：margin 從 285 px 回到 158 px，專輯圖恢復 266×266。
 
 ## 7. 風險與待確認事項
 
