@@ -69,7 +69,7 @@ Rust 擁有 `config.json`（`config.rs`，`defaults.ts` 的移植）。renderer 
 - **discord：** Rust 直接講 Discord 的本機 IPC（Windows named pipe `discord-ipc-N`、Unix socket），取代 `@xhayper/discord-rpc`；節流、暫停逾時清除、自動重連照搬 `DiscordService`。選單在頁面執行，它 import 的 `main.ts` 在打包時換成 `compat/discord.ts`（透過 IPC 讀連線狀態、連線、清除）。
 - **api-server：** axum 重寫，路由、JWT（HS256，與 hono/jwt 互通）、CORS、WebSocket 事件與 Electron 版相同；`AUTH_AT_FIRST` 的 Allow/Deny 對話框用頁面送來的翻譯。`/doc`（OpenAPI）與 `/swagger` 來自 zod 路由定義，Rust 跑不了，所以由打包步驟產生（`scripts/api-openapi.mts` 在 Vite SSR 裡載入真正的路由模組、把主行程模組換成空殼，照 `backend/main.ts` 註冊後取出 Hono 的回應），Rust 原樣回傳；Swagger UI 和 Electron 一樣從 jsDelivr 載入。預設 secret 是頁面載入時的 `Date.now()`，Rust 第一次啟動時把它存進設定，token 才不會在重新整理後失效。HTTPS 用 rustls（ring）。
 - **amuse：** 9863 埠的 `/`、`/query`、`/api`，axum。
-- **in-app-menu：** 啟用時（Windows 預設）主視窗無邊框，選單與視窗按鈕由頁面畫，Rust 回答 `get-menu`／`peard:menu-event`／`window-*`。`app-region: drag` 由 `plugin-glue.ts` 轉成 `start_dragging`（雙擊最大化）。window-state 插件不還原 decorations／visible，否則會蓋掉這個設定。Android 上它是唯一的選單：啟動時一律開啟（頁面依 UA 判斷的預設值在「Linux」上是關閉），不畫視窗按鈕（`__pearNoWindowControls`），選單裡也拿掉 Android 用不到的項目（置頂、開機啟動、系統匣、縮放、全螢幕、DevTools、自訂視窗標題、重新啟動／結束）。
+- **in-app-menu：** 啟用時（Windows 預設）主視窗無邊框，選單與視窗按鈕由頁面畫，Rust 回答 `get-menu`／`peard:menu-event`／`window-*`。`app-region: drag` 由 `plugin-glue.ts` 轉成 `start_dragging`（雙擊最大化）。window-state 插件不還原 decorations／visible，否則會蓋掉這個設定。Android 上它是唯一的選單：啟動時一律開啟，外掛功能裡它的開關也變灰、不能關閉（關掉就只能用 adb 改設定）（頁面依 UA 判斷的預設值在「Linux」上是關閉），不畫視窗按鈕（`__pearNoWindowControls`），選單裡也拿掉 Android 用不到的項目（置頂、開機啟動、系統匣、縮放、全螢幕、DevTools、自訂視窗標題、重新啟動／結束）。
 - **系統媒體控制：** Windows 的 SMTC 由 WebView2 自己提供（顯示名稱是 `msedgewebview2.exe` 或「未知的應用程式」，設定 AppUserModelID 也不會變）；taskbar-mediacontrol 的縮圖按鈕用 `ITaskbarList3`。Linux 的 MPRIS 與 macOS Now Playing 沒有移植（見「這個環境無法建置測試的平台功能」）。Android 見下方「背景播放」。
 - **notifications：** `interactive` 開啟時，Windows 顯示附上一首／播放暫停／下一首按鈕的 WinRT toast，七種 `toastStyle` 都有（`plugins/notifications/toast.rs`，`interactive.ts` 的移植）。按鈕用 toast 自己的 `Activated` 事件在程式內處理（Electron 用 `peard://` 協定啟動第二個實例），所以 app 要在執行中。按鈕有文字（系統匣選單的翻譯，`hideButtonText` 開啟時不顯示；Electron 的判斷式誤用 `toastStyle`，文字從來沒出現過）與圖示，圖示依 Windows 的淺色／深色主題選黑色或白色（Electron 一律黑色，深色主題下看不見）；和 Electron 一樣 5 秒後收起，`refreshOnPlayPause` 會重新顯示，`trayControls` 讓按系統匣圖示顯示／收起 toast（雙擊切換視窗）。和 Electron 不同的地方：標題有做 XML 跳脫（Electron 遇到 `&` 會顯示失敗）、每首歌的封面用不同檔名（Windows 依路徑快取 toast 圖片）、切換模式不必重新啟動。未安裝的開發版（`target\debug`）沒有註冊 AppUserModelID，toast 會顯示成 PowerShell 的，和 tauri-plugin-notification 相同；安裝版用 app 的 identifier。試過讓開發版在 `HKCU\Software\Classes\AppUserModelId\` 註冊自己的 ID（顯示名稱與圖示），Windows 接受了 toast 卻完全不顯示（加上 `CustomActivator` 也一樣），所以維持 PowerShell 的 ID；要在開發版顯示 app 名稱，得像安裝程式那樣建立帶 AppUserModelID 的開始功能表捷徑。其他平台與 `interactive` 關閉時是基本通知。
 - **do-not-track（廣告阻擋）：** 預設的 **In player** 模式完全在頁面裡執行（包住 `JSON.parse` 與 `Response.json`，刪掉播放器回應裡的 `playerAds`／`adPlacements`／`adSlots`），Windows 與 Android 都可用。**With blocklists** 模式改用 Brave 的 adblock-rust（`plugins/do_not_track.rs`），清單與 Electron 相同（tb.json 列出的預設清單，除非 `disableDefaultLists`，加上 `additionalBlockLists`），scriptlet 與 redirect 用 Ghostery 那份 uBlock Origin 資源；`cache` 開啟且沒有額外清單時快取引擎（和 Electron 一樣不會自動更新）。只有預設清單能用 `trusted-*` scriptlet。**Windows** 在主 webview 的 `WebResourceRequested` 比對每個請求（含 service worker 與 iframe），擋下的回空的 403，redirect 回對應的資源；app 自己的 `*.localhost` 不比對。**Android** 由 pear-gecko extension 的 `webRequest`（blocking）透過 native messaging 問 Rust（`dnt_check`）。兩邊的頁面都在 Electron 載入 Ghostery preload 的地方向 Rust 要這個網址的隱藏 CSS（每個 selector 一條規則，瀏覽器不接受的只會丟掉那一條）與 scriptlet。沒有移植的：Ghostery preload 依 DOM 計算的通用 class/id 隱藏、procedural 過濾、`removeparam`。和 Electron 不同，切回 In player 時引擎會卸載（Electron 要停用插件才會）。打包時 `blocker.ts` 與 Ghostery 的 preload 由 `compat/do-not-track.ts` 取代。
@@ -144,7 +144,11 @@ cd tauri-poc/src-tauri && pnpm dlx @tauri-apps/cli@2.12.4 android build --debug 
 - 模擬器若出現 `ERR_NAME_NOT_RESOLVED`（主機有 Tailscale 等 VPN 時常見），用 `emulator -avd <name> -dns-server 8.8.8.8` 啟動。
 - `MainActivity` 把 WebView 呈現為**同版本的桌面版 Chrome**：UA 字串用實際的 WebView 版本，Client Hints（`Sec-CH-UA*`、`navigator.userAgentData`，原本會列出「Android WebView」）透過 `WebSettingsCompat.setUserAgentMetadata` 改成 Google Chrome／Linux／非行動裝置。否則會拿到行動版 YTM（插件無法運作），Google 登入也會以「這個瀏覽器或應用程式可能不安全」拒絕。`X-Requested-With: <套件名稱>` 標頭仍會送出：用來關掉它的 `setRequestedWithHeaderOriginAllowList` 在 WebView 143 上不支援（`REQUESTED_WITH_HEADER_ALLOW_LIST` 為 false）。
 - 畫面從 Android 15 起強制延伸到系統列下方；`MainActivity` 依系統列與瀏海的 inset 留邊距，底色用 YTM 的 `#030303`、系統列圖示用淺色。
-- **YouTube Music 連結：** manifest 為 `https://music.youtube.com` 宣告了 VIEW intent filter，`MainActivity` 會載入收到的連結（冷啟動時排在 wry 的起始網址之後，執行中則經 `onNewIntent`）。這個 app 無法通過該網域的驗證，所以 Android 12 起不會自動接手：要在「應用程式資訊 › 預設開啟」加入 `music.youtube.com`；若裝了官方 YouTube Music app，它是已驗證的處理者，會優先。桌面版沒有對應功能（Windows 無法替 https 網址註冊處理程式）。
+- **YouTube Music 連結：** manifest 為 `https://music.youtube.com` 宣告了 VIEW intent filter，`MainActivity` 會載入收到的連結（冷啟動時排在 wry 的起始網址之後，執行中則經 `onNewIntent`）。這個 app 無法通過該網域的驗證，所以 Android 12 起不會自動接手：要在「應用程式資訊 › 預設開啟」加入 `music.youtube.com`；若裝了官方 YouTube Music app，它是已驗證的處理者，會優先。官方 app 常是系統內建、無法移除（實機確認），設定步驟是：
+  1. 設定 › 應用程式 › YouTube Music › 預設開啟：關閉「開啟支援的連結」（或取消勾選 `music.youtube.com`）。
+  2. 設定 › 應用程式 › Pear Tauri PoC › 預設開啟：「新增連結」並勾選 `music.youtube.com`。
+
+  之後點 `music.youtube.com` 的連結就會用 Pear 開啟（實機確認）。桌面版沒有對應功能（Windows 無法替 https 網址註冊處理程式）。
 - **Google 登入：** 在 WebView 裡無法登入，PoC 不打算繞過。登入頁本身送出的 POST（`AccountsSignInUi/data/batchexecute`、`browserinfo`）都帶 `X-Requested-With`，而 `shouldInterceptRequest` 拿不到 POST 內容，無法不帶標頭重送；`browserinfo` 也會回傳瀏覽器指紋。WebView 版目前只能未登入使用；可行的方向是換成 GeckoView（見下一節）。
 - 實機平板請改用 `--target aarch64`。
 - **頁面引擎：** 預設是 GeckoView（Google 登入可用，見「GeckoView 可行性驗證」）。`adb shell am start -n com.github.pear_devs.tauri_poc/.MainActivity --es engine webview` 改回 WebView，`--es engine gecko` 切回；選擇會記住。`MainActivity` 在 Rust 啟動前把它寫進環境變數 `PEAR_ENGINE`（`src/page.rs` 讀取）。下面關於 WebView 的說明只適用於 WebView 引擎。
@@ -335,16 +339,18 @@ Android 版預設的頁面引擎。release APK（arm64）216 MB，壓縮後 101 
 
 - [x] Google 登入成功（Windows，預設 UA）
 - [x] 登入後正常關閉、重開仍保持登入（Windows）
-- [ ] 確認單獨按 Alt 進入選單模式時，頁面本身是否也會凍結（若是，需攔截 `WM_SYSCOMMAND`/`SC_KEYMENU`）
-- [ ] 通知實際顯示、Last.fm 登入流程、ListenBrainz 送出
+- [x] 單獨按 Alt 不會讓頁面凍結（也不會有其他反應，in-app-menu 本來就沒有 Alt 快捷鍵）
+- [x] 通知實際顯示
+- [ ] scrobbler：Last.fm 登入流程、ListenBrainz 送出（需要帳號；這兩個服務記錄聽歌紀錄）
 - [x] Android 實機平板：播放、觸控操作、背景播放與鎖定畫面控制
 - [x] Android 實機平板：Google 登入（UA／Client Hints 修改後重測：仍被拒）
-- [ ] Android 實機平板：選單外觀與操作、在「預設開啟」加入 `music.youtube.com` 後點連結
-- [ ] discord：實際 Discord 用戶端顯示 Rich Presence
-- [ ] api-server：新 client 的 Allow/Deny 對話框、HTTPS
-- [ ] taskbar-mediacontrol：縮圖按鈕外觀
+- [x] Android 實機平板：選單外觀與操作、在「預設開啟」加入 `music.youtube.com` 後點連結（步驟見上方「YouTube Music 連結」）
+- [ ] discord：連線成功（log 有 `discord: connected`、Discord 沒有回錯誤），但使用者的 Discord 沒看到音樂狀態；待確認 Discord 的「活動隱私」設定，並與 Electron 版對照
+- [ ] api-server：介面正常；新 client 的 Allow/Deny 對話框、HTTPS、實際呼叫 API
+- [x] taskbar-mediacontrol：縮圖按鈕外觀
 - [x] notifications：互動式 toast 的三個按鈕實際按下、系統匣 trayControls
-- [ ] notifications：按鈕的新文字與白色圖示在深色主題下的外觀；安裝版的 toast 顯示 app 名稱
+- [x] notifications：按鈕的新文字與白色圖示在深色主題下的外觀，切換語言後文字跟著變
+- [ ] notifications：安裝版的 toast 顯示 app 名稱（直接執行 `target\release` 的 exe 仍算未安裝，顯示 PowerShell）
 - [x] downloader：Android 存到「音樂/Pear Desktop」，MediaStore 讀得到標籤，檔案內有封面
 - [x] downloader：Windows 的資料夾選擇對話框
 - [ ] downloader：Android 音樂 app 裡的顯示；Premium 的 256 kbps 格式（需要 Premium 帳號，而且目前的工作階段未登入）
