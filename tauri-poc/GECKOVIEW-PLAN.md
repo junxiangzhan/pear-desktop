@@ -89,8 +89,8 @@ Tauri 版的 loader 用同步 XHR 從 `pear` 協定拿「設定快照 + bundle�
 
 - 新版 Android 打包會讓 native library **不壓縮**存放（可直接載入），所以 GeckoView 在裝置上約多佔 **190 MB**，下載量約多 **90 MB**。改用壓縮打包（`useLegacyPackaging`）只會讓安裝時解壓縮出同樣大小，裝置佔用不會變小。
 - 主要來源是 Gecko 引擎本身，沒有實際可行的裁減方式；只出 arm64 已經是最小的組合。
-- release 版實測見「第 4 階段結果」：APK 213 MB、壓縮後 99 MB。
-- 對照：桌面版 Tauri 15.9 MB vs Electron 397 MB 的優勢在 Android 上不成立；Android 版的價值在於能用插件與登入，而不是體積。
+- release 版實測見「第 4 階段結果」：APK 213 MB、壓縮後 99 MB。第三輪移植（下載工具、廣告阻擋等）後重新量測：216 MB、壓縮後 101 MB，增加的都在 Rust 函式庫（17 → 19.6 MB）。
+- 對照：桌面版 Tauri 18.9 MB（第三輪後；當時 15.9 MB）vs Electron 397 MB 的優勢在 Android 上不成立；Android 版的價值在於能用插件與登入，而不是體積。
 
 ## 6. 階段與驗證
 

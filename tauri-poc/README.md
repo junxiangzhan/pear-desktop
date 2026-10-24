@@ -175,7 +175,7 @@ cd tauri-poc/src-tauri && pnpm dlx @tauri-apps/cli@2.12.4 android build --debug 
 | 流暢度：模擬捲動（debug build，未登入） | 原始網站 vs 注入後幾乎相同：靜置 ~165 fps；捲動 ~138 fps、長任務 7 次（兩者皆是 YTM 自身載入內容）。同條件下 Electron 開發版的滾輪測試並沒有比較好 | 靜置 59.3 fps、p95 16.8 ms、無長任務 |
 | 流暢度：使用者實際滾輪捲動（已登入，20 秒） | `performance-improvement` **開啟：550 個掉幀**、主執行緒忙碌 76%、`animationiteration` 事件 18,854 次。**關閉：0 個掉幀**、忙碌 22%、無 `animationiteration`。兩者 GC 都很少（Major GC 4–5 次、合計約 60–110 ms），卡頓不是 GC 造成的 | — |
 | 同一插件在 Electron vs Tauri（模擬滾輪、插件開啟） | 兩者開銷相近：`animationiteration` 1,806 vs 2,009 次、長任務 3 vs 2 次。WebView2 並沒有放大這個問題 | — |
-| 執行檔大小 | 第二輪後重新量測：release exe 15.9 MB（含 7.3 MB bundle；gzip 後 6.0 MB），已安裝的 Electron 版 397 MB（Electron 執行環境本身 355 MB）。WebView2 由 Windows 10/11 內建，不計入。改寫 Rust 主行程之前的 PoC 是 11 MB（壓縮後 3.6 MB） | debug APK 134 MB（不含除錯資訊；含完整除錯資訊時 374 MB，皆非代表值） |
+| 執行檔大小 | 第三輪後重新量測（2026-10-24）：release exe **18.9 MB**（含 7.3 MB bundle；gzip 後 7.8 MB）。第二輪後是 15.9 MB（gzip 後 6.0 MB），多出的 3 MB 是這一輪加的廣告阻擋引擎、標籤、AAC 解碼與 mp3 編碼、封面處理等函式庫。已安裝的 Electron 版 397 MB（Electron 執行環境本身 355 MB）。WebView2 由 Windows 10/11 內建，不計入。改寫 Rust 主行程之前的 PoC 是 11 MB（壓縮後 3.6 MB） | debug APK 134 MB（不含除錯資訊；含完整除錯資訊時 374 MB，皆非代表值） |
 
 ### 卡頓的原因：performance-improvement 的 cpu-tamer
 
@@ -273,7 +273,7 @@ arm64 debug APK 61.6 MB（不含除錯資訊）。小米需要在開發者選項
 
 ## GeckoView 版的平板驗證（Xiaomi 25091RP04G，Android 16，GeckoView 153，2026-10-24）
 
-Android 版預設的頁面引擎。release APK（arm64）213 MB，壓縮後 99 MB；記憶體（PSS，播放中）900 MB，WebView 引擎是 521 MB。細節見 [GECKOVIEW-PLAN.md](GECKOVIEW-PLAN.md) 的「第 4 階段結果」。
+Android 版預設的頁面引擎。release APK（arm64）216 MB，壓縮後 101 MB（第三輪後重新量測；Rust 函式庫從 17 MB 變成 19.6 MB，GeckoView 不變：`libxul.so` 153 MB、`omni.ja` 15 MB；第 4 階段時是 213 MB／99 MB）；記憶體（PSS，播放中）900 MB，WebView 引擎是 521 MB。細節見 [GECKOVIEW-PLAN.md](GECKOVIEW-PLAN.md) 的「第 4 階段結果」。
 
 | 項目 | 結果 |
 |---|---|
