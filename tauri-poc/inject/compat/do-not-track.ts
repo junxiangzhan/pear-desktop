@@ -18,10 +18,7 @@ export const unloadTrackerBlockerEngine = () => {};
 
 let injected = false;
 
-// inject-cliqz-preload's default export, run by the plugin's preload
-export default async () => {
-  if (injected) return;
-  injected = true;
+const injectCosmetics = async () => {
   // The backend starts once the page has sent its plugin list
   let cosmetics: { css: string; script: string } | undefined;
   for (let attempt = 0; attempt < 20 && !cosmetics; attempt++) {
@@ -48,4 +45,15 @@ export default async () => {
       console.error(LOG_PREFIX, 'do-not-track: a scriptlet failed', error);
     }
   }
+};
+
+// inject-cliqz-preload's default export, run by the plugin's preload. Does
+// not wait: the first run downloads the lists, which would hold up the
+// other preload plugins.
+export default () => {
+  if (injected) return;
+  injected = true;
+  injectCosmetics().catch((error: unknown) =>
+    console.error(LOG_PREFIX, 'do-not-track: cosmetic filters failed', error),
+  );
 };

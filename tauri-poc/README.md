@@ -229,7 +229,7 @@ cd tauri-poc/src-tauri && pnpm dlx @tauri-apps/cli@2.12.4 android build --debug 
 
 ## 第三輪移植的驗證結果（Windows，2026-10-24）
 
-未登入的獨立設定檔（`PEAR_POC_PROFILE_DIR`），用 WebView2 的除錯埠操作頁面。Android 部分都能編譯，但還沒有在實機上跑過（見「手動驗證清單」）。
+未登入的獨立設定檔（`PEAR_POC_PROFILE_DIR`），用 WebView2 的除錯埠操作頁面。Android 的結果在表格後面。
 
 | 項目 | 結果 |
 |---|---|
@@ -242,6 +242,14 @@ cd tauri-poc/src-tauri && pnpm dlx @tauri-apps/cli@2.12.4 android build --debug 
 | notifications（互動式） | ✅ 樣式 4（封面、專輯、時間）與樣式 1（256×256 封面）從 Windows 通知歷程讀回，三個圖示按鈕都在，5 秒後收起；七種樣式的 XML 都能被 WinRT 解析。按鈕的實際點按未測 |
 | api-server `/doc`、`/swagger` | ✅ `/doc` 26 個路徑，標題與 bearer 驗證和 Electron 相同；`/swagger` 在瀏覽器顯示全部路由；`/api` 仍需要 token |
 | do-not-track With blocklists | ✅ 12 份清單 3 秒建好引擎，之後從快取載入；頁面載入時擋下 doubleclick 的請求；套用 716 條隱藏規則；播放正常 |
+
+**Android（平板 Xiaomi 25091RP04G，GeckoView 153，已登入，debug build）：**
+
+| 項目 | 結果 |
+|---|---|
+| downloader | ✅ 從歌曲選單下載：存進 MediaStore 的「Music/Pear Desktop/」，MediaStore 讀到標題、演出者、專輯、長度；拉回電腦後 ffprobe 看到 544×544 封面、整首能解碼。再下載一次會覆寫同一筆（沒有產生重複的項目） |
+| do-not-track With blocklists | ✅ 平板上 3 秒建好引擎，之後從快取載入；extension 經 native messaging 擋下與 Windows 相同的 doubleclick 請求，診斷報告顯示播出 0 則廣告。修正：preload 原本會等隱藏 CSS 回來（第一次要下載清單，約 3 秒），擋住其他插件的 preload；改成不等待 |
+| proxy | ✅ 選項 › 進階 › 設定代理伺服器 出現原生對話框（翻譯的標題、說明、範例），會帶入目前的值；設定帶帳密的 SOCKS5（電腦上的測試伺服器 + `adb reverse`）後不必重開，googlevideo、music.youtube.com、yt3 的連線立即改走 proxy；清空後立即恢復直連 |
 
 ## Android 實機平板（Xiaomi 25091RP04G，Android 16，WebView 143，2026-10-24）
 
@@ -334,7 +342,8 @@ Android 版預設的頁面引擎。release APK（arm64）213 MB，壓縮後 99 M
 - [ ] api-server：新 client 的 Allow/Deny 對話框、HTTPS
 - [ ] taskbar-mediacontrol：縮圖按鈕外觀
 - [ ] notifications：互動式 toast 的三個按鈕實際按下（toast 的顯示、樣式與 5 秒後收起已用通知歷程驗證）、系統匣 trayControls
-- [ ] downloader：Android 存到「音樂/Pear Desktop」、音樂 app 看得到標籤與封面；Windows 的資料夾選擇對話框
-- [ ] proxy：Android 的原生輸入對話框、extension 的 proxy（電腦上的 SOCKS5 測試伺服器 + `adb reverse`）
-- [ ] do-not-track With blocklists：Android（`webRequest` 經 native messaging 的延遲與阻擋）
+- [x] downloader：Android 存到「音樂/Pear Desktop」，MediaStore 讀得到標籤，檔案內有封面
+- [ ] downloader：Windows 的資料夾選擇對話框、Android 音樂 app 裡的顯示
+- [x] proxy：Android 的原生輸入對話框、extension 的 proxy（電腦上的 SOCKS5 測試伺服器 + `adb reverse`）
+- [x] do-not-track With blocklists：Android 的阻擋
 - [ ] 從頁面執行 `location.reload()` 會讓 Windows 版的頁面停住（停用這輪新增的請求過濾後仍然如此；瀏覽器層級的重新整理，也就是 CDP `Page.reload`，等同「檢視 › 重新整理」用的 WebView2 `Reload`，則正常），原因未查
