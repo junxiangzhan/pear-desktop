@@ -10,6 +10,8 @@ import { defineConfig, withFilter, type Plugin } from 'vite';
 import viteResolve from 'vite-plugin-resolve';
 import solidPlugin from 'vite-plugin-solid';
 
+import { buildApiOpenApi } from './scripts/api-openapi.mts';
+
 import { i18nImporter } from '../vite-plugins/i18n-importer.mts';
 import { pluginVirtualModuleGenerator } from '../vite-plugins/plugin-importer.mts';
 import pluginLoader from '../vite-plugins/plugin-loader.mts';
@@ -37,6 +39,18 @@ const dropExtractedCss = (): Plugin => ({
         delete bundle[file.fileName];
       }
     }
+  },
+});
+
+// api-server's `/doc` and `/swagger`, generated from its zod routes and
+// served by the Rust port (src-tauri/src/plugins/api_server.rs)
+const apiOpenApi = (): Plugin => ({
+  name: 'pear-api-openapi',
+  apply: 'build',
+  async generateBundle() {
+    const { doc, swagger } = await buildApiOpenApi(repoRoot);
+    this.emitFile({ type: 'asset', fileName: 'api-openapi.json', source: doc });
+    this.emitFile({ type: 'asset', fileName: 'api-swagger.html', source: swagger });
   },
 });
 
@@ -102,6 +116,7 @@ export default defineConfig({
       load: { id: [/\.(tsx|jsx)$/, '/@solid-refresh'] },
     }),
     dropExtractedCss(),
+    apiOpenApi(),
   ],
   define: {
     'process.env.NODE_ENV': JSON.stringify('production'),
