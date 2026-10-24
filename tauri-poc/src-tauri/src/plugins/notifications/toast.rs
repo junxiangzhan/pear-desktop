@@ -40,8 +40,8 @@ const BANNER_BOTTOM: u64 = 6;
 const LEGACY: u64 = 7;
 
 const HIDE_AFTER: Duration = Duration::from_secs(5);
-/// Unpackaged runs (`target\debug`, `target\release`) have no registered
-/// AppUserModelID; tauri-plugin-notification shows theirs as PowerShell's.
+/// What tauri-plugin-notification shows unpackaged runs as, used here if
+/// registering their own ID fails
 const POWERSHELL_APP_ID: &str = "{1AC14E77-02E7-4E5D-B744-2EB1AE5198B7}\\WindowsPowerShell\\v1.0\\powershell.exe";
 
 /// What a button press asks for: `previous`, `play`, `pause`, `next`, or
@@ -115,7 +115,7 @@ impl Toaster {
         let document = XmlDocument::new()?;
         document.LoadXml(&HSTRING::from(xml))?;
         let toast = ToastNotification::CreateToastNotification(&document)?;
-        let app_id = app_id(&app.config().identifier);
+        let app_id = app_id(app);
 
         let app = app.clone();
         toast.Activated(&TypedEventHandler::new(
@@ -198,17 +198,71 @@ impl Toaster {
 }
 
 /// The installed app's AppUserModelID (its identifier, set on the Start
-/// menu shortcut by the installer); PowerShell's for unpackaged runs.
-fn app_id(identifier: &str) -> String {
+/// menu shortcut by the installer). Unpackaged runs (`target\debug`,
+/// `target\release`) have no such shortcut, so they register an ID of their
+/// own ([`register_dev_app_id`]); PowerShell's is the last resort.
+fn app_id(app: &AppHandle) -> String {
+    let identifier = &app.config().identifier;
     let unpackaged = std::env::current_exe()
         .ok()
         .and_then(|exe| exe.parent().map(Path::to_path_buf))
         .is_some_and(|dir| dir.ends_with("target\\debug") || dir.ends_with("target\\release"));
-    if unpackaged || identifier.is_empty() {
-        POWERSHELL_APP_ID.to_owned()
-    } else {
-        identifier.to_owned()
+    if !unpackaged && !identifier.is_empty() {
+        return identifier.clone();
     }
+    static DEV_APP_ID: std::sync::OnceLock<Option<String>> = std::sync::OnceLock::new();
+    DEV_APP_ID
+        .get_or_init(|| {
+            register_dev_app_id(app)
+                .map_err(|error| log::warn!("notifications: registering an AppUserModelID failed: {error}"))
+                .ok()
+        })
+        .clone()
+        .unwrap_or_else(|| POWERSHELL_APP_ID.to_owned())
+}
+
+/// Registers `<identifier>.dev` under `HKCU\Software\Classes\AppUserModelId`
+/// with a display name and an icon, the way Microsoft documents for
+/// unpackaged apps, so dev builds' toasts name the app instead of
+/// PowerShell. Remove it with
+/// `reg delete HKCU\Software\Classes\AppUserModelId\<identifier>.dev /f`.
+fn register_dev_app_id(app: &AppHandle) -> Result<String, String> {
+    use windows::{
+        core::HSTRING,
+        Win32::System::Registry::{RegCloseKey, RegCreateKeyW, RegSetValueExW, HKEY, HKEY_CURRENT_USER, REG_SZ},
+    };
+
+    let id = format!("{}.dev", app.config().identifier);
+    let icon = app.path().app_cache_dir().map_err(|error| error.to_string())?.join("toasts").join("app-icon.png");
+    std::fs::create_dir_all(icon.parent().unwrap()).map_err(|error| error.to_string())?;
+    std::fs::write(&icon, include_bytes!("../../../../../assets/icon.png")).map_err(|error| error.to_string())?;
+    let values = [
+        ("DisplayName", format!("{} (dev)", app.package_info().name)),
+        ("IconUri", icon.display().to_string()),
+    ];
+
+    let mut key = HKEY::default();
+    // SAFETY: plain registry calls with valid strings; the key is closed below
+    unsafe {
+        RegCreateKeyW(
+            HKEY_CURRENT_USER,
+            &HSTRING::from(format!("Software\\Classes\\AppUserModelId\\{id}")),
+            &mut key,
+        )
+        .ok()
+        .map_err(|error| error.to_string())?;
+        let mut result = Ok(());
+        for (name, value) in values {
+            let data: Vec<u8> = value.encode_utf16().chain([0]).flat_map(u16::to_le_bytes).collect();
+            if let Err(error) = RegSetValueExW(key, &HSTRING::from(name), None, REG_SZ, Some(&data)).ok() {
+                result = Err(error.to_string());
+            }
+        }
+        let _ = RegCloseKey(key);
+        result?;
+    }
+    log::info!("notifications: toasts use the AppUserModelID {id}");
+    Ok(id)
 }
 
 /// WinRT calls from pool threads need COM; already-initialized is fine.
