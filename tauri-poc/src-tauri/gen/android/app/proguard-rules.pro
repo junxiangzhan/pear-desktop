@@ -19,3 +19,8 @@
 # If you keep the line number information, uncomment this to
 # hide the original source file name.
 #-renamesourcefileattribute SourceFile
+# GeckoView reads its config file (GeckoPage.writeConfig) with SnakeYAML,
+# which looks up its own package name; R8's repackaging left it without one
+# and the release build crashed in GeckoRuntime.create
+-keep class org.yaml.snakeyaml.** { *; }
+-dontwarn org.yaml.snakeyaml.**
