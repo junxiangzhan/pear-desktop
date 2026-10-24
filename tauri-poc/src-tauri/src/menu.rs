@@ -89,6 +89,12 @@ fn available_by_default() -> bool {
     true
 }
 
+/// Plugins whose switch is greyed out: on Android in-app-menu is the only
+/// menu, so turning it off would leave no way back but adb.
+fn always_on(plugin: &str) -> bool {
+    cfg!(mobile) && plugin == "in-app-menu"
+}
+
 #[derive(Deserialize, Clone, Debug, Default)]
 #[serde(rename_all = "camelCase")]
 pub struct MenuData {
@@ -265,13 +271,14 @@ fn build(app: &AppHandle, data: &MenuData) -> tauri::Result<NativeMenu> {
     let mut plugin_items = Items::new();
     for plugin in &data.plugins {
         let toggle_id = format!("plugin:{}", plugin.id);
+        let locked = always_on(&plugin.id);
         match &plugin.submenu {
             Some(template) if plugin.enabled => {
-                let mut children = vec![b.check(&toggle_id, &enabled_label, true, true), b.separator()];
+                let mut children = vec![b.check(&toggle_id, &enabled_label, true, !locked), b.separator()];
                 children.extend(b.template(template));
                 plugin_items.push(b.submenu(&plugin.name, children));
             }
-            _ => plugin_items.push(b.check(&toggle_id, &plugin.name, plugin.enabled, plugin.available)),
+            _ => plugin_items.push(b.check(&toggle_id, &plugin.name, plugin.enabled, plugin.available && !locked)),
         }
     }
     let plugins = b.submenu(&b.label("plugins.label"), plugin_items);
@@ -609,6 +616,9 @@ fn dispatch(app: &AppHandle, id: &str) {
         return;
     }
     if let Some(plugin) = id.strip_prefix("plugin:") {
+        if always_on(plugin) {
+            return;
+        }
         // `config.plugins.enable/disable` → setMenuOptions
         let mut value = config.get(&format!("plugins.{plugin}"));
         if !value.is_object() {
@@ -704,6 +714,9 @@ fn dispatch(app: &AppHandle, id: &str) {
         "act:restart" => app_controls::restart(app),
         "act:quit" => app.exit(0),
         "act:about" => crate::dialogs::about(app),
+        // The tray's own menu handler takes these (tray.rs); Tauri sends
+        // every menu event here too
+        id if id.starts_with("tray:") => {}
         _ => log::warn!("unhandled menu item '{id}'"),
     }
 }
