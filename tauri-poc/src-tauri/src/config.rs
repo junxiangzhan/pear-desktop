@@ -222,7 +222,13 @@ impl Config {
 
     pub fn set_manifest(&self, entries: Vec<ManifestEntry>) {
         let mut manifest = self.manifest.lock().unwrap();
-        for entry in entries {
+        for mut entry in entries {
+            // The Tauri downloader saves the source audio by default:
+            // Electron's default "mp3 (256kbps)" re-encodes it into a file
+            // twice as large without being better (plugins/downloader)
+            if entry.id == "downloader" {
+                entry.config["selectedPreset"] = json!("Source");
+            }
             manifest.insert(entry.id.clone(), entry);
         }
         drop(manifest);

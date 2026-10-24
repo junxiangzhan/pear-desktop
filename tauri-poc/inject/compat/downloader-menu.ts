@@ -1,8 +1,8 @@
 // Stands in for src/plugins/downloader/menu.ts: the same menu, with three
 // changes. The folder pickers use the async dialog (`showOpenDialogSync`
 // cannot wait on IPC); Android has no folder pickers (files go to
-// Music/Pear Desktop); and the presets say that the Tauri port always saves
-// the source format (there is no ffmpeg).
+// Music/Pear Desktop); and the presets explain what Source and mp3 save
+// (mp3 is encoded with LAME, there is no ffmpeg; Source is the Tauri default).
 import { dialog } from 'electron';
 
 import { t } from '@/i18n';
@@ -78,7 +78,10 @@ export const onMenu = async (
       return {
         ...item,
         submenu: [
-          { label: 'Tauri: always saves the source audio (.m4a)', enabled: false },
+          {
+            label: "Tauri: Source keeps YouTube's .m4a; mp3 re-encodes it (bigger, not better)",
+            enabled: false,
+          },
           { type: 'separator' },
           ...item.submenu,
         ],

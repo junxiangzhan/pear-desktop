@@ -1,0 +1,10 @@
+# mp3lame-sys builds LAME with its MSVC config header whenever the host is
+# Windows, even for Android, and under clang that header breaks <stdint.h>
+# (see build-support/include/pear-stdint-first.h). The header is found
+# through CPATH (cc's CFLAGS can't carry a path relative to this file).
+[env]
+CPATH = { value = "build-support/include", relative = true }
+CFLAGS_aarch64_linux_android = "-include pear-stdint-first.h"
+CFLAGS_armv7_linux_androideabi = "-include pear-stdint-first.h"
+CFLAGS_i686_linux_android = "-include pear-stdint-first.h"
+CFLAGS_x86_64_linux_android = "-include pear-stdint-first.h"

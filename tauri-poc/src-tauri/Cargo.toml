@@ -29,6 +29,9 @@ hmac = "0.12"
 image = { version = "0.25", default-features = false, features = ["jpeg", "png"] }
 # do-not-track "With blocklists" (Brave's engine; without `single-thread` it is Send + Sync)
 adblock = { version = "0.13", default-features = false, features = ["embedded-domain-resolver", "full-regex-handling"] }
+# Downloader mp3 presets: AAC decoding (MPL-2.0) and LAME (LGPL-3.0, built from source)
+symphonia = { version = "0.6", default-features = false, features = ["aac", "isomp4"] }
+mp3lame-encoder = "0.2"
 # Downloader tags (MP4 ilst)
 lofty = "0.25"
 serde = { version = "1", features = ["derive"] }
@@ -60,3 +63,12 @@ lto = true
 opt-level = "s"
 panic = "abort"
 strip = true
+
+# Dev builds: optimized codecs encode a 3.5-minute mp3 in about 4 s instead
+# of 15 s
+[profile.dev.package.mp3lame-sys]
+opt-level = 3
+[profile.dev.package.symphonia-codec-aac]
+opt-level = 3
+[profile.dev.package.symphonia-core]
+opt-level = 3

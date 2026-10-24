@@ -43,6 +43,7 @@ class AudioArgs {
   var path: String? = null
   lateinit var name: String
   var subfolder: String? = null
+  var mime: String = "audio/mp4"
 }
 
 /** App-level commands for `src/android_app.rs`. */
@@ -242,7 +243,7 @@ class AndroidAppPlugin(private val activity: Activity) : Plugin(activity) {
           audioCollection(),
           ContentValues().apply {
             put(MediaStore.MediaColumns.DISPLAY_NAME, args.name)
-            put(MediaStore.MediaColumns.MIME_TYPE, "audio/mp4")
+            put(MediaStore.MediaColumns.MIME_TYPE, args.mime)
             put(MediaStore.MediaColumns.RELATIVE_PATH, relativePath(args.subfolder))
             put(MediaStore.MediaColumns.IS_PENDING, 1)
           },
@@ -260,7 +261,7 @@ class AndroidAppPlugin(private val activity: Activity) : Plugin(activity) {
         val target = legacyFile(args.name, args.subfolder)
         target.parentFile?.mkdirs()
         source.copyTo(target, overwrite = true)
-        MediaScannerConnection.scanFile(activity, arrayOf(target.path), arrayOf("audio/mp4"), null)
+        MediaScannerConnection.scanFile(activity, arrayOf(target.path), arrayOf(args.mime), null)
         Uri.fromFile(target).toString()
       }
     }

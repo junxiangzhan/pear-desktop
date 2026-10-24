@@ -1,8 +1,8 @@
 // The downloader backend (src/plugins/downloader/main/index.ts), split in
 // two: the page finds the stream and the metadata with youtubei.js
 // (`./youtubei`, it needs BotGuard), Rust downloads, tags and saves the file
-// (`src-tauri/src/plugins/downloader.rs`). There is no ffmpeg, so files keep
-// YouTube's own audio format (AAC in MP4, `.m4a`) whatever preset is chosen.
+// (`src-tauri/src/plugins/downloader/`): YouTube's own AAC (`.m4a`) for the
+// Source preset, or an mp3 encoded with LAME for the mp3 presets.
 import { YTNodes, type YT, type YTMusic } from 'youtubei.js';
 
 import { t } from '@/i18n';
@@ -22,11 +22,13 @@ interface SongOptions {
   onProgress?: (ratio: number) => void;
 }
 
-const progressListeners = new Map<number, (ratio: number) => void>();
+const progressListeners = new Map<number, (ratio: number, converting: boolean) => void>();
 let nextDownloadId = 1;
 
-ipcRenderer.on('downloader:progress', (_, id, ratio) =>
-  progressListeners.get(id as number)?.(ratio as number),
+// `[id, ratio]` while downloading, `[id, ratio, 'converting']` while an mp3
+// preset encodes
+ipcRenderer.on('downloader:progress', (_, id, ratio, phase) =>
+  progressListeners.get(id as number)?.(ratio as number, phase === 'converting'),
 );
 
 const setProgressBar = (value: number) => ipcRenderer.send('downloader:progress-bar', value);
@@ -115,14 +117,11 @@ const downloadSongUnsafe = async (
     t('plugins.downloader.backend.feedback.download-info', { artist, title, videoId }),
   );
   const id = nextDownloadId++;
-  progressListeners.set(id, (ratio) => {
-    options.onProgress?.(ratio);
+  progressListeners.set(id, (ratio, converting) => {
+    if (!converting) options.onProgress?.(ratio);
     if (options.quiet) return;
-    feedback(
-      t('plugins.downloader.backend.feedback.download-progress', {
-        percent: Math.floor(ratio * 100),
-      }),
-    );
+    const key = converting ? 'conversion-progress' : 'download-progress';
+    feedback(t(`plugins.downloader.backend.feedback.${key}`, { percent: Math.floor(ratio * 100) }));
     setProgressBar(ratio);
   });
   try {

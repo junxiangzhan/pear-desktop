@@ -97,11 +97,12 @@ pub async fn save_audio(
     path: &std::path::Path,
     name: &str,
     subfolder: Option<&str>,
+    mime: &str,
 ) -> Result<String, String> {
     ask(
         app,
         "saveAudio",
-        serde_json::json!({ "path": path, "name": name, "subfolder": subfolder }),
+        serde_json::json!({ "path": path, "name": name, "subfolder": subfolder, "mime": mime }),
     )
     .await
 }

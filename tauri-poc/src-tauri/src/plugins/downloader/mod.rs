@@ -2,14 +2,15 @@
 //!
 //! The page finds the stream and the metadata with youtubei.js, which needs
 //! BotGuard (`tauri-poc/inject/downloader.ts`); this side downloads, tags and
-//! saves the file. There is no ffmpeg, so files keep YouTube's own audio
-//! format (AAC in MP4, `.m4a`) whatever preset is chosen, rewritten from
-//! YouTube's fragmented MP4 into a regular one (`remux.rs`; Windows' player
-//! can't play the fragmented file), and are tagged with lofty (MP4 ilst)
-//! instead of ID3.
+//! saves the file. There is no ffmpeg: the "Source" preset (the Tauri
+//! default) keeps YouTube's AAC as `.m4a`, rewritten from YouTube's
+//! fragmented MP4 into a regular one (`remux.rs`; Windows' player can't play
+//! the fragmented file) and tagged with lofty (MP4 ilst); the mp3 presets
+//! re-encode it with Symphonia and LAME (`mp3.rs`) and tag it with ID3v2.
 //!
 //! - `downloader:save` (invoke): downloads one song; progress goes back as
-//!   `downloader:progress` `[id, ratio]`
+//!   `downloader:progress` `[id, ratio]`, then `[id, ratio, "converting"]`
+//!   while encoding an mp3
 //! - `downloader:prepare-folder` (invoke): a playlist's folder
 //! - `downloader:dialog` (invoke), `downloader:progress-bar` (send): the
 //!   message boxes and the taskbar progress of the Electron backend
@@ -39,7 +40,55 @@ use crate::{
     song_info::{cleanup_name, SongInfo, SongInfoEvent, SongInfoProvider},
 };
 
+mod mp3;
 mod remux;
+
+/// What the selected preset saves. Electron's presets are ffmpeg arguments;
+/// here the mp3 ones are a LAME bitrate, "Custom" too when it asks for mp3
+/// (its `-b:a`), and everything else keeps the source.
+#[derive(Clone, Copy)]
+enum Output {
+    Source,
+    Mp3(u32),
+}
+
+impl Output {
+    fn from_config(config: &Value) -> Self {
+        match config["selectedPreset"].as_str() {
+            Some("mp3 (256kbps)") => Output::Mp3(256),
+            Some("Custom") if config["customPresetSetting"]["extension"].as_str() == Some("mp3") => {
+                let args: Vec<&str> = config["customPresetSetting"]["ffmpegArgs"]
+                    .as_array()
+                    .into_iter()
+                    .flatten()
+                    .filter_map(Value::as_str)
+                    .collect();
+                let kbps = args
+                    .windows(2)
+                    .find(|pair| pair[0] == "-b:a")
+                    .and_then(|pair| pair[1].trim_end_matches(['k', 'K']).parse().ok())
+                    .unwrap_or(256);
+                Output::Mp3(mp3::bitrate(kbps))
+            }
+            _ => Output::Source,
+        }
+    }
+
+    fn extension(self) -> &'static str {
+        match self {
+            Output::Source => "m4a",
+            Output::Mp3(_) => "mp3",
+        }
+    }
+
+    #[cfg_attr(desktop, allow(dead_code))]
+    fn mime(self) -> &'static str {
+        match self {
+            Output::Source => "audio/mp4",
+            Output::Mp3(_) => "audio/mpeg",
+        }
+    }
+}
 
 const ID: &str = "downloader";
 /// googlevideo throttles long unranged reads; youtubei.js reads 10 MB ranges
@@ -178,9 +227,11 @@ async fn save(app: &AppHandle, request: SaveRequest) -> Result<Value, String> {
     let title = cleanup_name(&request.title);
     let artist = cleanup_name(&request.artist);
     let name = if artist.is_empty() { title.clone() } else { format!("{artist} - {title}") };
-    let filename = sanitize(&format!("{name}.m4a"), '_');
+    let config = config(app);
+    let output = Output::from_config(&config);
+    let filename = sanitize(&format!("{name}.{}", output.extension()), '_');
     let subfolder = request.subfolder.as_deref().map(|title| sanitize(title, ' '));
-    let skip_existing = config(app)["skipExisting"].as_bool().unwrap_or(false);
+    let skip_existing = config["skipExisting"].as_bool().unwrap_or(false);
 
     #[cfg(desktop)]
     let (target, part) = {
@@ -193,8 +244,7 @@ async fn save(app: &AppHandle, request: SaveRequest) -> Result<Value, String> {
             return Ok(json!({ "path": target, "skipped": true }));
         }
         std::fs::create_dir_all(&dir).map_err(|error| error.to_string())?;
-        let part = dir.join(format!("{filename}.part"));
-        (target, part)
+        (target, dir.join(format!("{filename}.part")))
     };
     #[cfg(mobile)]
     let part = {
@@ -205,6 +255,8 @@ async fn save(app: &AppHandle, request: SaveRequest) -> Result<Value, String> {
         std::fs::create_dir_all(&dir).map_err(|error| error.to_string())?;
         dir.join(format!("{}.m4a", request.id))
     };
+    // The mp3, while `part` holds the downloaded AAC
+    let encoded = part.with_extension("mp3-encoding");
 
     let result = async {
         download(app, &request, &part).await?;
@@ -219,25 +271,36 @@ async fn save(app: &AppHandle, request: SaveRequest) -> Result<Value, String> {
             track: request.track,
             cover,
         };
-        let path = part.clone();
-        tauri::async_runtime::spawn_blocking(move || {
+        let (path, encoded_path, progress_app, id) = (part.clone(), encoded.clone(), app.clone(), request.id);
+        let ready = tauri::async_runtime::spawn_blocking(move || {
             let data = std::fs::read(&path).map_err(|error| error.to_string())?;
             if let Some(regular) = remux::remux(&data).map_err(|error| format!("remuxing failed: {error}"))? {
                 std::fs::write(&path, regular).map_err(|error| error.to_string())?;
             }
-            write_tags(&path, metadata)
+            let ready = match output {
+                Output::Source => path,
+                Output::Mp3(kbps) => {
+                    mp3::transcode(&path, &encoded_path, kbps, |ratio| {
+                        send_to_page(&progress_app, "downloader:progress", &[json!(id), json!(ratio), json!("converting")]);
+                    })?;
+                    let _ = std::fs::remove_file(&path);
+                    encoded_path
+                }
+            };
+            write_tags(&ready, metadata, output)?;
+            Ok::<_, String>(ready)
         })
         .await
         .map_err(|error| error.to_string())??;
         #[cfg(desktop)]
         {
-            std::fs::rename(&part, &target).map_err(|error| error.to_string())?;
+            std::fs::rename(&ready, &target).map_err(|error| error.to_string())?;
             Ok::<_, String>(target.display().to_string())
         }
         #[cfg(mobile)]
         {
-            let uri = crate::android_app::save_audio(app, &part, &filename, subfolder.as_deref()).await?;
-            let _ = std::fs::remove_file(&part);
+            let uri = crate::android_app::save_audio(app, &ready, &filename, subfolder.as_deref(), output.mime()).await?;
+            let _ = std::fs::remove_file(&ready);
             Ok::<_, String>(uri)
         }
     }
@@ -249,6 +312,7 @@ async fn save(app: &AppHandle, request: SaveRequest) -> Result<Value, String> {
         }
         Err(error) => {
             let _ = std::fs::remove_file(&part);
+            let _ = std::fs::remove_file(&encoded);
             Err(error)
         }
     }
@@ -326,15 +390,18 @@ async fn fetch_cover(url: &str) -> Result<Vec<u8>, String> {
     .map_err(|error| error.to_string())?
 }
 
-fn write_tags(path: &Path, metadata: Metadata) -> Result<(), String> {
+/// MP4 ilst for the source audio, ID3v2 (like Electron's node-id3) for mp3.
+fn write_tags(path: &Path, metadata: Metadata, output: Output) -> Result<(), String> {
     use lofty::{
         config::WriteOptions,
-        mp4::Ilst,
         picture::{MimeType, Picture, PictureType},
-        tag::{Accessor, TagExt},
+        tag::{Accessor, Tag, TagExt, TagType},
     };
 
-    let mut tag = Ilst::new();
+    let mut tag = Tag::new(match output {
+        Output::Source => TagType::Mp4Ilst,
+        Output::Mp3(_) => TagType::Id3v2,
+    });
     tag.set_title(metadata.title);
     if !metadata.artist.is_empty() {
         tag.set_artist(metadata.artist);
@@ -346,7 +413,7 @@ fn write_tags(path: &Path, metadata: Metadata) -> Result<(), String> {
         tag.set_track(track);
     }
     if let Some(cover) = metadata.cover {
-        tag.insert_picture(
+        tag.push_picture(
             Picture::unchecked(cover)
                 .pic_type(PictureType::CoverFront)
                 .mime_type(MimeType::Png)
