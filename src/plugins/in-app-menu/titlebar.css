@@ -95,6 +95,18 @@ html {
   scrollbar-color: unset;
 }
 
+/* That also took YTM's scrollbar colours from its popups (song menus),
+   which then got the platform's wide scrollbar once a menu is taller than
+   the window, and a horizontal one too, since iron-dropdown sizes the menu
+   without room for it (and sets `overflow` inline) */
+tp-yt-iron-dropdown {
+  scrollbar-color: var(--yt-sys-color-baseline--text-secondary) transparent;
+}
+tp-yt-iron-dropdown ytmusic-menu-popup-renderer {
+  scrollbar-width: thin;
+  overflow-x: hidden !important;
+}
+
 /* fixes scrollbar lagging behind in large playlists */
 ytmusic-browse-response .ytmusic-responsive-list-item-renderer {
   will-change: transform;
