@@ -91,8 +91,11 @@ enum Target {
     Domain(String),
 }
 
-/// The running relay and its address (one per process).
-static SERVER: Mutex<Option<((String, u16), JoinHandle<()>)>> = Mutex::new(None);
+/// A relay's listen address and task.
+type Relay = ((String, u16), JoinHandle<()>);
+
+/// The running relay (one per process).
+static SERVER: Mutex<Option<Relay>> = Mutex::new(None);
 
 /// Starts the relay on `address`, unless it already runs there.
 #[cfg_attr(mobile, allow(dead_code))]
