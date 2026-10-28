@@ -2,6 +2,8 @@
 
 中文 · [English](README-en.md)（英文版由這份翻譯，以這份為準；更新時請一併更新）
 
+> **專案狀態：非官方、獨立維護。** 上游 [pear-devs/pear-desktop](https://github.com/pear-devs/pear-desktop) 已婉拒改用 Tauri：Tauri 依賴系統 WebView，不同作業系統、不同版本的行為差異大（對 YTM 尤其麻煩），加上長期維護成本，光靠體積變小不足以支持轉換。這個移植因此不會併回上游，由這個 fork 自行維護與發佈；問題請回報到這裡，不要回報給上游。
+
 Pear Desktop 的 Tauri 版。頁面（music.youtube.com）裡跑的是現有的 renderer（`src/renderer.ts`、各插件的 renderer / preload / menu 部分）；Electron 主行程的工作（設定、歌曲資訊、播放控制、選單、系統匣、插件 backend）則改寫成 Rust。
 
 分工原則：**商業邏輯與作業系統整合在 Rust**；**UI 定義留在 TS**（插件的 `menu()` 範本在頁面裡執行、由 Rust 畫成原生選單；只顯示翻譯過提示框的 backend 也在頁面處理，因為 i18n 在 TS）。

@@ -2,6 +2,8 @@
 
 [中文](README.md) · English (translated from the Chinese README, which is the primary version)
 
+> **Status: unofficial, maintained independently.** Upstream [pear-devs/pear-desktop](https://github.com/pear-devs/pear-desktop) has declined to move to Tauri: Tauri relies on the system WebView, whose behavior varies a lot across operating systems and versions (especially troublesome for YTM), and together with the long-term maintenance cost, a smaller binary isn't enough to justify the switch. So this port won't be merged upstream; this fork maintains and releases it on its own. Please report issues here, not upstream.
+
 The Tauri version of Pear Desktop. The page (music.youtube.com) runs the existing renderer (`src/renderer.ts` and each plugin's renderer / preload / menu parts); the work of Electron's main process (config, song info, playback controls, menus, tray, plugin backends) is rewritten in Rust.
 
 How the work is split: **business logic and OS integration live in Rust**; **UI definitions stay in TS** (a plugin's `menu()` template runs in the page and Rust draws it as a native menu; backends that only show translated prompts are also handled in the page, because i18n lives in TS).
