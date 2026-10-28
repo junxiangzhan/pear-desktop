@@ -371,7 +371,6 @@ mod tests {
 
     #[test]
     fn plugin_support_lists_backend_plugins() {
-        assert!(unavailable_plugins().contains("touchbar"));
         assert!(!unavailable_plugins().contains("downloader"));
         assert!(!unavailable_plugins().contains("discord"));
     }

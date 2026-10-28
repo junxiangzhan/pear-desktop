@@ -1,5 +1,5 @@
 import prompt, { type KeybindOptions } from 'custom-electron-prompt';
-import { globalShortcut, type MenuItem } from 'electron';
+import { type MenuItem } from 'electron';
 
 import { t } from '@/i18n';
 import promptOptions from '@/providers/prompt-options';
@@ -166,22 +166,6 @@ export default createPlugin({
         click: () => promptVolumeSteps(config),
       },
     ];
-  },
-
-  async backend({ getConfig, ipc }) {
-    const config = await getConfig();
-
-    if (config.globalShortcuts?.volumeUp) {
-      globalShortcut.register(config.globalShortcuts.volumeUp, () =>
-        ipc.send('changeVolume', true),
-      );
-    }
-
-    if (config.globalShortcuts?.volumeDown) {
-      globalShortcut.register(config.globalShortcuts.volumeDown, () =>
-        ipc.send('changeVolume', false),
-      );
-    }
   },
 
   renderer: {

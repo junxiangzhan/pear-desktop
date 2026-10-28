@@ -1,7 +1,4 @@
-import prompt from 'custom-electron-prompt';
-
 import { t } from '@/i18n';
-import promptOptions from '@/providers/prompt-options';
 import { createPlugin } from '@/utils';
 import { waitForElement } from '@/utils/wait-for-element';
 
@@ -88,16 +85,6 @@ export default createPlugin<
     enabled: false,
   },
   stylesheets: [style],
-  backend({ ipc }) {
-    ipc.handle('music-together:prompt', async (title: string, label: string) =>
-      prompt({
-        title,
-        label,
-        type: 'input',
-        ...promptOptions(),
-      }),
-    );
-  },
   renderer: {
     updateNext: false,
     ignoreChange: false,

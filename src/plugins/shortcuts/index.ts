@@ -1,7 +1,6 @@
 import { t } from '@/i18n';
 import { createPlugin } from '@/utils';
 
-import { onMainLoad } from './main';
 import { onMenu } from './menu';
 
 export type ShortcutMappingType = {
@@ -35,6 +34,4 @@ export default createPlugin({
     },
   } as ShortcutsPluginConfig,
   menu: onMenu,
-
-  backend: onMainLoad,
 });

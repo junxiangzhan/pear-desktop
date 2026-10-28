@@ -1,7 +1,6 @@
 import { t } from '@/i18n';
 import { createPlugin } from '@/utils';
 
-import { backend } from './backend';
 import { menu } from './menu';
 import { renderer } from './renderer';
 import style from './style.css?inline';
@@ -9,7 +8,7 @@ import style from './style.css?inline';
 import type { SyncedLyricsPluginConfig } from './types';
 
 export default createPlugin<
-  typeof backend,
+  unknown,
   unknown,
   typeof renderer,
   SyncedLyricsPluginConfig
@@ -31,6 +30,5 @@ export default createPlugin<
 
   menu,
   renderer,
-  backend,
   stylesheets: [style],
 });

@@ -1,7 +1,6 @@
 import { APPLICATION_NAME, t } from '@/i18n';
 import { createPlugin } from '@/utils';
 
-import backend from './back';
 import renderer, {
   type CaptionsSelectorConfig,
   type LanguageOptions,
@@ -54,7 +53,5 @@ export default createPlugin<
       },
     ];
   },
-
-  backend,
   renderer,
 });

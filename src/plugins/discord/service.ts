@@ -1,7 +1,6 @@
-// Stands in for src/plugins/discord/main.ts in the page bundle, where the
-// discord menu runs: its `discordService` talks to the Rust service
-// (`src-tauri/src/plugins/discord.rs`) instead of owning the RPC client.
-import { ipcRenderer } from '../ipc';
+// The discord menu's view of the Rust service
+// (tauri-poc/src-tauri/src/plugins/discord.rs), which owns the RPC client.
+const { ipcRenderer } = window;
 
 let connected = false;
 const refreshCallbacks: (() => void)[] = [];

@@ -1,15 +1,10 @@
-import { contextBridge, webFrame, type BrowserWindow } from 'electron';
+import { contextBridge, webFrame } from 'electron';
 
 import { t } from '@/i18n';
 import { createPlugin } from '@/utils';
 
-import {
-  isBlockerEnabled,
-  loadTrackerBlockerEngine,
-  unloadTrackerBlockerEngine,
-} from './blocker';
+import injectCosmeticFilters from './injectors/cosmetic-filters';
 import { inject, isInjected } from './injectors/inject';
-import injectCliqzPreload from './injectors/inject-cliqz-preload';
 import { blockers } from './types';
 
 export interface TrackerBlockerConfig {
@@ -69,42 +64,6 @@ export default createPlugin({
       },
     ];
   },
-  backend: {
-    mainWindow: null as BrowserWindow | null,
-    async start({ getConfig, window }) {
-      const config = await getConfig();
-      this.mainWindow = window;
-
-      if (config.blocker === blockers.WithBlocklists) {
-        await loadTrackerBlockerEngine(
-          window.webContents.session,
-          config.cache,
-          config.additionalBlockLists,
-          config.disableDefaultLists,
-        );
-      }
-    },
-    stop({ window }) {
-      if (isBlockerEnabled(window.webContents.session)) {
-        unloadTrackerBlockerEngine(window.webContents.session);
-      }
-    },
-    async onConfigChange(newConfig) {
-      if (this.mainWindow) {
-        if (
-          newConfig.blocker === blockers.WithBlocklists &&
-          !isBlockerEnabled(this.mainWindow.webContents.session)
-        ) {
-          await loadTrackerBlockerEngine(
-            this.mainWindow.webContents.session,
-            newConfig.cache,
-            newConfig.additionalBlockLists,
-            newConfig.disableDefaultLists,
-          );
-        }
-      }
-    },
-  },
   preload: {
     // see #1478
     script: `const _prunerFn = window._pruner;
@@ -126,7 +85,7 @@ export default createPlugin({
         inject(contextBridge);
         await webFrame.executeJavaScript(this.script);
       } else if (config.blocker === blockers.WithBlocklists) {
-        await injectCliqzPreload();
+        injectCosmeticFilters();
       }
     },
     async onConfigChange(newConfig) {

@@ -1,4 +1,3 @@
-import { dialog } from 'electron';
 import { render } from 'solid-js/web';
 
 import { t } from '@/i18n';
@@ -14,31 +13,6 @@ export default createPlugin({
   restartNeeded: false,
   config: {
     enabled: false,
-  },
-
-  backend({ ipc, window }) {
-    ipc.handle(
-      'peard:quality-changer',
-      async (qualityLabels: string[], currentIndex: number) =>
-        await dialog.showMessageBox(window, {
-          type: 'question',
-          buttons: qualityLabels,
-          defaultId: currentIndex,
-          title: t(
-            'plugins.quality-changer.backend.dialog.quality-changer.title',
-          ),
-          message: t(
-            'plugins.quality-changer.backend.dialog.quality-changer.message',
-          ),
-          detail: t(
-            'plugins.quality-changer.backend.dialog.quality-changer.detail',
-            {
-              quality: qualityLabels[currentIndex],
-            },
-          ),
-          cancelId: -1,
-        }),
-    );
   },
 
   renderer: {

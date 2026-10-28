@@ -1,7 +1,6 @@
 import { t } from '@/i18n';
 import { createPlugin } from '@/utils';
 
-import { backend } from './backend';
 import { defaultAPIServerConfig } from './config';
 import { onMenu } from './menu';
 
@@ -12,6 +11,4 @@ export default createPlugin({
   config: defaultAPIServerConfig,
   addedVersion: '3.6.X',
   menu: onMenu,
-
-  backend,
 });

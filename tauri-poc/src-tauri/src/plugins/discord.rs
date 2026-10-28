@@ -4,7 +4,7 @@
 //! One task owns the connection and the timers of `DiscordService`
 //! (activity timeout, throttled update, reconnect retry); everything else
 //! talks to it through `Command`s. The menu runs in the page and reaches the
-//! service through `tauri-poc/inject/compat/discord.ts`:
+//! service through `src/plugins/discord/service.ts`:
 //! `discord:status` (invoke, and pushed on change), `discord:connect`,
 //! `discord:clear-activity`.
 

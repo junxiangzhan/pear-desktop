@@ -1,7 +1,6 @@
 import { t } from '@/i18n';
 import { createPlugin } from '@/utils';
 
-import { onConfigChange, onMainLoad } from './main';
 import { onMenu } from './menu';
 import { onPlayerApiReady, onRendererLoad } from './renderer';
 import style from './style.css?inline';
@@ -46,10 +45,6 @@ export default createPlugin({
   config: defaultConfig,
   stylesheets: [style],
   menu: onMenu,
-  backend: {
-    start: onMainLoad,
-    onConfigChange,
-  },
   renderer: {
     start: onRendererLoad,
     onPlayerApiReady,

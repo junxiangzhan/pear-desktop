@@ -3,7 +3,6 @@ import { StatusDisplayType } from 'discord-api-types/v10';
 import { t } from '@/i18n';
 import { createPlugin } from '@/utils';
 
-import { backend } from './main';
 import { onMenu } from './menu';
 
 export type DiscordPluginConfig = {
@@ -57,5 +56,4 @@ export default createPlugin({
     'statusDisplayType': StatusDisplayType.Details,
   } as DiscordPluginConfig,
   menu: onMenu,
-  backend,
 });

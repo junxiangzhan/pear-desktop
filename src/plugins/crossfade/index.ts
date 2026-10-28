@@ -1,14 +1,8 @@
 import prompt from 'custom-electron-prompt';
-import { Innertube } from '\u0079\u006f\u0075\u0074\u0075\u0062\u0065i.js';
 
 import { t } from '@/i18n';
-import { getNetFetchAsFetch } from '@/plugins/utils/main';
-import {
-  mintPoToken,
-  setupYoutubeiEvaluator,
-} from '@/plugins/utils/main/youtubei';
 import promptOptions from '@/providers/prompt-options';
-import { createPlugin, LoggerPrefix } from '@/utils';
+import { createPlugin } from '@/utils';
 
 import { type VolumeControl, VolumeFader } from './fader';
 
@@ -165,40 +159,6 @@ export default createPlugin<
         },
       },
     ];
-  },
-
-  async backend({ ipc }) {
-    setupYoutubeiEvaluator();
-    const yt = await Innertube.create({
-      fetch: getNetFetchAsFetch(),
-    });
-
-    ipc.handle('audio-url', async (videoID: string) => {
-      try {
-        const poToken = await mintPoToken(
-          yt.session.context.client.visitorData ?? '',
-          videoID,
-        );
-        const info = await yt.getBasicInfo(videoID, {
-          client: 'YTMUSIC',
-          po_token: poToken,
-        });
-        const url = new URL(
-          await info
-            .chooseFormat({ type: 'audio', quality: 'best' })
-            .decipher(yt.session.player),
-        );
-        url.searchParams.set('pot', poToken);
-        return url.toString();
-      } catch (error) {
-        console.error(
-          LoggerPrefix,
-          `[crossfade] Failed to get the stream URL of ${videoID}:`,
-          error,
-        );
-        return '';
-      }
-    });
   },
 
   renderer: {
