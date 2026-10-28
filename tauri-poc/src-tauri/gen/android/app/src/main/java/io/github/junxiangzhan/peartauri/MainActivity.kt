@@ -1,4 +1,4 @@
-package com.github.pear_devs.tauri_poc
+package io.github.junxiangzhan.peartauri
 
 import android.content.Intent
 import android.content.res.Configuration

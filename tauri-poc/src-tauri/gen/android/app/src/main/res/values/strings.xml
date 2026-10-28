@@ -1,4 +1,4 @@
 <resources>
-    <string name="app_name">"Pear Tauri PoC"</string>
-    <string name="main_activity_title">"Pear Tauri PoC"</string>
+    <string name="app_name">"Pear Tauri"</string>
+    <string name="main_activity_title">"Pear Tauri"</string>
 </resources>

@@ -121,7 +121,7 @@ cargo run --manifest-path tauri-poc/src-tauri/Cargo.toml
 
 | 環境變數 | 作用 |
 |---|---|
-| `PEAR_POC_DEVTOOLS=1` | 啟動時開 DevTools（看 `[pear-tauri-poc]` log） |
+| `PEAR_POC_DEVTOOLS=1` | 啟動時開 DevTools（看 `[pear-tauri]` log） |
 | `PEAR_POC_USER_AGENT=...` | 覆寫 User-Agent（例如 Google 登入被擋時測試） |
 | `PEAR_POC_NO_INJECT=1` | 不注入，載入原始網站（區分外殼問題與 renderer 問題） |
 | `PEAR_POC_INJECT_FILE=path` | 改注入磁碟上的檔案，免重編譯 |
@@ -150,12 +150,12 @@ cd tauri-poc/src-tauri && pnpm dlx @tauri-apps/cli@2.12.4 android build --debug 
 - 畫面從 Android 15 起強制延伸到系統列下方；`MainActivity` 依系統列與瀏海的 inset 留邊距，底色用 YTM 的 `#030303`、系統列圖示用淺色。
 - **YouTube Music 連結：** manifest 為 `https://music.youtube.com` 宣告了 VIEW intent filter，`MainActivity` 會載入收到的連結（冷啟動時排在 wry 的起始網址之後，執行中則經 `onNewIntent`）。這個 app 無法通過該網域的驗證，所以 Android 12 起不會自動接手：要在「應用程式資訊 › 預設開啟」加入 `music.youtube.com`；若裝了官方 YouTube Music app，它是已驗證的處理者，會優先。官方 app 常是系統內建、無法移除（實機確認），設定步驟是：
   1. 設定 › 應用程式 › YouTube Music › 預設開啟：關閉「開啟支援的連結」（或取消勾選 `music.youtube.com`）。
-  2. 設定 › 應用程式 › Pear Tauri PoC › 預設開啟：「新增連結」並勾選 `music.youtube.com`。
+  2. 設定 › 應用程式 › Pear Tauri › 預設開啟：「新增連結」並勾選 `music.youtube.com`。
 
   之後點 `music.youtube.com` 的連結就會用 Pear 開啟（實機確認）。桌面版沒有對應功能（Windows 無法替 https 網址註冊處理程式）。
 - **Google 登入：** 在 WebView 裡無法登入，PoC 不打算繞過。登入頁本身送出的 POST（`AccountsSignInUi/data/batchexecute`、`browserinfo`）都帶 `X-Requested-With`，而 `shouldInterceptRequest` 拿不到 POST 內容，無法不帶標頭重送；`browserinfo` 也會回傳瀏覽器指紋。WebView 版目前只能未登入使用；可行的方向是換成 GeckoView（見下一節）。
 - 實機平板請改用 `--target aarch64`。
-- **頁面引擎：** 預設是 GeckoView（Google 登入可用，見「GeckoView 可行性驗證」）。`adb shell am start -n com.github.pear_devs.tauri_poc/.MainActivity --es engine webview` 改回 WebView，`--es engine gecko` 切回；選擇會記住。`MainActivity` 在 Rust 啟動前把它寫進環境變數 `PEAR_ENGINE`（`src/page.rs` 讀取）。下面關於 WebView 的說明只適用於 WebView 引擎。
+- **頁面引擎：** 預設是 GeckoView（Google 登入可用，見「GeckoView 可行性驗證」）。`adb shell am start -n io.github.junxiangzhan.peartauri/.MainActivity --es engine webview` 改回 WebView，`--es engine gecko` 切回；選擇會記住。`MainActivity` 在 Rust 啟動前把它寫進環境變數 `PEAR_ENGINE`（`src/page.rs` 讀取）。下面關於 WebView 的說明只適用於 WebView 引擎。
 - **GeckoView 的 viewport：** UA 是桌面版 Firefox（插件需要桌面版網站），但 viewport 用 `VIEWPORT_MODE_MOBILE`，依 YTM 自己的 `<meta name="viewport" content="width=device-width">` 排版，和 WebView 一樣。`VIEWPORT_MODE_DESKTOP` 會把頁面至少排成 980 CSS px 寬，視窗縮小（分割畫面、浮動視窗、手機）時就不會切換到 YTM 的窄版面；平板浮動視窗（381 dp）實測 viewport 為 385 px。
 - **浮動視窗：** 這台 MIUI 平板把 app 拖成浮動視窗時，先給手機大小的視窗（420×750 dp），約 0.5 秒後改成**整個平板大小的視窗再縮小顯示**（logcat 的 `mFreeFormScale=0.526`，configuration 回到 1164×777 dp）。所以浮動視窗裡是縮小的平板版面，也拉不回手機比例：這是 MIUI 對這個 app 的浮動視窗做法，不是 app 限制的（以 `am start --windowingMode 5` 開啟時可以是手機比例，頁面也會切到窄版面）。
 - **浮動視窗後版面卡在窄版（已處理）：** 播放頁元件消失、側欄出現第二個 YouTube Music 標誌，都是 YTM 的 bug：它用一組 media query 追蹤版面大小級別（-4 到 3），套用時寫成 `size && size >= -1`（側欄常駐）、`size && size >= -2`（播放頁開啟時顯示導覽列與播放列），而級別 0（寬 1150–1363 px，這台平板正好 1173 px）是 falsy，所以從窄版面**直接跳進級別 0** 時什麼都不會更新，版面停在窄版（導覽列、播放列 `visibility: hidden`、側欄維持窄版的覆蓋式抽屜與標頭）。拖曳視窗會先經過級別 -1 所以平常看不到；MIUI 浮動視窗是一次跳過去。Electron 版把窄視窗直接最大化到這個寬度時應該也會遇到。`inject/shim.ts` 包住 `MediaQueryList.addListener`：級別 0 的 query 開始成立時，先對 YTM 的級別 -1 listener 回報一次，100 ms 後才送出級別 0，等同拖曳經過 -1。以 `am task resize`（手機大小載入 → 平板大小 → 手機 → 平板）驗證：側欄常駐、標頭隱藏、導覽列與播放列顯示，縮回窄版時照 YTM 原本的方式隱藏。`MainActivity` 會在 logcat（tag `PearMainActivity`）記錄 configuration 變更，`report.js` 記錄最近的視窗大小、devicePixelRatio 與這組 media query 的變化。

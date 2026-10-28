@@ -1,5 +1,5 @@
 [package]
-name = "pear-tauri-poc"
+name = "pear-tauri"
 version = "0.1.0"
 description = "Proof of concept: Pear Desktop renderer on Tauri v2"
 edition = "2021"
@@ -7,7 +7,7 @@ publish = false
 
 [lib]
 # The `_lib` suffix avoids a name clash with the binary on Windows
-name = "pear_tauri_poc_lib"
+name = "pear_tauri_lib"
 crate-type = ["staticlib", "cdylib", "rlib"]
 
 [build-dependencies]

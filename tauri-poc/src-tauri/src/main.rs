@@ -2,5 +2,5 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
 fn main() {
-    pear_tauri_poc_lib::run()
+    pear_tauri_lib::run()
 }

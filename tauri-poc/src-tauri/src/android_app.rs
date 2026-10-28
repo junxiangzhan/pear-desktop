@@ -22,7 +22,7 @@ struct AndroidApp(PluginHandle<Wry>);
 pub fn init() -> TauriPlugin<Wry> {
     Builder::new("pear-android-app")
         .setup(|app, api| {
-            let handle = api.register_android_plugin("com.github.pear_devs.tauri_poc", "AndroidAppPlugin")?;
+            let handle = api.register_android_plugin("io.github.junxiangzhan.peartauri", "AndroidAppPlugin")?;
             app.manage(AndroidApp(handle));
             Ok(())
         })

@@ -15,3 +15,7 @@ node_modules
 .vite-inspect
 
 .DS_Store
+
+# Release signing keys (CI gets them from secrets)
+*.jks
+*.keystore

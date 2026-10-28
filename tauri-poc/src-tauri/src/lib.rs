@@ -113,7 +113,7 @@ fn set_app_user_model_id(identifier: &str) {
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     #[cfg(windows)]
-    set_app_user_model_id("com.github.pear-devs.tauri-poc");
+    set_app_user_model_id("io.github.junxiangzhan.peartauri");
 
     let mut builder = tauri::Builder::default()
         .plugin(

@@ -36,7 +36,7 @@ struct Playback<'a> {
 pub fn init() -> TauriPlugin<Wry> {
     Builder::new("pear-media-session")
         .setup(|app, api| {
-            let handle = api.register_android_plugin("com.github.pear_devs.tauri_poc", "MediaSessionPlugin")?;
+            let handle = api.register_android_plugin("io.github.junxiangzhan.peartauri", "MediaSessionPlugin")?;
             app.manage(MediaSession(handle));
             Ok(())
         })

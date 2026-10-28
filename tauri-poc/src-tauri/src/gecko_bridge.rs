@@ -45,7 +45,7 @@ pub fn init() -> TauriPlugin<Wry> {
     Builder::new("pear-gecko-bridge")
         .setup(|app, api| {
             let handle: PluginHandle<Wry> =
-                api.register_android_plugin("com.github.pear_devs.tauri_poc", "GeckoBridgePlugin")?;
+                api.register_android_plugin("io.github.junxiangzhan.peartauri", "GeckoBridgePlugin")?;
             app.manage(Plugin(handle.clone()));
             let (sender, receiver) = mpsc::channel::<(&'static str, Value)>();
             std::thread::Builder::new()

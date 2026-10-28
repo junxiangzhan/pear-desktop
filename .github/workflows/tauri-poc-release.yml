@@ -3,7 +3,7 @@
 #
 # - Push a tag `tauri-vX.Y.Z` (on the tauri-poc branch) to build and release
 #   version X.Y.Z as a pre-release.
-# - Or run it by hand (Actions › Tauri PoC release › Run workflow) to only
+# - Or run it by hand (Actions › Pear Tauri release › Run workflow) to only
 #   build; the files are attached to the run. Manual runs need this file on
 #   the default branch.
 #
@@ -12,7 +12,7 @@
 # ANDROID_KEYSTORE_PASSWORD, ANDROID_KEY_ALIAS, ANDROID_KEY_PASSWORD.
 # The Windows installer is not code-signed.
 
-name: Tauri PoC release
+name: Pear Tauri release
 
 on:
   push:
@@ -206,7 +206,7 @@ jobs:
           $keystore = Join-Path $env:RUNNER_TEMP release.jks
           [IO.File]::WriteAllBytes($keystore, [Convert]::FromBase64String($env:KEYSTORE_BASE64))
           $unsigned = "tauri-poc/src-tauri/gen/android/app/build/outputs/apk/universal/release/app-universal-release-unsigned.apk"
-          $name = if ($env:VERSION) { "pear-tauri-poc-$env:VERSION-android-arm64.apk" } else { "pear-tauri-poc-android-arm64.apk" }
+          $name = if ($env:VERSION) { "pear-tauri-$env:VERSION-android-arm64.apk" } else { "pear-tauri-android-arm64.apk" }
           New-Item -ItemType Directory -Force dist | Out-Null
           & "$env:ANDROID_HOME\build-tools\36.0.0\apksigner.bat" sign `
             --ks $keystore --ks-pass env:KEYSTORE_PASSWORD `
@@ -249,6 +249,6 @@ jobs:
           EOF
           gh release create "$TAG" dist/* \
             --repo "$GITHUB_REPOSITORY" \
-            --title "Pear Tauri PoC $VERSION" \
+            --title "Pear Tauri $VERSION" \
             --notes-file notes.md \
             --prerelease

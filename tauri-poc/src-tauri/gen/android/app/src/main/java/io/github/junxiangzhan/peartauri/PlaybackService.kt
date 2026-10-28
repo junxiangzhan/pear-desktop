@@ -1,4 +1,4 @@
-package com.github.pear_devs.tauri_poc
+package io.github.junxiangzhan.peartauri
 
 import android.app.Notification
 import android.app.NotificationChannel
@@ -42,7 +42,7 @@ class PlaybackService : Service() {
   companion object {
     private const val CHANNEL_ID = "playback"
     private const val NOTIFICATION_ID = 1
-    private const val ACTION = "com.github.pear_devs.tauri_poc.PLAYBACK_ACTION"
+    private const val ACTION = "io.github.junxiangzhan.peartauri.PLAYBACK_ACTION"
 
     /** Sends a control request (`play`, `pause`, `next`, `previous`, `seek`) to Rust. */
     @Volatile var actions: ((action: String, value: Long) -> Unit)? = null

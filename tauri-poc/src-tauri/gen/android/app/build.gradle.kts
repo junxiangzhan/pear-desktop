@@ -16,10 +16,10 @@ val tauriProperties = Properties().apply {
 
 android {
     compileSdk = 37
-    namespace = "com.github.pear_devs.tauri_poc"
+    namespace = "io.github.junxiangzhan.peartauri"
     defaultConfig {
         manifestPlaceholders["usesCleartextTraffic"] = "false"
-        applicationId = "com.github.pear_devs.tauri_poc"
+        applicationId = "io.github.junxiangzhan.peartauri"
         // 26 for GeckoView
         minSdk = 26
         targetSdk = 37
