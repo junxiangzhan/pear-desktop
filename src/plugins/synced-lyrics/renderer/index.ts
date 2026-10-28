@@ -22,7 +22,7 @@ export const renderer = createRenderer<
     observerCallback: MutationCallback;
     observer?: MutationObserver;
     videoDataChange: () => Promise<void>;
-    updateTimestampInterval?: NodeJS.Timeout | string | number;
+    updateTimestampInterval?: ReturnType<typeof setInterval>;
   },
   SyncedLyricsPluginConfig
 >({

@@ -11,7 +11,7 @@
 A desktop and Android client for YouTube Music built on [Tauri v2](https://tauri.app/). It started as a port of [Pear Desktop](https://github.com/pear-devs/pear-desktop) and runs its renderer and plugins inside the page, with the Electron main process rewritten in Rust.
 
 > [!NOTE]
-> **Unofficial and independently maintained.** Upstream Pear Desktop declined to move to Tauri, so this fork goes its own way: Electron is being removed step by step and Tauri becomes the core. Please report issues [here](https://github.com/junxiangzhan/pear-desktop/issues), not to upstream.
+> **Unofficial and independently maintained.** Upstream Pear Desktop declined to move to Tauri, so this fork goes its own way: Electron has been removed and Tauri is the core (the last Electron version is the `electron-reference` tag). Please report issues [here](https://github.com/junxiangzhan/pear-desktop/issues), not to upstream.
 
 > [!IMPORTANT]
 > **No affiliation.** This project is not affiliated with, authorized by, endorsed by, or in any way officially connected with Google LLC, YouTube, or any of their subsidiaries or affiliates. "Google" and "YouTube Music" are trademarks of their respective owners and are used here for identification only.

@@ -15,7 +15,7 @@ export function debounce<T extends (...params: never[]) => unknown>(
   fn: T,
   delay: number,
 ): T {
-  let timeout: NodeJS.Timeout;
+  let timeout: ReturnType<typeof setTimeout>;
   return ((...args) => {
     clearTimeout(timeout);
     timeout = setTimeout(() => fn(...args), delay);
@@ -58,7 +58,7 @@ export function throttle<T extends (...params: unknown[]) => unknown>(
   fn: T,
   delay: number,
 ): T {
-  let timeout: NodeJS.Timeout | undefined;
+  let timeout: ReturnType<typeof setTimeout> | undefined;
   return ((...args) => {
     if (timeout) {
       return;
