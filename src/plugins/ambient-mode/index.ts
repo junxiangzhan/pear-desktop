@@ -36,7 +36,7 @@ export default createPlugin({
 
     unregister: null as (() => void) | null,
     update: null as (() => void) | null,
-    interval: null as NodeJS.Timeout | null,
+    interval: null as ReturnType<typeof setTimeout> | null,
     lastMediaType: null as 'video' | 'image' | null,
     lastVideoSource: null as string | null,
     lastImageSource: null as string | null,
@@ -164,7 +164,7 @@ export default createPlugin({
         this.update();
 
         /* hooking */
-        let canvasInterval: NodeJS.Timeout | null = null;
+        let canvasInterval: ReturnType<typeof setTimeout> | null = null;
         canvasInterval = setInterval(
           onSync,
           Math.max(1, Math.ceil(1000 / this.buffer)),

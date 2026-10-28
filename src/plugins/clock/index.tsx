@@ -51,7 +51,7 @@ export default createPlugin({
     displaySeconds: defaultConfig.displaySeconds,
     hour12: defaultConfig.hour12,
 
-    interval: null as NodeJS.Timeout | null,
+    interval: null as ReturnType<typeof setTimeout> | null,
     clockContainer: document.createElement('div'),
     updateTime: null as unknown as () => void,
 

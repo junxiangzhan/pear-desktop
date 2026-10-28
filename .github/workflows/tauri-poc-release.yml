@@ -29,8 +29,6 @@ env:
   NODE_VERSION: "24.x"
   TAURI_CLI: "@tauri-apps/cli@2.12.4"
   NDK_VERSION: "28.0.13004108"
-  # Only the Tauri build runs here; Electron's binary isn't needed
-  ELECTRON_SKIP_BINARY_DOWNLOAD: "1"
 
 jobs:
   version:

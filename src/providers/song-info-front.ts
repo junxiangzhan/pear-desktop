@@ -277,7 +277,7 @@ export const setupSongInfo = (api: MusicPlayer) => {
     );
 
   const waitingEvent = new Set<string>();
-  const waitingTimeouts = new Map<string, NodeJS.Timeout>();
+  const waitingTimeouts = new Map<string, ReturnType<typeof setTimeout>>();
 
   const clearVideoTimeout = (videoId: string) => {
     const timeoutId = waitingTimeouts.get(videoId);
