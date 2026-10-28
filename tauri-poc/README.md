@@ -174,7 +174,7 @@ cd tauri-poc/src-tauri && pnpm dlx @tauri-apps/cli@2.12.4 android build --debug 
 
 `.github/workflows/tauri-poc-release.yml` 在 Windows runner 上建置 Windows 安裝檔（NSIS，未做程式碼簽章）與 Android arm64 APK（用下面的金鑰簽名），並發佈成 GitHub Release（pre-release）。
 
-- **發佈：** 在 `master` 上打 `tauri-vX.Y.Z` 的 tag 並推送，版本號就是 X.Y.Z（Android 的 versionCode 由它算出）：
+- **發佈：** 在 `master` 上打 `tauri-vX.Y.Z` 的 tag 並推送，版本號就是 X.Y.Z（Android 的 versionCode 由它算出；`package.json` 與 `tauri.conf.json` 裡的 0.1.0 只是佔位，不用跟著改）：
 
   ```bash
   git tag tauri-v0.2.0 && git push origin tauri-v0.2.0
