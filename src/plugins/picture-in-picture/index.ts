@@ -1,7 +1,6 @@
 import { t } from '@/i18n';
 import { createPlugin } from '@/utils';
 
-import { onConfigChange, onMainLoad } from './main';
 import { onMenu } from './menu';
 import { onPlayerApiReady } from './renderer';
 import style from './style.css?inline';
@@ -35,11 +34,6 @@ export default createPlugin({
   } as PictureInPicturePluginConfig,
   stylesheets: [style],
   menu: onMenu,
-
-  backend: {
-    start: onMainLoad,
-    onConfigChange,
-  },
   renderer: {
     onPlayerApiReady,
   },

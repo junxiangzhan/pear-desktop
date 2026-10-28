@@ -6,9 +6,12 @@ import promptOptions from '@/providers/prompt-options';
 
 import { type ScrobblerPluginConfig } from './index';
 
-import type { SetConfType } from './main';
 import type { MenuTemplate } from '@/menu';
 import type { MenuContext } from '@/types/contexts';
+
+type SetConfType = (
+  conf: Partial<Omit<ScrobblerPluginConfig, 'enabled'>>,
+) => void | Promise<void>;
 
 async function promptLastFmOptions(
   options: ScrobblerPluginConfig,

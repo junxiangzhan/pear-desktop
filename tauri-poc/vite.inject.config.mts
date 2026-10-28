@@ -2,7 +2,7 @@
 // shell injects as an initialization script. Run from the repository root:
 //   pnpm exec vite build -c tauri-poc/vite.inject.config.mts
 import { readFileSync } from 'node:fs';
-import { basename, dirname, resolve } from 'node:path';
+import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 import builtinModules from 'builtin-modules';
@@ -54,55 +54,9 @@ const apiOpenApi = (): Plugin => ({
   },
 });
 
-// Main-process modules that a page-side plugin part (a menu) imports, swapped
-// for page modules that reach the Rust port over IPC
-const backendProxies: Record<string, string> = {
-  'src/plugins/discord/main.ts': compat('discord.ts'),
-  // do-not-track: only the page-side "In player" mode is ported
-  'src/plugins/do-not-track/blocker.ts': compat('do-not-track.ts'),
-  'src/plugins/do-not-track/injectors/inject-cliqz-preload.ts': compat('do-not-track.ts'),
-  // downloader: the page finds the stream, Rust saves it (inject/downloader.ts)
-  'src/plugins/downloader/main/index.ts': compat('downloader.ts'),
-  'src/plugins/downloader/main/utils.ts': compat('downloader.ts'),
-  'src/plugins/downloader/menu.ts': compat('downloader-menu.ts'),
-};
-const proxyBackends = (): Plugin => {
-  const targets = new Map(
-    Object.entries(backendProxies).map(([file, proxy]) => [
-      resolve(repoRoot, file).replaceAll('\\', '/'),
-      proxy,
-    ]),
-  );
-  const proxies = new Set(
-    Object.values(backendProxies).map((proxy) => proxy.replaceAll('\\', '/')),
-  );
-  // Only resolve imports whose last segment names a proxied module (its
-  // directory, for an index.ts)
-  const names = new Set(
-    Object.keys(backendProxies).map((file) =>
-      basename(file, '.ts') === 'index' ? basename(dirname(file)) : basename(file, '.ts'),
-    ),
-  );
-  return {
-    name: 'pear-proxy-backends',
-    enforce: 'pre',
-    async resolveId(source, importer, options) {
-      if (!importer || !names.has(basename(source, '.ts'))) return null;
-      // A proxy may wrap the module it stands in for
-      if (proxies.has(importer.replaceAll('\\', '/'))) return null;
-      const resolved = await this.resolve(source, importer, {
-        ...options,
-        skipSelf: true,
-      });
-      return (resolved && targets.get(resolved.id.replaceAll('\\', '/'))) ?? resolved;
-    },
-  };
-};
-
 export default defineConfig({
   root: resolve(repoRoot, 'src'),
   plugins: [
-    proxyBackends(),
     // The page runs what Electron splits across the preload, renderer and
     // menu-building main process; backends are reimplemented in Rust
     pluginLoader(['renderer', 'preload', 'menu'], {

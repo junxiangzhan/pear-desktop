@@ -6,18 +6,45 @@ import { t } from '@/i18n';
 import promptOptions from '@/providers/prompt-options';
 
 import { type DownloaderPluginConfig, defaultConfig } from './index';
-import { downloadPlaylist } from './main';
-import { getFolder } from './main/utils';
 import { DefaultPresetList } from './types';
 
 import type { MenuTemplate } from '@/menu';
 import type { MenuContext } from '@/types/contexts';
+
+type MenuItem = MenuTemplate[number];
+
+// The async dialog: the native one answers over IPC
+const pickFolder = async (defaultPath?: string) => {
+  const result = await dialog.showOpenDialog({
+    properties: ['openDirectory', 'createDirectory'],
+    defaultPath,
+  });
+  return result.canceled ? undefined : result.filePaths[0];
+};
 
 export const onMenu = async ({
   getConfig,
   setConfig,
 }: MenuContext<DownloaderPluginConfig>): Promise<MenuTemplate> => {
   const config = await getConfig();
+  // Android has no folder pickers: files go to Music/Pear Desktop
+  const mobile =
+    (window as { __PEAR_MOBILE__?: boolean }).__PEAR_MOBILE__ === true;
+  const folderPicker = (
+    current: string | undefined,
+    save: (folder: string) => void,
+  ): MenuItem[] =>
+    mobile
+      ? []
+      : [
+          {
+            label: t('plugins.downloader.menu.choose-download-folder'),
+            async click() {
+              const folder = await pickFolder(current);
+              if (folder) save(folder);
+            },
+          },
+        ];
 
   return [
     {
@@ -45,28 +72,19 @@ export const onMenu = async ({
         {
           type: 'separator',
         },
-        {
-          label: t('plugins.downloader.menu.choose-download-folder'),
-          click() {
-            const result = dialog.showOpenDialogSync({
-              properties: ['openDirectory', 'createDirectory'],
-              defaultPath: getFolder(
-                config.downloadOnFinish?.folder ?? config.downloadFolder,
-              ),
-            });
-            if (result) {
-              setConfig({
-                downloadOnFinish: {
-                  ...deepmerge(
-                    defaultConfig.downloadOnFinish,
-                    config.downloadOnFinish,
-                  ),
-                  folder: result[0],
-                },
-              });
-            }
-          },
-        },
+        ...folderPicker(
+          config.downloadOnFinish?.folder ?? config.downloadFolder,
+          (folder) =>
+            setConfig({
+              downloadOnFinish: {
+                ...deepmerge(
+                  defaultConfig.downloadOnFinish,
+                  config.downloadOnFinish,
+                ),
+                folder,
+              },
+            }),
+        ),
         {
           label: t(
             'plugins.downloader.menu.download-finish-settings.submenu.mode',
@@ -179,30 +197,36 @@ export const onMenu = async ({
 
     {
       label: t('plugins.downloader.menu.download-playlist'),
-      click: () => downloadPlaylist(),
-    },
-    {
-      label: t('plugins.downloader.menu.choose-download-folder'),
+      // Answered by the page-side downloader (tauri-poc/inject/downloader.ts)
       click() {
-        const result = dialog.showOpenDialogSync({
-          properties: ['openDirectory', 'createDirectory'],
-          defaultPath: getFolder(config.downloadFolder ?? ''),
-        });
-        if (result) {
-          setConfig({ downloadFolder: result[0] });
-        } // Else = user pressed cancel
+        window.ipcRenderer
+          .invoke('download-playlist-request')
+          .catch(console.error);
       },
     },
+    ...folderPicker(config.downloadFolder, (folder) =>
+      setConfig({ downloadFolder: folder }),
+    ),
     {
       label: t('plugins.downloader.menu.presets'),
-      submenu: Object.keys(DefaultPresetList).map((preset) => ({
-        label: preset,
-        type: 'radio',
-        checked: config.selectedPreset === preset,
-        click() {
-          setConfig({ selectedPreset: preset });
+      submenu: [
+        {
+          label:
+            "Source keeps YouTube's .m4a; mp3 re-encodes it (bigger, not better)",
+          enabled: false,
         },
-      })),
+        { type: 'separator' },
+        ...Object.keys(DefaultPresetList).map(
+          (preset): MenuItem => ({
+            label: preset,
+            type: 'radio',
+            checked: config.selectedPreset === preset,
+            click() {
+              setConfig({ selectedPreset: preset });
+            },
+          }),
+        ),
+      ],
     },
     {
       label: t('plugins.downloader.menu.skip-existing'),

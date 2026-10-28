@@ -1,5 +1,5 @@
-# Builds the page bundle and runs the Rust tests on every push to master
-# and every pull request. Releases are tauri-poc-release.yml.
+# Typechecks src, builds the page bundle and runs the Rust tests on every
+# push to master and every pull request. Releases are tauri-poc-release.yml.
 
 name: Pear Tauri check
 
@@ -58,6 +58,9 @@ jobs:
           restore-keys: |
             cargo-check-windows-
             cargo-windows-
+
+      - name: Typecheck
+        run: pnpm typecheck
 
       - name: Build the page bundle
         run: pnpm exec vite build -c tauri-poc/vite.inject.config.mts
