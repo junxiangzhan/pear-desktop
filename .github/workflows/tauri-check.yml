@@ -1,0 +1,66 @@
+# Builds the page bundle and runs the Rust tests on every push to master
+# and every pull request. Releases are tauri-poc-release.yml.
+
+name: Pear Tauri check
+
+on:
+  push:
+    branches: [master]
+  pull_request:
+
+permissions: {}
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  NODE_VERSION: "24.x"
+  # Only the Tauri build runs here; Electron's binary isn't needed
+  ELECTRON_SKIP_BINARY_DOWNLOAD: "1"
+
+jobs:
+  check:
+    name: Bundle and Rust tests
+    if: github.event.pull_request.draft != true
+    runs-on: windows-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd
+
+      - name: Install pnpm
+        uses: pnpm/action-setup@fc06bc1257f339d1d5d8b3a19a8cae5388b55320
+        with:
+          version: 11
+          run_install: false
+
+      - name: Setup NodeJS
+        uses: actions/setup-node@53b83947a5a98c8d113130e565377fae1a50d02f
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: "pnpm"
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Update Rust
+        run: rustup update stable --no-self-update
+
+      - name: Cache Cargo
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            tauri-poc/src-tauri/target
+          key: cargo-check-windows-${{ hashFiles('tauri-poc/src-tauri/Cargo.lock') }}
+          restore-keys: |
+            cargo-check-windows-
+            cargo-windows-
+
+      - name: Build the page bundle
+        run: pnpm exec vite build -c tauri-poc/vite.inject.config.mts
+
+      - name: Rust tests
+        run: cargo test --manifest-path tauri-poc/src-tauri/Cargo.toml --lib

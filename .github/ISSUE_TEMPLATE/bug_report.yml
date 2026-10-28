@@ -1,72 +1,60 @@
 name: Bug Report
-description: Report a Pear Desktop bug
+description: Report a Pear Tauri bug
 title: "[Bug]: "
-labels: "bug :beetle:"
+labels: "bug"
 body:
 - type: checkboxes
   attributes:
     label: Preflight Checklist
     description: Please ensure you've completed all of the following.
     options:
-      - label: I use the latest version of Pear Desktop (Application).
+      - label: I use the latest release of Pear Tauri.
         required: true
-      - label: I have searched the [issue tracker](https://github.com/pear-devs/pear-desktop/issues) for a bug report that matches the one I want to file, without success.
+      - label: I have searched the [issue tracker](https://github.com/junxiangzhan/pear-desktop/issues) for a bug report that matches the one I want to file, without success.
         required: true
-      - label: I understand that **pear-devs/pear-desktop has NO affiliation with Google or YouTube**
+      - label: I understand that **Pear Tauri has NO affiliation with Google or YouTube**, and that it is not the upstream Pear Desktop (Electron) app.
         required: true
 - type: input
   id: app-version
   attributes:
-    label: Pear Desktop (Application) Version
-    description: |
-      What version of the Pear Desktop Application are you using?
-
-      Note: Please check if this issue is reproducible with the latest stable release.
-    placeholder: 2.0.0
+    label: Pear Tauri Version
+    description: What version of Pear Tauri are you using?
+    placeholder: 0.3.0
   validations:
     required: true
-- type: checkboxes
-  attributes:
-    label: Checklists
-    options:
-      - label: I use the portable version of the Pear Desktop Application.
-      - label: I can reproduce this issue in the [official version of (WEB) YTM](https://music.youtube.com).
 - type: dropdown
-  id: os
+  id: platform
   attributes:
-    label: What operating system are you using?
+    label: Platform
     options:
       - Windows
-      - macOS
-      - Ubuntu
-      - Other Linux
+      - Android
       - Other (specify below)
   validations:
     required: true
 - type: input
   id: os-version
   attributes:
-    label: Operating System Version
-    description: What operating system version are you using? On Windows, click the Start button > Settings > System > About. On macOS, click the Apple Menu > About This Mac. On Linux, use lsb_release or uname -a.
-    placeholder: "e.g. Windows 10 version 1909, macOS Catalina 10.15.7, or Ubuntu 20.04"
+    label: Operating System and Device
+    description: On Windows, Start > Settings > System > About. On Android, include the device model.
+    placeholder: "e.g. Windows 11 24H2, or Android 16 on a Pixel 9"
   validations:
     required: true
 - type: dropdown
-  id: cpu-arch
+  id: engine
   attributes:
-    label: What CPU architecture are you using?
+    label: Page engine (Android only)
+    description: GeckoView is the default; WebView is chosen with `--es engine webview`.
     options:
-      - x64
-      - ia32
-      - arm64 (including Apple Silicon)
-      - Other (specify below)
-  validations:
-    required: true
-- type: input
+      - GeckoView (default)
+      - WebView
+      - Not applicable (Windows)
+- type: checkboxes
   attributes:
-    label: Last Known Working Pear Desktop (Application) version
-    description: (If applicable) What is the last version of Pear Desktop this worked in?
-    placeholder: 1.20.0
+    label: Checklists
+    options:
+      - label: I can reproduce this issue in the [web version of YouTube Music](https://music.youtube.com).
+      - label: The same issue happens in upstream Pear Desktop (Electron).
 - type: textarea
   attributes:
     label: Reproduction steps
@@ -97,4 +85,4 @@ body:
 - type: textarea
   attributes:
     label: Additional Information
-    description: If your problem needs further explanation, or if the issue you're seeing cannot be reproduced in a gist, please add more information here.
+    description: Anything else that helps, such as logs (`PEAR_POC_DEVTOOLS=1` on Windows, logcat on Android) or screenshots.
