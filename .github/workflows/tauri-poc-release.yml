@@ -1,7 +1,7 @@
 # Builds the Tauri port (tauri-poc/) for Windows and Android and publishes
 # both to a GitHub Release.
 #
-# - Push a tag `tauri-vX.Y.Z` (on the tauri-poc branch) to build and release
+# - Push a tag `tauri-vX.Y.Z` (on master) to build and release
 #   version X.Y.Z as a pre-release.
 # - Or run it by hand (Actions › Pear Tauri release › Run workflow) to only
 #   build; the files are attached to the run. Manual runs need this file on

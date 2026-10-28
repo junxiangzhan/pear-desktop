@@ -174,7 +174,7 @@ cd tauri-poc/src-tauri && pnpm dlx @tauri-apps/cli@2.12.4 android build --debug 
 
 `.github/workflows/tauri-poc-release.yml` builds, on Windows runners, the Windows installer (NSIS, not code-signed) and the Android arm64 APK (signed with the key below), and publishes them as a GitHub Release (pre-release).
 
-- **Releasing:** push a `tauri-vX.Y.Z` tag on the `tauri-poc` branch; X.Y.Z becomes the version (Android's versionCode is derived from it):
+- **Releasing:** push a `tauri-vX.Y.Z` tag on `master`; X.Y.Z becomes the version (Android's versionCode is derived from it):
 
   ```bash
   git tag tauri-v0.2.0 && git push origin tauri-v0.2.0
@@ -226,7 +226,7 @@ cd tauri-poc/src-tauri && pnpm dlx @tauri-apps/cli@2.12.4 android build --debug 
 
 `src/plugins/performance-improvement/scripts/cpu-tamer/cpu-tamer-by-animationframe.js` inserts a hidden `<a-f>` element running a 1 ms infinite CSS animation, uses its `animationiteration` event as a clock (fired every frame), and rewrites the global `setTimeout`/`setInterval`: while media plays, YTM's timers are deferred to the next clock tick. On a high-refresh display (e.g. 165 Hz) the main thread is woken every frame, so scrolling drops frames and feels like "move, stall, move", easily mistaken for GC.
 
-**Fixed** ([pear-devs/pear-desktop#4772](https://github.com/pear-devs/pear-desktop/pull/4772), merged into `tauri-poc`): the clock uses `requestAnimationFrame` and only requests the next frame while timers are waiting. Timer deferral and coalescing are unchanged (a 1 ms `setInterval` still fires about 164 times a second while playing). So the PoC no longer turns this plugin off by default.
+**Fixed** ([pear-devs/pear-desktop#4772](https://github.com/pear-devs/pear-desktop/pull/4772), merged into `master`): the clock uses `requestAnimationFrame` and only requests the next frame while timers are waiting. Timer deferral and coalescing are unchanged (a 1 ms `setInterval` still fires about 164 times a second while playing). So the PoC no longer turns this plugin off by default.
 
 Re-measured in the PoC after the fix (Windows, WebView2, signed in, not playing, 165 Hz, 1100×700 window on top; the same simulated wheel as Electron: 120 px every 33 ms, reversing every 2 seconds; each case 15 s × 2, averaged; bundles switched with `PEAR_POC_INJECT_FILE`):
 
