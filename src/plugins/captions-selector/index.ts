@@ -10,7 +10,6 @@ import type { MusicPlayer } from '@/types/music-player';
 
 export default createPlugin<
   unknown,
-  unknown,
   {
     captionsSettingsButton?: HTMLElement;
     captionTrackList: LanguageOptions[] | null;

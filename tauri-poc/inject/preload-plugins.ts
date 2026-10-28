@@ -1,7 +1,7 @@
 // Runs the plugins' preload parts in the page, as `src/preload.ts` does in
-// Electron's isolated world. `@/config` resolves to the Rust-backed mirror
-// (`compat/config.ts`) in this bundle, so the shared loader works unchanged.
-import { ipcRenderer } from './ipc';
+// Electron's isolated world. `@/config` is the Rust-backed mirror, so the
+// shared loader works unchanged.
+import { ipcRenderer } from '@/platform/ipc';
 
 import {
   forceLoadPreloadPlugin,

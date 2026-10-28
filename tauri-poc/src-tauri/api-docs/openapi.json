@@ -1,0 +1,965 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "version": "1.0.0",
+    "title": "YouTube Music API Server",
+    "description": "Note: You need to get an access token using the `/auth/{id}` endpoint first to call any API endpoints under `/api`."
+  },
+  "security": [
+    {
+      "bearerAuth": []
+    }
+  ],
+  "components": {
+    "securitySchemes": {
+      "bearerAuth": {
+        "type": "http",
+        "scheme": "bearer",
+        "bearerFormat": "JWT"
+      }
+    },
+    "schemas": {},
+    "parameters": {}
+  },
+  "paths": {
+    "/api/v1/previous": {
+      "post": {
+        "summary": "play previous song",
+        "description": "Plays the previous song in the queue",
+        "responses": {
+          "204": {
+            "description": "Success"
+          }
+        }
+      }
+    },
+    "/api/v1/next": {
+      "post": {
+        "summary": "play next song",
+        "description": "Plays the next song in the queue",
+        "responses": {
+          "204": {
+            "description": "Success"
+          }
+        }
+      }
+    },
+    "/api/v1/play": {
+      "post": {
+        "summary": "Play",
+        "description": "Change the state of the player to play",
+        "responses": {
+          "204": {
+            "description": "Success"
+          }
+        }
+      }
+    },
+    "/api/v1/pause": {
+      "post": {
+        "summary": "Pause",
+        "description": "Change the state of the player to pause",
+        "responses": {
+          "204": {
+            "description": "Success"
+          }
+        }
+      }
+    },
+    "/api/v1/toggle-play": {
+      "post": {
+        "summary": "Toggle play/pause",
+        "description": "Change the state of the player to play if paused, or pause if playing",
+        "responses": {
+          "204": {
+            "description": "Success"
+          }
+        }
+      }
+    },
+    "/api/v1/like-state": {
+      "get": {
+        "summary": "get like state",
+        "description": "Get the current like state",
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "state": {
+                      "type": "string",
+                      "nullable": true,
+                      "enum": [
+                        "DISLIKE",
+                        "INDIFFERENT",
+                        "LIKE",
+                        null
+                      ]
+                    }
+                  },
+                  "required": [
+                    "state"
+                  ]
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/like": {
+      "post": {
+        "summary": "like song",
+        "description": "Set the current song as liked",
+        "responses": {
+          "204": {
+            "description": "Success"
+          }
+        }
+      }
+    },
+    "/api/v1/dislike": {
+      "post": {
+        "summary": "dislike song",
+        "description": "Set the current song as disliked",
+        "responses": {
+          "204": {
+            "description": "Success"
+          }
+        }
+      }
+    },
+    "/api/v1/seek-to": {
+      "post": {
+        "summary": "seek",
+        "description": "Seek to a specific time in the current song",
+        "requestBody": {
+          "description": "seconds to seek to",
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "seconds": {
+                    "type": "number"
+                  }
+                },
+                "required": [
+                  "seconds"
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "204": {
+            "description": "Success"
+          }
+        }
+      }
+    },
+    "/api/v1/go-back": {
+      "post": {
+        "summary": "go back",
+        "description": "Move the current song back by a number of seconds",
+        "requestBody": {
+          "description": "seconds to go back",
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "seconds": {
+                    "type": "number"
+                  }
+                },
+                "required": [
+                  "seconds"
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "204": {
+            "description": "Success"
+          }
+        }
+      }
+    },
+    "/api/v1/go-forward": {
+      "post": {
+        "summary": "go forward",
+        "description": "Move the current song forward by a number of seconds",
+        "requestBody": {
+          "description": "seconds to go forward",
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "seconds": {
+                    "type": "number"
+                  }
+                },
+                "required": [
+                  "seconds"
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "204": {
+            "description": "Success"
+          }
+        }
+      }
+    },
+    "/api/v1/shuffle": {
+      "get": {
+        "summary": "get shuffle state",
+        "description": "Get the current shuffle state",
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "state": {
+                      "type": "boolean",
+                      "nullable": true
+                    }
+                  },
+                  "required": [
+                    "state"
+                  ]
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "summary": "shuffle",
+        "description": "Shuffle the queue",
+        "responses": {
+          "204": {
+            "description": "Success"
+          }
+        }
+      }
+    },
+    "/api/v1/repeat-mode": {
+      "get": {
+        "summary": "get current repeat mode",
+        "description": "Get the current repeat mode (NONE, ALL, ONE)",
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "mode": {
+                      "type": "string",
+                      "nullable": true,
+                      "enum": [
+                        "ONE",
+                        "NONE",
+                        "ALL",
+                        null
+                      ]
+                    }
+                  },
+                  "required": [
+                    "mode"
+                  ]
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/switch-repeat": {
+      "post": {
+        "summary": "switch repeat",
+        "description": "Switch the repeat mode",
+        "requestBody": {
+          "description": "number of times to click the repeat button",
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "iteration": {
+                    "type": "number"
+                  }
+                },
+                "required": [
+                  "iteration"
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "204": {
+            "description": "Success"
+          }
+        }
+      }
+    },
+    "/api/v1/volume": {
+      "post": {
+        "summary": "set volume",
+        "description": "Set the volume of the player",
+        "requestBody": {
+          "description": "volume to set",
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "volume": {
+                    "type": "number"
+                  }
+                },
+                "required": [
+                  "volume"
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "204": {
+            "description": "Success"
+          }
+        }
+      },
+      "get": {
+        "summary": "get volume state",
+        "description": "Get the current volume state of the player",
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "state": {
+                      "type": "number"
+                    },
+                    "isMuted": {
+                      "type": "boolean"
+                    }
+                  },
+                  "required": [
+                    "state",
+                    "isMuted"
+                  ]
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/fullscreen": {
+      "post": {
+        "summary": "set fullscreen",
+        "description": "Set the fullscreen state of the player",
+        "requestBody": {
+          "description": "fullscreen state",
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "state": {
+                    "type": "boolean"
+                  }
+                },
+                "required": [
+                  "state"
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "204": {
+            "description": "Success"
+          }
+        }
+      },
+      "get": {
+        "summary": "get fullscreen state",
+        "description": "Get the current fullscreen state",
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "state": {
+                      "type": "boolean"
+                    }
+                  },
+                  "required": [
+                    "state"
+                  ]
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/toggle-mute": {
+      "post": {
+        "summary": "toggle mute",
+        "description": "Toggle the mute state of the player",
+        "responses": {
+          "204": {
+            "description": "Success"
+          }
+        }
+      }
+    },
+    "/api/v1/song-info": {
+      "get": {
+        "deprecated": true,
+        "summary": "get current song info",
+        "description": "Get the current song info",
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "title": {
+                      "type": "string"
+                    },
+                    "artist": {
+                      "type": "string"
+                    },
+                    "views": {
+                      "type": "number"
+                    },
+                    "uploadDate": {
+                      "type": "string"
+                    },
+                    "imageSrc": {
+                      "type": "string",
+                      "nullable": true
+                    },
+                    "isPaused": {
+                      "type": "boolean"
+                    },
+                    "songDuration": {
+                      "type": "number"
+                    },
+                    "elapsedSeconds": {
+                      "type": "number"
+                    },
+                    "url": {
+                      "type": "string"
+                    },
+                    "album": {
+                      "type": "string",
+                      "nullable": true
+                    },
+                    "videoId": {
+                      "type": "string"
+                    },
+                    "playlistId": {
+                      "type": "string"
+                    },
+                    "mediaType": {
+                      "type": "string",
+                      "enum": [
+                        "AUDIO",
+                        "ORIGINAL_MUSIC_VIDEO",
+                        "USER_GENERATED_CONTENT",
+                        "PODCAST_EPISODE",
+                        "OTHER_VIDEO"
+                      ]
+                    }
+                  },
+                  "required": [
+                    "title",
+                    "artist",
+                    "views",
+                    "songDuration",
+                    "videoId",
+                    "mediaType"
+                  ]
+                }
+              }
+            }
+          },
+          "204": {
+            "description": "No song info"
+          }
+        }
+      }
+    },
+    "/api/v1/song": {
+      "get": {
+        "summary": "get current song info",
+        "description": "Get the current song info",
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "title": {
+                      "type": "string"
+                    },
+                    "artist": {
+                      "type": "string"
+                    },
+                    "views": {
+                      "type": "number"
+                    },
+                    "uploadDate": {
+                      "type": "string"
+                    },
+                    "imageSrc": {
+                      "type": "string",
+                      "nullable": true
+                    },
+                    "isPaused": {
+                      "type": "boolean"
+                    },
+                    "songDuration": {
+                      "type": "number"
+                    },
+                    "elapsedSeconds": {
+                      "type": "number"
+                    },
+                    "url": {
+                      "type": "string"
+                    },
+                    "album": {
+                      "type": "string",
+                      "nullable": true
+                    },
+                    "videoId": {
+                      "type": "string"
+                    },
+                    "playlistId": {
+                      "type": "string"
+                    },
+                    "mediaType": {
+                      "type": "string",
+                      "enum": [
+                        "AUDIO",
+                        "ORIGINAL_MUSIC_VIDEO",
+                        "USER_GENERATED_CONTENT",
+                        "PODCAST_EPISODE",
+                        "OTHER_VIDEO"
+                      ]
+                    }
+                  },
+                  "required": [
+                    "title",
+                    "artist",
+                    "views",
+                    "songDuration",
+                    "videoId",
+                    "mediaType"
+                  ]
+                }
+              }
+            }
+          },
+          "204": {
+            "description": "No song info"
+          }
+        }
+      }
+    },
+    "/api/v1/queue-info": {
+      "get": {
+        "deprecated": true,
+        "summary": "get current queue info",
+        "description": "Get the current queue info",
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {}
+                }
+              }
+            }
+          },
+          "204": {
+            "description": "No queue info"
+          }
+        }
+      }
+    },
+    "/api/v1/queue": {
+      "get": {
+        "summary": "get current queue info",
+        "description": "Get the current queue info",
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {}
+                }
+              }
+            }
+          },
+          "204": {
+            "description": "No queue info"
+          }
+        }
+      },
+      "post": {
+        "summary": "add song to queue",
+        "description": "Add a song to the queue",
+        "requestBody": {
+          "description": "video id of the song to add",
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "videoId": {
+                    "type": "string"
+                  },
+                  "insertPosition": {
+                    "type": "string",
+                    "enum": [
+                      "INSERT_AT_END",
+                      "INSERT_AFTER_CURRENT_VIDEO"
+                    ],
+                    "default": "INSERT_AT_END"
+                  }
+                },
+                "required": [
+                  "videoId"
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "204": {
+            "description": "Success"
+          }
+        }
+      },
+      "patch": {
+        "summary": "set queue index",
+        "description": "Set the current index of the queue",
+        "requestBody": {
+          "description": "index to move the song to",
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "index": {
+                    "type": "integer",
+                    "minimum": 0
+                  }
+                },
+                "required": [
+                  "index"
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "204": {
+            "description": "Success"
+          }
+        }
+      },
+      "delete": {
+        "summary": "clear queue",
+        "description": "Clear the queue",
+        "responses": {
+          "204": {
+            "description": "Success"
+          }
+        }
+      }
+    },
+    "/api/v1/queue/next": {
+      "get": {
+        "summary": "get next song info",
+        "description": "Get information about the next song in the queue (relative index +1)",
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "title": {
+                      "type": "string"
+                    },
+                    "artist": {
+                      "type": "string"
+                    },
+                    "views": {
+                      "type": "number"
+                    },
+                    "uploadDate": {
+                      "type": "string"
+                    },
+                    "imageSrc": {
+                      "type": "string",
+                      "nullable": true
+                    },
+                    "isPaused": {
+                      "type": "boolean"
+                    },
+                    "songDuration": {
+                      "type": "number"
+                    },
+                    "elapsedSeconds": {
+                      "type": "number"
+                    },
+                    "url": {
+                      "type": "string"
+                    },
+                    "album": {
+                      "type": "string",
+                      "nullable": true
+                    },
+                    "videoId": {
+                      "type": "string"
+                    },
+                    "playlistId": {
+                      "type": "string"
+                    },
+                    "mediaType": {
+                      "type": "string",
+                      "enum": [
+                        "AUDIO",
+                        "ORIGINAL_MUSIC_VIDEO",
+                        "USER_GENERATED_CONTENT",
+                        "PODCAST_EPISODE",
+                        "OTHER_VIDEO"
+                      ]
+                    }
+                  },
+                  "required": [
+                    "title",
+                    "artist",
+                    "views",
+                    "songDuration",
+                    "videoId",
+                    "mediaType"
+                  ]
+                }
+              }
+            }
+          },
+          "204": {
+            "description": "No next song in queue"
+          }
+        }
+      }
+    },
+    "/api/v1/queue/{index}": {
+      "patch": {
+        "summary": "move song in queue",
+        "description": "Move a song in the queue",
+        "parameters": [
+          {
+            "schema": {
+              "type": "integer",
+              "nullable": true,
+              "minimum": 0
+            },
+            "required": false,
+            "name": "index",
+            "in": "path"
+          }
+        ],
+        "requestBody": {
+          "description": "index to move the song to",
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "toIndex": {
+                    "type": "number"
+                  }
+                },
+                "required": [
+                  "toIndex"
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "204": {
+            "description": "Success"
+          }
+        }
+      },
+      "delete": {
+        "summary": "remove song from queue",
+        "description": "Remove a song from the queue",
+        "parameters": [
+          {
+            "schema": {
+              "type": "integer",
+              "nullable": true,
+              "minimum": 0
+            },
+            "required": false,
+            "name": "index",
+            "in": "path"
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Success"
+          }
+        }
+      }
+    },
+    "/api/v1/search": {
+      "post": {
+        "summary": "search for a song",
+        "description": "search for a song",
+        "requestBody": {
+          "description": "search query",
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "query": {
+                    "type": "string"
+                  },
+                  "params": {
+                    "type": "string"
+                  },
+                  "continuation": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "query"
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {}
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/auth/{id}": {
+      "post": {
+        "summary": "",
+        "description": "",
+        "security": [],
+        "parameters": [
+          {
+            "schema": {
+              "type": "string"
+            },
+            "required": true,
+            "name": "id",
+            "in": "path"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "accessToken": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "accessToken"
+                  ]
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Forbidden"
+          }
+        }
+      }
+    },
+    "/api/v1/ws": {
+      "get": {
+        "summary": "websocket endpoint",
+        "description": "WebSocket endpoint for real-time updates",
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "description": "Authentication token. Required when the API server authStrategy is not NONE; optional otherwise."
+            },
+            "required": false,
+            "description": "Authentication token. Required when the API server authStrategy is not NONE; optional otherwise.",
+            "name": "token",
+            "in": "query"
+          }
+        ],
+        "responses": {
+          "101": {
+            "description": "Switching Protocols"
+          }
+        }
+      }
+    }
+  }
+}

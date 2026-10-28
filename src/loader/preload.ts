@@ -8,10 +8,7 @@ import { LoggerPrefix, startPlugin, stopPlugin } from '@/utils';
 import type { PreloadContext } from '@/types/contexts';
 import type { PluginConfig, PluginDef } from '@/types/plugins';
 
-const loadedPluginMap: Record<
-  string,
-  PluginDef<unknown, unknown, unknown>
-> = {};
+const loadedPluginMap: Record<string, PluginDef<unknown, unknown>> = {};
 const createContext = (id: string): PreloadContext<PluginConfig> => ({
   getConfig: async () =>
     deepmerge(
@@ -107,7 +104,7 @@ export const unloadAllPreloadPlugins = async () => {
 
 export const getLoadedPreloadPlugin = (
   id: string,
-): PluginDef<unknown, unknown, unknown> | undefined => {
+): PluginDef<unknown, unknown> | undefined => {
   return loadedPluginMap[id];
 };
 

@@ -8,7 +8,7 @@ import { YTNodes, type YT, type YTMusic } from 'youtubei.js';
 import { t } from '@/i18n';
 import { getSongInfo } from '@/providers/song-info-front';
 
-import { emitLocal, handleLocally, ipcRenderer } from './ipc';
+import { emitLocal, handleLocally, ipcRenderer } from '@/platform/ipc';
 import { getInnertube, poTokenFor } from './youtubei';
 
 interface SongOptions {

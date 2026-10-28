@@ -1,10 +1,6 @@
 import { t } from '@/i18n';
 
-import type {
-  BackendContext,
-  PreloadContext,
-  RendererContext,
-} from '@/types/contexts';
+import type { PreloadContext, RendererContext } from '@/types/contexts';
 import type {
   PluginDef,
   PluginConfig,
@@ -17,31 +13,16 @@ import type {
 export const LoggerPrefix = '[YTMusic]';
 
 export const createPlugin = <
-  BackendProperties,
   PreloadProperties,
   RendererProperties,
   Config extends PluginConfig = PluginConfig,
 >(
-  def: PluginDef<
-    BackendProperties,
-    PreloadProperties,
-    RendererProperties,
-    Config
-  > & {
+  def: PluginDef<PreloadProperties, RendererProperties, Config> & {
     config?: Omit<Config, 'enabled'> & {
       enabled: boolean;
     };
   },
 ) => def;
-
-export const createBackend = <
-  BackendProperties,
-  Config extends PluginConfig = PluginConfig,
->(
-  back: {
-    [Key in keyof BackendProperties]: BackendProperties[Key];
-  } & PluginLifecycle<Config, BackendContext<Config>, BackendProperties>,
-) => back;
 
 export const createPreload = <
   PreloadProperties,
@@ -66,13 +47,12 @@ export const createRenderer = <
 ) => renderer;
 
 type Options<Config extends PluginConfig> =
-  | { ctx: 'backend'; context: BackendContext<Config> }
   | { ctx: 'preload'; context: PreloadContext<Config> }
   | { ctx: 'renderer'; context: RendererContext<Config> };
 
 export const startPlugin = async <Config extends PluginConfig>(
   id: string,
-  def: PluginDef<unknown, unknown, unknown, Config>,
+  def: PluginDef<unknown, unknown, Config>,
   options: Options<Config>,
 ) => {
   const lifecycle =
@@ -93,7 +73,7 @@ export const startPlugin = async <Config extends PluginConfig>(
       Object.entries(defContext).forEach(([key, value]) => {
         if (typeof value === 'function') {
           // oxlint-disable-next-line typescript/no-unsafe-assignment,typescript/no-unsafe-call,typescript/no-unsafe-member-access
-          defContext[key as keyof typeof defContext] = value.bind(defContext);
+          (defContext as Record<string, unknown>)[key] = value.bind(defContext);
         }
       });
     }
@@ -130,7 +110,7 @@ export const startPlugin = async <Config extends PluginConfig>(
 
 export const stopPlugin = async <Config extends PluginConfig>(
   id: string,
-  def: PluginDef<unknown, unknown, unknown, Config>,
+  def: PluginDef<unknown, unknown, Config>,
   options: Options<Config>,
 ) => {
   if (!def || !def[options.ctx]) return false;

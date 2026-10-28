@@ -1,16 +1,15 @@
-import prompt from 'custom-electron-prompt';
 import { StatusDisplayType } from 'discord-api-types/v10';
 
 import { setMenuOptions } from '@/config/plugins';
 import { APPLICATION_NAME, t } from '@/i18n';
+import prompt from '@/platform/prompt';
 import { singleton } from '@/providers/decorators';
-import promptOptions from '@/providers/prompt-options';
 
 import { discordService } from './service';
 
 import type { DiscordPluginConfig } from './index';
-import type { MenuTemplate } from '@/menu';
 import type { MenuContext } from '@/types/contexts';
+import type { MenuItem, MenuTemplate } from '@/types/menu';
 
 const registerRefreshOnce = singleton((refreshMenu: () => void) => {
   discordService?.registerRefreshCallback(refreshMenu);
@@ -26,7 +25,6 @@ const DiscordStatusDisplayTypeLabels: Record<StatusDisplayType, string> = {
 };
 
 export const onMenu = async ({
-  window,
   getConfig,
   setConfig,
   refresh,
@@ -46,7 +44,7 @@ export const onMenu = async ({
       label: t('plugins.discord.menu.auto-reconnect'),
       type: 'checkbox',
       checked: config.autoReconnect,
-      click(item: Electron.MenuItem) {
+      click(item: MenuItem) {
         setConfig({
           autoReconnect: item.checked,
         });
@@ -60,7 +58,7 @@ export const onMenu = async ({
       label: t('plugins.discord.menu.clear-activity-after-timeout'),
       type: 'checkbox',
       checked: config.activityTimeoutEnabled,
-      click(item: Electron.MenuItem) {
+      click(item: MenuItem) {
         setConfig({
           activityTimeoutEnabled: item.checked,
         });
@@ -73,7 +71,7 @@ export const onMenu = async ({
         config[
           'playOn\u0059\u006f\u0075\u0054\u0075\u0062\u0065\u004d\u0075\u0073\u0069\u0063'
         ],
-      click(item: Electron.MenuItem) {
+      click(item: MenuItem) {
         setConfig({
           'playOn\u0059\u006f\u0075\u0054\u0075\u0062\u0065\u004d\u0075\u0073\u0069\u0063':
             item.checked,
@@ -84,7 +82,7 @@ export const onMenu = async ({
       label: t('plugins.discord.menu.hide-github-button'),
       type: 'checkbox',
       checked: config.hideGitHubButton,
-      click(item: Electron.MenuItem) {
+      click(item: MenuItem) {
         setConfig({
           hideGitHubButton: item.checked,
         });
@@ -94,7 +92,7 @@ export const onMenu = async ({
       label: t('plugins.discord.menu.hide-duration-left'),
       type: 'checkbox',
       checked: config.hideDurationLeft,
-      click(item: Electron.MenuItem) {
+      click(item: MenuItem) {
         setConfig({
           hideDurationLeft: item.checked,
         });
@@ -102,7 +100,7 @@ export const onMenu = async ({
     },
     {
       label: t('plugins.discord.menu.set-inactivity-timeout'),
-      click: () => setInactivityTimeout(window, config),
+      click: () => setInactivityTimeout(config),
     },
     {
       label: t('plugins.discord.menu.set-status-display-type.label'),
@@ -131,22 +129,15 @@ export const onMenu = async ({
   ];
 };
 
-async function setInactivityTimeout(
-  win: Electron.BrowserWindow,
-  options: DiscordPluginConfig,
-) {
-  const output = await prompt(
-    {
-      title: t('plugins.discord.prompt.set-inactivity-timeout.title'),
-      label: t('plugins.discord.prompt.set-inactivity-timeout.label'),
-      value: String(Math.round((options.activityTimeoutTime ?? 0) / 1e3)),
-      type: 'counter',
-      counterOptions: { minimum: 0, multiFire: true },
-      width: 450,
-      ...promptOptions(),
-    },
-    win,
-  );
+async function setInactivityTimeout(options: DiscordPluginConfig) {
+  const output = await prompt({
+    title: t('plugins.discord.prompt.set-inactivity-timeout.title'),
+    label: t('plugins.discord.prompt.set-inactivity-timeout.label'),
+    value: String(Math.round((options.activityTimeoutTime ?? 0) / 1e3)),
+    type: 'counter',
+    counterOptions: { minimum: 0, multiFire: true },
+    width: 450,
+  });
 
   if (output) {
     options.activityTimeoutTime = Math.round(~~output * 1e3);

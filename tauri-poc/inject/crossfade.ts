@@ -1,7 +1,7 @@
 // The `audio-url` backend of crossfade (src/plugins/crossfade/index.ts and
 // src/plugins/utils/main/youtubei.ts), run in the page with youtubei.js
 // (`./youtubei`).
-import { handleLocally } from './ipc';
+import { handleLocally } from '@/platform/ipc';
 import { getInnertube, poTokenFor } from './youtubei';
 
 const LOG_PREFIX = '[pear-tauri]';

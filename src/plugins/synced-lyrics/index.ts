@@ -7,28 +7,25 @@ import style from './style.css?inline';
 
 import type { SyncedLyricsPluginConfig } from './types';
 
-export default createPlugin<
-  unknown,
-  unknown,
-  typeof renderer,
-  SyncedLyricsPluginConfig
->({
-  name: () => t('plugins.synced-lyrics.name'),
-  description: () => t('plugins.synced-lyrics.description'),
-  authors: ['Non0reo', 'ArjixWasTaken', 'KimJammer', 'Strvm'],
-  restartNeeded: true,
-  addedVersion: '3.5.X',
-  config: {
-    enabled: false,
-    preciseTiming: true,
-    showLyricsEvenIfInexact: true,
-    showTimeCodes: false,
-    defaultTextString: '♪',
-    lineEffect: 'fancy',
-    romanization: true,
-  },
+export default createPlugin<unknown, typeof renderer, SyncedLyricsPluginConfig>(
+  {
+    name: () => t('plugins.synced-lyrics.name'),
+    description: () => t('plugins.synced-lyrics.description'),
+    authors: ['Non0reo', 'ArjixWasTaken', 'KimJammer', 'Strvm'],
+    restartNeeded: true,
+    addedVersion: '3.5.X',
+    config: {
+      enabled: false,
+      preciseTiming: true,
+      showLyricsEvenIfInexact: true,
+      showTimeCodes: false,
+      defaultTextString: '♪',
+      lineEffect: 'fancy',
+      romanization: true,
+    },
 
-  menu,
-  renderer,
-  stylesheets: [style],
-});
+    menu,
+    renderer,
+    stylesheets: [style],
+  },
+);

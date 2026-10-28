@@ -1,7 +1,7 @@
 //! The app config (`config.json`), owned by Rust. Port of `src/config/*` and
 //! of the config watcher in `src/index.ts#initHook`.
 //!
-//! The page keeps a synchronous mirror (`inject/compat/config.ts`): it is
+//! The page keeps a synchronous mirror (`src/config/store.ts`): it is
 //! seeded from the payload and replaced by every `pear:config` broadcast.
 
 use std::{

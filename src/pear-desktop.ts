@@ -1,5 +1,3 @@
-/// <reference types="electron-vite/node" />
-
 declare module '*.html' {
   const html: string;
 

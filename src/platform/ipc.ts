@@ -1,10 +1,20 @@
-// `window.ipcRenderer` backed by the Rust dispatcher (`src-tauri/src/ipc.rs`).
+// `window.ipcRenderer`, backed by the Rust dispatcher
+// (tauri-poc/src-tauri/src/ipc.rs).
 // Sends and invokes go to Rust as `{ channel, args }`; Rust pushes messages
 // back as `pear:ipc` events, which are fanned out to `on`/`once` listeners
 // with an Electron-style `(event, ...args)` signature.
 import { invoke, listen } from './tauri';
 
-type Listener = (event: unknown, ...args: unknown[]) => void;
+/** What listeners get first, where Electron passed its IpcRendererEvent */
+export interface IpcEvent {
+  sender: null;
+}
+
+// Arguments come from Rust untyped; listeners declare what they expect, as
+// they did with Electron's `...args: any[]`
+// oxlint-disable-next-line typescript/no-explicit-any
+export type IpcListener = (event: IpcEvent, ...args: any[]) => void;
+type Listener = IpcListener;
 
 const LOG_PREFIX = '[pear-tauri]';
 const listeners = new Map<string, Set<Listener>>();
@@ -32,8 +42,10 @@ export const emitLocal = (channel: string, ...args: unknown[]) => {
   }
 };
 
-void listen<{ channel: string; args: unknown[] }>('pear:ipc', ({ channel, args }) =>
+listen<{ channel: string; args: unknown[] }>('pear:ipc', ({ channel, args }) =>
   emitLocal(channel, ...args),
+).catch((error: unknown) =>
+  console.error(LOG_PREFIX, 'listening for IPC failed', error),
 );
 
 export const ipcRenderer = {
@@ -65,14 +77,14 @@ export const ipcRenderer = {
       console.error(LOG_PREFIX, `send '${channel}' failed`, error),
     );
   },
-  // Rejects when Rust has no handler, like Electron's ipcRenderer.invoke
-  invoke: async (channel: string, ...args: unknown[]) => {
+  // Rejects when Rust has no handler, like Electron's ipcRenderer.invoke.
+  // Resolves to `any` like Electron's: callers know the reply's shape.
+  // oxlint-disable-next-line typescript/no-explicit-any
+  invoke: async (channel: string, ...args: unknown[]): Promise<any> => {
     const local = localHandlers.get(channel);
     if (local) return await local(...args);
     return await invoke('ipc_invoke', { channel, args });
   },
-  sendSync(channel: string) {
-    throw new Error(`sendSync('${channel}') is not supported on Tauri`);
-  },
-  sendToHost() {},
 };
+
+export type IpcRenderer = typeof ipcRenderer;

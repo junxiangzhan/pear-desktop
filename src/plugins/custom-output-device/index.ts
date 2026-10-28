@@ -1,7 +1,5 @@
-import prompt from 'custom-electron-prompt';
-
 import { t } from '@/i18n';
-import promptOptions from '@/providers/prompt-options';
+import prompt from '@/platform/prompt';
 import { createPlugin } from '@/utils';
 
 import { renderer } from './renderer';
@@ -21,22 +19,18 @@ export default createPlugin({
     output: 'default',
     devices: {},
   } as CustomOutputPluginConfig,
-  menu: ({ setConfig, getConfig, window }) => {
+  menu: ({ setConfig, getConfig }) => {
     const promptDeviceSelector = async () => {
       const options = await getConfig();
 
-      const response = await prompt(
-        {
-          title: t('plugins.custom-output-device.prompt.device-selector.title'),
-          label: t('plugins.custom-output-device.prompt.device-selector.label'),
-          value: options.output || 'default',
-          type: 'select',
-          selectOptions: options.devices,
-          width: 500,
-          ...promptOptions(),
-        },
-        window,
-      ).catch(console.error);
+      const response = await prompt({
+        title: t('plugins.custom-output-device.prompt.device-selector.title'),
+        label: t('plugins.custom-output-device.prompt.device-selector.label'),
+        value: options.output || 'default',
+        type: 'select',
+        selectOptions: options.devices,
+        width: 500,
+      }).catch(console.error);
 
       if (!response) return;
       options.output = response;

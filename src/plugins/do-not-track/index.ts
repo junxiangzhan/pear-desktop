@@ -1,6 +1,5 @@
-import { contextBridge, webFrame } from 'electron';
-
 import { t } from '@/i18n';
+import { runInPage } from '@/platform/page';
 import { createPlugin } from '@/utils';
 
 import injectCosmeticFilters from './injectors/cosmetic-filters';
@@ -82,16 +81,16 @@ export default createPlugin({
       const config = await getConfig();
 
       if (config.blocker === blockers.InPlayer && !isInjected()) {
-        inject(contextBridge);
-        await webFrame.executeJavaScript(this.script);
+        inject();
+        runInPage(this.script);
       } else if (config.blocker === blockers.WithBlocklists) {
         injectCosmeticFilters();
       }
     },
-    async onConfigChange(newConfig) {
+    onConfigChange(newConfig) {
       if (newConfig.blocker === blockers.InPlayer && !isInjected()) {
-        inject(contextBridge);
-        await webFrame.executeJavaScript(this.script);
+        inject();
+        runInPage(this.script);
       }
     },
   },

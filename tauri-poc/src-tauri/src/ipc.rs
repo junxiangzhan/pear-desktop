@@ -1,4 +1,4 @@
-//! IPC between the page (`window.ipcRenderer`, see `inject/ipc.ts`) and Rust.
+//! IPC between the page (`window.ipcRenderer`, see `src/platform/ipc.ts`) and Rust.
 //!
 //! Plays the role of Electron's `ipcMain` + `webContents.send`:
 //! - page `send(channel, ...args)` → `ipc_send` → every listener on `channel`

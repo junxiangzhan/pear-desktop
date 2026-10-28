@@ -3,7 +3,7 @@
 // `peard:get-config` and to start Rust backends with the merged config.
 import { allPlugins } from 'virtual:plugins';
 
-import { invoke } from './tauri';
+import { invoke } from '@/platform/tauri';
 
 export interface ManifestEntry {
   id: string;

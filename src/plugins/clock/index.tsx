@@ -2,7 +2,7 @@ import { createSignal, onMount } from 'solid-js';
 import { render } from 'solid-js/web';
 
 import { t } from '@/i18n';
-import { type MenuTemplate } from '@/menu';
+import { type MenuTemplate } from '@/types/menu';
 import { createPlugin } from '@/utils';
 
 import style from './style.css?inline';

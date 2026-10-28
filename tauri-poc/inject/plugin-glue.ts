@@ -1,12 +1,12 @@
 // Plugin "backends" that only show UI, answered in the page: they need the
 // plugin's translations (i18n lives in TS) and open the Rust prompt window
-// through the `custom-electron-prompt` compat. Same strings and results as
+// (`@/platform/prompt`). Same strings and results as
 // the Electron backends they replace.
-import prompt from './compat/prompt';
+import prompt from '@/platform/prompt';
 import './crossfade';
 import './downloader';
-import { emitLocal, handleLocally, ipcRenderer } from './ipc';
-import { invoke } from './tauri';
+import { emitLocal, handleLocally, ipcRenderer } from '@/platform/ipc';
+import { invoke } from '@/platform/tauri';
 
 import { t } from '@/i18n';
 

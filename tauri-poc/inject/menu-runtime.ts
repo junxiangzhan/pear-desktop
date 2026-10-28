@@ -11,20 +11,20 @@ import { allPlugins } from 'virtual:plugins';
 import { APPLICATION_NAME } from '@/i18n';
 import { startingPages } from '@/providers/extracted-data';
 
-import * as config from './compat/config';
-import { emitLocal, ipcRenderer } from './ipc';
-import { invoke } from './tauri';
+import * as config from '@/config';
+import { emitLocal, ipcRenderer } from '@/platform/ipc';
+import { invoke } from '@/platform/tauri';
 
 import type { MenuContext } from '@/types/contexts';
 import type { PluginConfig } from '@/types/plugins';
-import type { MenuItemConstructorOptions } from 'electron';
+import type { MenuItemOptions, PluginWindow } from '@/types/menu';
 
 const LOG_PREFIX = '[pear-tauri]';
 
 interface SerializedItem {
   commandId?: number;
   label?: string;
-  type?: MenuItemConstructorOptions['type'];
+  type?: MenuItemOptions['type'];
   checked?: boolean;
   enabled?: boolean;
   visible?: boolean;
@@ -47,7 +47,7 @@ const unavailable = new Set(window.__PEAR_UNAVAILABLE_PLUGINS__ ?? []);
 
 interface Handler {
   item: { checked?: boolean };
-  click: NonNullable<MenuItemConstructorOptions['click']>;
+  click: NonNullable<MenuItemOptions['click']>;
 }
 
 let handlers = new Map<number, Handler>();
@@ -67,9 +67,9 @@ const windowFacade = new Proxy(
         console.warn(LOG_PREFIX, `menu called unsupported window.${String(property)}`, args);
     },
   },
-) as unknown as MenuContext<PluginConfig>['window'];
+) as unknown as PluginWindow;
 
-const serialize = (items: MenuItemConstructorOptions[], next: Map<number, Handler>): SerializedItem[] =>
+const serialize = (items: MenuItemOptions[], next: Map<number, Handler>): SerializedItem[] =>
   items.map((item) => {
     const serialized: SerializedItem = {
       label: item.label,
@@ -86,7 +86,7 @@ const serialize = (items: MenuItemConstructorOptions[], next: Map<number, Handle
       serialized.commandId = commandId;
     }
     if (Array.isArray(item.submenu)) {
-      serialized.submenu = serialize(item.submenu as MenuItemConstructorOptions[], next);
+      serialized.submenu = serialize(item.submenu as MenuItemOptions[], next);
     }
     return serialized;
   });

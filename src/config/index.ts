@@ -1,36 +1,31 @@
-import { deepmergeCustom } from 'deepmerge-ts';
+// The app config, owned by Rust (see ./store.ts). Same API as the Electron
+// app's electron-store wrapper, so it serves both as `window.mainConfig` and
+// as `@/config` for page modules.
+import { invoke } from '@/platform/tauri';
 
-import { restart } from '@/providers/app-controls';
-
-import { store, type IStore } from './store';
+import {
+  addWatcher,
+  getPath,
+  report,
+  restartIfWanted,
+  setPath,
+  setPathPartial,
+  type Watcher,
+} from './store';
 
 import type { defaultConfig } from './defaults';
-
-const deepmerge = deepmergeCustom({
-  mergeArrays: false,
-});
 
 export { defaultConfig } from './defaults';
 export * as plugins from './plugins';
 
-export const set = (key: string, value: unknown) => {
-  store.set(key, value);
-};
+export const set = (key: string, value: unknown) => setPath(key, value);
 
-export const setPartial = (
-  key: string,
-  value: object,
-  defaultValue?: object,
-) => {
-  const newValue = deepmerge(defaultValue ?? {}, store.get(key) ?? {}, value);
-  store.set(key, newValue);
-};
+export const setPartial = (key: string, value: object, defaultValue?: object) =>
+  setPathPartial(key, value, defaultValue);
 
 export const setMenuOption = (key: string, value: unknown) => {
   set(key, value);
-  if (store.get('options.restartOnConfigChanges')) {
-    restart();
-  }
+  restartIfWanted();
 };
 
 // MAGIC OF TYPESCRIPT
@@ -82,10 +77,8 @@ type PathValue<T, K extends string> =
     : T;
 
 export const get = <Key extends Paths<typeof defaultConfig>>(key: Key) =>
-  store.get(key) as PathValue<typeof defaultConfig, typeof key>;
+  getPath(key) as PathValue<typeof defaultConfig, typeof key>;
 
-export const edit = () => store.openInEditor();
+export const edit = () => invoke('config_edit').catch(report('open config'));
 
-export const watch = (cb: Parameters<IStore['onDidAnyChange']>[0]) => {
-  store.onDidAnyChange(cb);
-};
+export const watch = (callback: Watcher) => addWatcher(callback);

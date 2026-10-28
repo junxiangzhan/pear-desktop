@@ -11,7 +11,6 @@ export type DisableAutoPlayPluginConfig = {
 
 export default createPlugin<
   unknown,
-  unknown,
   {
     config: DisableAutoPlayPluginConfig | null;
     api: MusicPlayer | null;

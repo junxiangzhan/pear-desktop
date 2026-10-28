@@ -8,10 +8,7 @@ import type { RendererContext } from '@/types/contexts';
 import type { PluginConfig, PluginDef } from '@/types/plugins';
 
 const unregisterStyleMap: Record<string, (() => void)[]> = {};
-const loadedPluginMap: Record<
-  string,
-  PluginDef<unknown, unknown, unknown>
-> = {};
+const loadedPluginMap: Record<string, PluginDef<unknown, unknown>> = {};
 
 export const createContext = <Config extends PluginConfig>(
   id: string,
@@ -136,7 +133,7 @@ export const unloadAllRendererPlugins = async () => {
 
 export const getLoadedRendererPlugin = (
   id: string,
-): PluginDef<unknown, unknown, unknown> | undefined => {
+): PluginDef<unknown, unknown> | undefined => {
   return loadedPluginMap[id];
 };
 

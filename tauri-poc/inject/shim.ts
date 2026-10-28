@@ -1,15 +1,13 @@
-// Stand-ins for the globals that `src/preload.ts` exposes through Electron's
-// contextBridge, so the renderer bundle runs unchanged in the Tauri webview:
-// `ipcRenderer` talks to the Rust dispatcher, `mainConfig` mirrors the
-// Rust-owned config, `electronIs` reads the platform from the user agent.
+// The globals the renderer reads, which Electron's preload exposed through
+// its contextBridge: `ipcRenderer` talks to the Rust dispatcher, `mainConfig`
+// mirrors the Rust-owned config.
 //
 // This module must not import `virtual:plugins`: that pulls in every plugin,
 // and their top-level code would run before the globals below exist.
 // `plugin-stubs.ts` handles the plugin list once the globals are in place.
-import * as mainConfig from './compat/config';
-import electronIs from './compat/electron-is';
-import { emitLocal, ipcRenderer } from './ipc';
-import { invoke } from './tauri';
+import * as mainConfig from '@/config';
+import { emitLocal, ipcRenderer } from '@/platform/ipc';
+import { invoke } from '@/platform/tauri';
 
 import musicPlayerCss from '@/music-player.css?inline';
 
@@ -39,10 +37,8 @@ const crossOriginFetch: typeof fetch = async (input, init) => {
 
 Object.assign(window, {
   ipcRenderer,
-  electronIs,
   mainConfig,
   reload: () => location.reload(),
-  ELECTRON_RENDERER_URL: undefined,
   __pearCrossOriginFetch: crossOriginFetch,
   // No native window controls over a frameless window (Electron's
   // `titleBarOverlay`), so in-app-menu draws its own

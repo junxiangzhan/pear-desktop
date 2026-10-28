@@ -1,7 +1,7 @@
 declare module 'virtual:plugins' {
   import type { PluginConfig, PluginDef } from '@/types/plugins';
 
-  type Plugin = PluginDef<unknown, unknown, unknown, PluginConfig>;
+  type Plugin = PluginDef<unknown, unknown, PluginConfig>;
 
   export const mainPlugins: () => Promise<Record<string, Plugin>>;
   export const preloadPlugins: () => Promise<Record<string, Plugin>>;
