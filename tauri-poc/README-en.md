@@ -174,7 +174,7 @@ cd tauri-poc/src-tauri && pnpm dlx @tauri-apps/cli@2.12.4 android build --debug 
 
 `.github/workflows/tauri-poc-release.yml` builds, on Windows runners, the Windows installer (NSIS, not code-signed) and the Android arm64 APK (signed with the key below), and publishes them as a GitHub Release (pre-release).
 
-- **Releasing:** push a `tauri-vX.Y.Z` tag on `master`; X.Y.Z becomes the version (Android's versionCode is derived from it):
+- **Releasing:** push a `tauri-vX.Y.Z` tag on `master`; X.Y.Z becomes the version (Android's versionCode is derived from it; the 0.1.0 in `package.json` and `tauri.conf.json` is a placeholder and doesn't need bumping):
 
   ```bash
   git tag tauri-v0.2.0 && git push origin tauri-v0.2.0

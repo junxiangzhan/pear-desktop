@@ -1,24 +1,30 @@
 {
-  "name": "youtube-music",
-  "desktopName": "com.github.th-ch.youtube-music",
-  "productName": "YouTube Music",
-  "version": "3.12.0",
-  "description": "YouTube Music Desktop App - including custom plugins",
+  "name": "pear-tauri",
+  "productName": "Pear Tauri",
+  "private": true,
+  "version": "0.1.0",
+  "description": "Unofficial YouTube Music client for Windows and Android, built on Tauri v2, with the Pear Desktop plugins",
   "type": "module",
   "license": "MIT",
-  "repository": "pear-devs/pear-desktop",
+  "homepage": "https://github.com/junxiangzhan/pear-desktop",
+  "bugs": "https://github.com/junxiangzhan/pear-desktop/issues",
+  "repository": "junxiangzhan/pear-desktop",
   "author": {
-    "name": "th-ch",
-    "email": "th-ch@users.noreply.github.com",
-    "url": "https://github.com/pear-devs/pear-desktop"
+    "name": "junxiangzhan",
+    "url": "https://github.com/junxiangzhan"
   },
+  "contributors": [
+    {
+      "name": "th-ch and the Pear Desktop contributors",
+      "url": "https://github.com/pear-devs/pear-desktop"
+    }
+  ],
   "scripts": {
     "build": "vite build -c tauri-poc/vite.inject.config.mts",
     "clean": "pnpm del-cli tauri-poc/src-tauri/inject",
     "lint": "pnpm oxlint --type-aware src",
     "format": "pnpm oxfmt --write src",
     "format:check": "pnpm oxfmt --check src",
-    "changelog": "pnpm dlx auto-changelog",
     "typecheck": "pnpm tsc -p tsconfig.json --noEmit",
     "check": "pnpm lint && pnpm format:check && pnpm typecheck"
   },
@@ -81,11 +87,5 @@
     "vite": "8.1.0",
     "vite-plugin-resolve": "2.5.2",
     "vite-plugin-solid": "2.11.12"
-  },
-  "auto-changelog": {
-    "hideCredit": true,
-    "package": true,
-    "unreleased": true,
-    "output": "changelog.md"
   }
 }
