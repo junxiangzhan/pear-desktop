@@ -1,6 +1,6 @@
 //! IPC with the page when it runs in GeckoView (Android, GECKOVIEW-PLAN.md).
 //!
-//! The page has no `__TAURI_INTERNALS__` there: `inject/tauri.ts` sends
+//! The page has no `__TAURI_INTERNALS__` there: `src/platform/tauri.ts` sends
 //! `{ id, cmd, args }` to the built-in extension (assets/pear-gecko), which
 //! forwards it over native messaging to `GeckoBridgePlugin` (Kotlin), and
 //! that over a [`Channel`] to here. Commands run the same functions as the

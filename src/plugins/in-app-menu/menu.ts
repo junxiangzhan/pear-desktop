@@ -1,10 +1,9 @@
-import is from 'electron-is';
-
 import { t } from '@/i18n';
+import is from '@/platform/is';
 
 import type { InAppMenuConfig } from './constants';
-import type { MenuTemplate } from '@/menu';
 import type { MenuContext } from '@/types/contexts';
+import type { MenuTemplate } from '@/types/menu';
 
 export const onMenu = async ({
   getConfig,

@@ -1,13 +1,11 @@
-import { type MenuItem } from 'electron';
-import is from 'electron-is';
-
 import { t } from '@/i18n';
+import is from '@/platform/is';
 
 import { snakeToCamel, ToastStyles, urgencyLevels } from './constants';
 
 import type { NotificationsPluginConfig } from './index';
-import type { MenuTemplate } from '@/menu';
 import type { MenuContext } from '@/types/contexts';
+import type { MenuItem, MenuItemOptions, MenuTemplate } from '@/types/menu';
 
 export const onMenu = async ({
   getConfig,
@@ -25,10 +23,10 @@ export const onMenu = async ({
         type: 'radio',
         checked: options.toastStyle === index,
         click: () => setConfig({ toastStyle: index }),
-      } satisfies Electron.MenuItemConstructorOptions;
+      } satisfies MenuItemOptions;
     }
 
-    return array as Electron.MenuItemConstructorOptions[];
+    return array as MenuTemplate;
   };
 
   const getMenu = (): MenuTemplate => {

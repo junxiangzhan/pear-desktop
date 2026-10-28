@@ -1,13 +1,12 @@
-import prompt, { type KeybindOptions } from 'custom-electron-prompt';
-import { type MenuItem } from 'electron';
-
 import { t } from '@/i18n';
-import promptOptions from '@/providers/prompt-options';
+import prompt, { type KeybindOptions } from '@/platform/prompt';
 import { createPlugin } from '@/utils';
 
 import { overrideListener } from './override';
 import { onConfigChange, onPlayerApiReady } from './renderer';
 import hudStyle from './volume-hud.css?inline';
+
+import type { MenuItem } from '@/types/menu';
 
 export type PreciseVolumePluginConfig = {
   enabled: boolean;
@@ -44,7 +43,7 @@ export default createPlugin({
     savedVolume: undefined,
   } as PreciseVolumePluginConfig,
   stylesheets: [hudStyle],
-  menu: async ({ setConfig, getConfig, window }) => {
+  menu: async ({ setConfig, getConfig }) => {
     const config = await getConfig();
 
     function changeOptions(
@@ -73,18 +72,14 @@ export default createPlugin({
     });
 
     async function promptVolumeSteps(options: PreciseVolumePluginConfig) {
-      const output = await prompt(
-        {
-          title: t('plugins.precise-volume.prompt.volume-steps.title'),
-          label: t('plugins.precise-volume.prompt.volume-steps.label'),
-          value: options.steps || 1,
-          type: 'counter',
-          counterOptions: { minimum: 0, maximum: 100, multiFire: true },
-          width: 380,
-          ...promptOptions(),
-        },
-        window,
-      );
+      const output = await prompt({
+        title: t('plugins.precise-volume.prompt.volume-steps.title'),
+        label: t('plugins.precise-volume.prompt.volume-steps.label'),
+        value: options.steps || 1,
+        type: 'counter',
+        counterOptions: { minimum: 0, maximum: 100, multiFire: true },
+        width: 380,
+      });
 
       if (output || output === 0) {
         // 0 is somewhat valid
@@ -96,31 +91,27 @@ export default createPlugin({
       options: PreciseVolumePluginConfig,
       item: MenuItem,
     ) {
-      const output = await prompt(
-        {
-          title: t('plugins.precise-volume.prompt.global-shortcuts.title'),
-          label: t('plugins.precise-volume.prompt.global-shortcuts.label'),
-          type: 'keybind',
-          keybindOptions: [
-            kb(
-              t(
-                'plugins.precise-volume.prompt.global-shortcuts.keybind-options.increase',
-              ),
-              'volumeUp',
-              options.globalShortcuts?.volumeUp,
+      const output = await prompt({
+        title: t('plugins.precise-volume.prompt.global-shortcuts.title'),
+        label: t('plugins.precise-volume.prompt.global-shortcuts.label'),
+        type: 'keybind',
+        keybindOptions: [
+          kb(
+            t(
+              'plugins.precise-volume.prompt.global-shortcuts.keybind-options.increase',
             ),
-            kb(
-              t(
-                'plugins.precise-volume.prompt.global-shortcuts.keybind-options.decrease',
-              ),
-              'volumeDown',
-              options.globalShortcuts?.volumeDown,
+            'volumeUp',
+            options.globalShortcuts?.volumeUp,
+          ),
+          kb(
+            t(
+              'plugins.precise-volume.prompt.global-shortcuts.keybind-options.decrease',
             ),
-          ],
-          ...promptOptions(),
-        },
-        window,
-      );
+            'volumeDown',
+            options.globalShortcuts?.volumeDown,
+          ),
+        ],
+      });
 
       if (output) {
         const newGlobalShortcuts: {

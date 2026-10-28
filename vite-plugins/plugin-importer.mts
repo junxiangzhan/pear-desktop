@@ -83,10 +83,8 @@ export const pluginVirtualModuleGenerator = (
       }
 
       writer.blankLine();
-      if (modes.includes('main') || modes.includes('preload')) {
-        writer.writeLine("import is from 'electron-is';");
-        writer.writeLine('globalThis.electronIs = is;');
-      }
+      // `supportsPlatform` below reads it
+      writer.writeLine("import is from '@/platform/is';");
       writer.write(supportsPlatform.toString());
       writer.blankLine();
 
@@ -146,12 +144,11 @@ export const pluginVirtualModuleGenerator = (
   return src.getText();
 };
 
+// In scope in the generated module, which imports it
+declare const is: typeof import('../src/platform/is').default;
+
 function supportsPlatform({ platform }: { platform: string }) {
   if (typeof platform !== 'number') return true;
-
-  const is = (globalThis as typeof globalThis & {
-    electronIs: typeof import('electron-is');
-  }).electronIs;
 
   if (is.windows()) return (platform & Platform.Windows) !== 0;
   if (is.macOS()) return (platform & Platform.macOS) !== 0;

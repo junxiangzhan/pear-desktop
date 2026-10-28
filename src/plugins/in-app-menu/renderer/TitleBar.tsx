@@ -1,4 +1,3 @@
-import { type Menu, type MenuItem } from 'electron';
 import {
   createEffect,
   createResource,
@@ -23,6 +22,24 @@ import { WindowController } from './WindowController';
 
 import type { InAppMenuConfig } from '../constants';
 import type { RendererContext } from '@/types/contexts';
+
+/** The app menu as Rust hands it over (`get-menu`, `get-menu-by-id`) */
+interface MenuItem {
+  commandId: number;
+  id: string;
+  label: string;
+  sublabel?: string;
+  toolTip?: string;
+  type: 'normal' | 'separator' | 'submenu' | 'checkbox' | 'radio';
+  checked: boolean;
+  enabled: boolean;
+  visible: boolean;
+  submenu?: Menu;
+}
+
+interface Menu {
+  items: MenuItem[];
+}
 
 const titleStyle = cacheNoArgs(
   () => css`
@@ -106,7 +123,7 @@ const animationStyle = cacheNoArgs(() => ({
 }));
 
 export type PanelRendererProps = {
-  items: Electron.Menu['items'];
+  items: Menu['items'];
   level?: number[];
   onClick?: (commandId: number, radioGroup?: MenuItem[]) => void;
 };
@@ -281,7 +298,7 @@ export const TitleBar = (props: TitleBarProps) => {
       setIgnoreTransition(false);
     });
     props.ipc.on('toggle-in-app-menu', () => {
-      setCollapsed(!collapsed());
+      setCollapsed((value) => !value);
     });
 
     props.ipc.on('window-maximize', refetchMaximize);

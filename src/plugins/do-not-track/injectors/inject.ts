@@ -6,8 +6,6 @@
  * https://github.com/gorhill/uBlock/blob/5de0ce975753b7565759ac40983d31978d1f84ca/assets/resources/scriptlets.js#L704
  */
 
-import type { ContextBridge } from 'electron';
-
 interface PrunableResponse {
   playerAds?: unknown;
   adPlacements?: unknown;
@@ -30,7 +28,7 @@ let injected = false;
 
 export const isInjected = (): boolean => injected;
 
-export const inject = (contextBridge: ContextBridge): void => {
+export const inject = (): void => {
   injected = true;
   {
     const pruner = (o: PrunableResponse): PrunableResponse => {
@@ -54,7 +52,7 @@ export const inject = (contextBridge: ContextBridge): void => {
       return o;
     };
 
-    contextBridge.exposeInMainWorld('_pruner', pruner);
+    (window as unknown as { _pruner: typeof pruner })._pruner = pruner;
   }
 
   const chains = [

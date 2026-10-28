@@ -1,4 +1,5 @@
 import { t } from '@/i18n';
+import is from '@/platform/is';
 import { createPlugin } from '@/utils';
 
 import type { Segment } from './types';
@@ -45,7 +46,7 @@ export default createPlugin({
             target.currentTime < segment[1]
           ) {
             target.currentTime = segment[1];
-            if (window.electronIs.dev()) {
+            if (is.dev()) {
               console.log('SponsorBlock: skipping segment', segment);
             }
           }

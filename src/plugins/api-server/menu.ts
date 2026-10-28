@@ -1,8 +1,6 @@
-import prompt from 'custom-electron-prompt';
-import { dialog } from 'electron';
-
 import { t } from '@/i18n';
-import promptOptions from '@/providers/prompt-options';
+import { showOpenDialog } from '@/platform/dialog';
+import prompt from '@/platform/prompt';
 
 import {
   type APIServerConfig,
@@ -10,13 +8,12 @@ import {
   defaultAPIServerConfig,
 } from './config';
 
-import type { MenuTemplate } from '@/menu';
 import type { MenuContext } from '@/types/contexts';
+import type { MenuTemplate } from '@/types/menu';
 
 export const onMenu = async ({
   getConfig,
   setConfig,
-  window,
 }: MenuContext<APIServerConfig>): Promise<MenuTemplate> => {
   const config = await getConfig();
 
@@ -28,17 +25,13 @@ export const onMenu = async ({
         const config = await getConfig();
 
         const newHostname =
-          (await prompt(
-            {
-              title: t('plugins.api-server.prompt.hostname.title'),
-              label: t('plugins.api-server.prompt.hostname.label'),
-              value: config.hostname,
-              type: 'input',
-              width: 380,
-              ...promptOptions(),
-            },
-            window,
-          )) ??
+          (await prompt({
+            title: t('plugins.api-server.prompt.hostname.title'),
+            label: t('plugins.api-server.prompt.hostname.label'),
+            value: config.hostname,
+            type: 'input',
+            width: 380,
+          })) ??
           config.hostname ??
           defaultAPIServerConfig.hostname;
 
@@ -52,18 +45,14 @@ export const onMenu = async ({
         const config = await getConfig();
 
         const newPort =
-          (await prompt(
-            {
-              title: t('plugins.api-server.prompt.port.title'),
-              label: t('plugins.api-server.prompt.port.label'),
-              value: config.port,
-              type: 'counter',
-              counterOptions: { minimum: 0, maximum: 65565 },
-              width: 380,
-              ...promptOptions(),
-            },
-            window,
-          )) ??
+          (await prompt({
+            title: t('plugins.api-server.prompt.port.title'),
+            label: t('plugins.api-server.prompt.port.label'),
+            value: config.port,
+            type: 'counter',
+            counterOptions: { minimum: 0, maximum: 65565 },
+            width: 380,
+          })) ??
           config.port ??
           defaultAPIServerConfig.port;
 
@@ -111,7 +100,7 @@ export const onMenu = async ({
           type: 'normal',
           async click() {
             const config = await getConfig();
-            const result = await dialog.showOpenDialog(window, {
+            const result = await showOpenDialog({
               title: t(
                 'plugins.api-server.menu.https.submenu.cert.dialogTitle',
               ),
@@ -128,7 +117,7 @@ export const onMenu = async ({
           type: 'normal',
           async click() {
             const config = await getConfig();
-            const result = await dialog.showOpenDialog(window, {
+            const result = await showOpenDialog({
               title: t('plugins.api-server.menu.https.submenu.key.dialogTitle'),
               filters: [{ name: 'Private Key', extensions: ['key', 'pem'] }],
               properties: ['openFile'],

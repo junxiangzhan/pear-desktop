@@ -8,8 +8,8 @@ import {
   type FilterConfig,
 } from './presets';
 
-import type { MenuTemplate } from '@/menu';
 import type { MenuContext } from '@/types/contexts';
+import type { MenuTemplate } from '@/types/menu';
 
 export type EqualizerPluginConfig = {
   enabled: boolean;

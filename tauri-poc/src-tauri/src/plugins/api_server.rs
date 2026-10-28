@@ -1,10 +1,11 @@
 //! Port of the `api-server` backend (src/plugins/api-server/backend/): the
 //! same REST + WebSocket API and JWT auth, on axum instead of Hono.
 //!
-//! The OpenAPI document (`/doc`) and Swagger UI page (`/swagger`) come from
-//! the zod route schemas, which only run in JavaScript: the inject build
-//! generates both (tauri-poc/scripts/api-openapi.mts) and they are served
-//! as they are. Like Electron's, the page loads Swagger UI from jsDelivr.
+//! The OpenAPI document (`/doc`) and Swagger UI page (`/swagger`) are
+//! static files in `api-docs/`. The document was generated from the
+//! Electron backend's zod route schemas (see the `electron-reference` tag);
+//! update it by hand when a route changes. Like Electron's, the page loads
+//! Swagger UI from jsDelivr.
 
 use std::{
     collections::HashMap,
@@ -476,7 +477,7 @@ fn router(shared: Arc<Shared>) -> Router {
             get(|| async {
                 (
                     [(header::CONTENT_TYPE, "application/json")],
-                    include_str!("../../inject/api-openapi.json"),
+                    include_str!("../../api-docs/openapi.json"),
                 )
             }),
         )
@@ -485,7 +486,7 @@ fn router(shared: Arc<Shared>) -> Router {
             get(|| async {
                 (
                     [(header::CONTENT_TYPE, "text/html; charset=UTF-8")],
-                    include_str!("../../inject/api-swagger.html"),
+                    include_str!("../../api-docs/swagger.html"),
                 )
             }),
         )

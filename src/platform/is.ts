@@ -1,4 +1,5 @@
-// `electron-is` for the page bundle: platform from the user agent, never dev.
+// Platform checks for the page, from the user agent. Same API as electron-is,
+// which plugins were written against; the page bundle is never a dev build.
 const ua = navigator.userAgent;
 const platform = {
   windows: /Windows/.test(ua),

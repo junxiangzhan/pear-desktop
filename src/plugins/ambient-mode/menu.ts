@@ -1,9 +1,9 @@
-import { type MenuItemConstructorOptions } from 'electron';
-
 import { t } from '@/i18n';
 import { type MenuContext } from '@/types/contexts';
 
 import { type AmbientModePluginConfig } from './types';
+
+import type { MenuItem, MenuTemplate } from '@/types/menu';
 
 export interface menuParameters {
   getConfig: () => AmbientModePluginConfig | Promise<AmbientModePluginConfig>;
@@ -14,9 +14,7 @@ export interface menuParameters {
 
 export const menu: (
   ctx: MenuContext<AmbientModePluginConfig>,
-) =>
-  | MenuItemConstructorOptions[]
-  | Promise<MenuItemConstructorOptions[]> = async ({
+) => MenuTemplate | Promise<MenuTemplate> = async ({
   getConfig,
   setConfig,
 }: menuParameters) => {
@@ -113,7 +111,7 @@ export const menu: (
       label: t('plugins.ambient-mode.menu.use-fullscreen.label'),
       type: 'checkbox',
       checked: config.fullscreen,
-      click(item: Electron.MenuItem) {
+      click(item: MenuItem) {
         setConfig({ fullscreen: item.checked });
       },
     },

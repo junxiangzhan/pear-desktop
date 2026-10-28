@@ -1,9 +1,5 @@
-import type {
-  BackendContext,
-  MenuContext,
-  PreloadContext,
-  RendererContext,
-} from './contexts';
+import type { MenuContext, PreloadContext, RendererContext } from './contexts';
+import type { MenuTemplate } from './menu';
 import type { MusicPlayer } from '@/types/music-player';
 
 type Author = string;
@@ -45,7 +41,6 @@ export enum Platform {
 }
 
 export interface PluginDef<
-  BackendProperties,
   PreloadProperties,
   RendererProperties,
   Config extends PluginConfig = PluginConfig,
@@ -57,17 +52,10 @@ export interface PluginDef<
   config?: Config;
   platform?: Platform;
 
-  menu?: (
-    ctx: MenuContext<Config>,
-  ) =>
-    | Promise<Electron.MenuItemConstructorOptions[]>
-    | Electron.MenuItemConstructorOptions[];
+  menu?: (ctx: MenuContext<Config>) => Promise<MenuTemplate> | MenuTemplate;
   stylesheets?: string[];
   restartNeeded?: boolean;
 
-  backend?: {
-    [Key in keyof BackendProperties]: BackendProperties[Key];
-  } & PluginLifecycle<Config, BackendContext<Config>, BackendProperties>;
   preload?: {
     [Key in keyof PreloadProperties]: PreloadProperties[Key];
   } & PluginLifecycle<Config, PreloadContext<Config>, PreloadProperties>;

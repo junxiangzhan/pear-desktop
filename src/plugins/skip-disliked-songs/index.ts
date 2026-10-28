@@ -4,7 +4,6 @@ import { waitForElement } from '@/utils/wait-for-element';
 
 export default createPlugin<
   unknown,
-  unknown,
   {
     observer?: MutationObserver;
     start(): void;

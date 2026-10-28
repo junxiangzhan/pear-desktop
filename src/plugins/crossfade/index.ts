@@ -1,13 +1,10 @@
-import prompt from 'custom-electron-prompt';
-
 import { t } from '@/i18n';
-import promptOptions from '@/providers/prompt-options';
+import prompt from '@/platform/prompt';
 import { createPlugin } from '@/utils';
 
 import { type VolumeControl, VolumeFader } from './fader';
 
 import type { RendererContext } from '@/types/contexts';
-import type { BrowserWindow } from 'electron';
 
 export type CrossfadePluginConfig = {
   enabled: boolean;
@@ -18,7 +15,6 @@ export type CrossfadePluginConfig = {
 };
 
 export default createPlugin<
-  unknown,
   unknown,
   {
     config?: CrossfadePluginConfig;
@@ -57,72 +53,67 @@ export default createPlugin<
      */
     fadeScaling: 'linear',
   },
-  menu({ window, getConfig, setConfig }) {
+  menu({ getConfig, setConfig }) {
     const promptCrossfadeValues = async (
-      win: BrowserWindow,
       options: CrossfadePluginConfig,
     ): Promise<Omit<CrossfadePluginConfig, 'enabled'> | undefined> => {
-      const res = await prompt(
-        {
-          title: t('plugins.crossfade.prompt.options'),
-          type: 'multiInput',
-          multiInputOptions: [
-            {
-              label: t(
-                'plugins.crossfade.prompt.options.multi-input.fade-in-duration',
-              ),
-              value: options.fadeInDuration,
-              inputAttrs: {
-                type: 'number',
-                required: true,
-                min: '0',
-                step: '100',
-              },
+      const res = await prompt({
+        title: t('plugins.crossfade.prompt.options'),
+        type: 'multiInput',
+        multiInputOptions: [
+          {
+            label: t(
+              'plugins.crossfade.prompt.options.multi-input.fade-in-duration',
+            ),
+            value: options.fadeInDuration,
+            inputAttrs: {
+              type: 'number',
+              required: true,
+              min: '0',
+              step: '100',
             },
-            {
-              label: t(
-                'plugins.crossfade.prompt.options.multi-input.fade-out-duration',
-              ),
-              value: options.fadeOutDuration,
-              inputAttrs: {
-                type: 'number',
-                required: true,
-                min: '0',
-                step: '100',
-              },
+          },
+          {
+            label: t(
+              'plugins.crossfade.prompt.options.multi-input.fade-out-duration',
+            ),
+            value: options.fadeOutDuration,
+            inputAttrs: {
+              type: 'number',
+              required: true,
+              min: '0',
+              step: '100',
             },
-            {
-              label: t(
-                'plugins.crossfade.prompt.options.multi-input.seconds-before-end',
-              ),
-              value: options.secondsBeforeEnd,
-              inputAttrs: {
-                type: 'number',
-                required: true,
-                min: '0',
-              },
+          },
+          {
+            label: t(
+              'plugins.crossfade.prompt.options.multi-input.seconds-before-end',
+            ),
+            value: options.secondsBeforeEnd,
+            inputAttrs: {
+              type: 'number',
+              required: true,
+              min: '0',
             },
-            {
-              label: t(
-                'plugins.crossfade.prompt.options.multi-input.fade-scaling.label',
+          },
+          {
+            label: t(
+              'plugins.crossfade.prompt.options.multi-input.fade-scaling.label',
+            ),
+            selectOptions: {
+              linear: t(
+                'plugins.crossfade.prompt.options.multi-input.fade-scaling.linear',
               ),
-              selectOptions: {
-                linear: t(
-                  'plugins.crossfade.prompt.options.multi-input.fade-scaling.linear',
-                ),
-                logarithmic: t(
-                  'plugins.crossfade.prompt.options.multi-input.fade-scaling.logarithmic',
-                ),
-              },
-              value: options.fadeScaling,
+              logarithmic: t(
+                'plugins.crossfade.prompt.options.multi-input.fade-scaling.logarithmic',
+              ),
             },
-          ],
-          resizable: true,
-          height: 360,
-          ...promptOptions(),
-        },
-        win,
-      ).catch(console.error);
+            value: options.fadeScaling,
+          },
+        ],
+        resizable: true,
+        height: 360,
+      }).catch(console.error);
 
       if (!res) {
         return undefined;
@@ -149,10 +140,7 @@ export default createPlugin<
       {
         label: t('plugins.crossfade.menu.advanced'),
         async click() {
-          const newOptions = await promptCrossfadeValues(
-            window,
-            await getConfig(),
-          );
+          const newOptions = await promptCrossfadeValues(await getConfig());
           if (newOptions) {
             setConfig(newOptions);
           }

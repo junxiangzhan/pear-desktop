@@ -1,11 +1,9 @@
-import prompt from 'custom-electron-prompt';
-
 import { t } from '@/i18n';
-import promptOptions from '@/providers/prompt-options';
+import prompt from '@/platform/prompt';
 
 import type { PictureInPicturePluginConfig } from './index';
-import type { MenuTemplate } from '@/menu';
 import type { MenuContext } from '@/types/contexts';
+import type { MenuTemplate } from '@/types/menu';
 
 export const onMenu = async ({
   window,
@@ -45,24 +43,20 @@ export const onMenu = async ({
       type: 'checkbox',
       checked: !!config.hotkey,
       async click(item) {
-        const output = await prompt(
-          {
-            title: t('plugins.picture-in-picture.menu.prompt.title'),
-            label: t('plugins.picture-in-picture.menu.prompt.label'),
-            type: 'keybind',
-            keybindOptions: [
-              {
-                value: 'hotkey',
-                label: t(
-                  'plugins.picture-in-picture.menu.prompt.keybind-options.hotkey',
-                ),
-                default: config.hotkey,
-              },
-            ],
-            ...promptOptions(),
-          },
-          window,
-        );
+        const output = await prompt({
+          title: t('plugins.picture-in-picture.menu.prompt.title'),
+          label: t('plugins.picture-in-picture.menu.prompt.label'),
+          type: 'keybind',
+          keybindOptions: [
+            {
+              value: 'hotkey',
+              label: t(
+                'plugins.picture-in-picture.menu.prompt.keybind-options.hotkey',
+              ),
+              default: config.hotkey,
+            },
+          ],
+        });
 
         if (output) {
           const { value, accelerator } = output[0];

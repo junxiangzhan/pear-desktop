@@ -1,21 +1,19 @@
-import prompt from 'custom-electron-prompt';
 import { deepmerge } from 'deepmerge-ts';
-import { dialog } from 'electron';
 
 import { t } from '@/i18n';
-import promptOptions from '@/providers/prompt-options';
+import { showOpenDialog } from '@/platform/dialog';
+import prompt from '@/platform/prompt';
 
 import { type DownloaderPluginConfig, defaultConfig } from './index';
 import { DefaultPresetList } from './types';
 
-import type { MenuTemplate } from '@/menu';
 import type { MenuContext } from '@/types/contexts';
+import type { MenuTemplate } from '@/types/menu';
 
 type MenuItem = MenuTemplate[number];
 
-// The async dialog: the native one answers over IPC
 const pickFolder = async (defaultPath?: string) => {
-  const result = await dialog.showOpenDialog({
+  const result = await showOpenDialog({
     properties: ['openDirectory', 'createDirectory'],
     defaultPath,
   });
@@ -170,7 +168,6 @@ export const onMenu = async ({
                     defaultConfig.downloadOnFinish!.percent,
                 },
               ],
-              ...promptOptions(),
               height: 240,
               resizable: true,
             }).catch(console.error);

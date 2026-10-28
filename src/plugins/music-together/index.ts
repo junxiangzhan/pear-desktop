@@ -39,7 +39,6 @@ type RawAccountData = {
 
 export default createPlugin<
   unknown,
-  unknown,
   {
     connection?: Connection;
     ipc?: RendererContext<never>['ipc'];

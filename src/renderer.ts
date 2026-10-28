@@ -4,6 +4,7 @@ import 'mdui/mdui.css';
 import 'mdui';
 
 import { loadI18n, setLanguage, t as i18t } from '@/i18n';
+import is from '@/platform/is';
 import {
   defaultTrustedTypePolicy,
   registerWindowDefaultTrustedTypePolicy,
@@ -51,11 +52,11 @@ async function onApiLoaded() {
   // Workaround for macOS traffic lights
   {
     let osType = 'Unknown';
-    if (window.electronIs.osx()) {
+    if (is.osx()) {
       osType = 'Macintosh';
-    } else if (window.electronIs.windows()) {
+    } else if (is.windows()) {
       osType = 'Windows';
-    } else if (window.electronIs.linux()) {
+    } else if (is.linux()) {
       osType = 'Linux';
     }
     document.documentElement.setAttribute('data-os', osType);
@@ -505,7 +506,7 @@ const main = async () => {
   setInterval(() => (window._lact = Date.now()), 900_000);
 
   // Setup back to front logger
-  if (window.electronIs.dev()) {
+  if (is.dev()) {
     window.ipcRenderer.on('log', (_event, log: string) => {
       console.log(JSON.parse(log));
     });

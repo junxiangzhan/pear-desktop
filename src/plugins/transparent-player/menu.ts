@@ -1,6 +1,5 @@
-import is from 'electron-is';
-
 import { t } from '@/i18n';
+import is from '@/platform/is';
 
 import {
   MaterialType,
@@ -9,8 +8,8 @@ import {
   type TransparentPlayerConfig,
 } from './types';
 
-import type { MenuTemplate } from '@/menu';
 import type { MenuContext } from '@/types/contexts';
+import type { MenuTemplate } from '@/types/menu';
 
 const opacityList = [0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1];
 

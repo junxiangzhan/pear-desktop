@@ -52,7 +52,7 @@ pub fn need_restart(app: &AppHandle, plugin_id: &str) {
         });
 }
 
-/// `dialog.showOpenDialog` for page-side menus (`inject/compat/electron.ts`):
+/// `showOpenDialog` for page-side menus (`src/platform/dialog.ts`):
 /// title, filters and `defaultPath`, one file or one folder
 /// (`openDirectory`), answered like Electron.
 pub fn register_ipc(ipc: &Ipc) {

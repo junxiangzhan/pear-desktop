@@ -4,11 +4,11 @@ import { providerNames } from './providers';
 
 import type { SyncedLyricsPluginConfig } from './types';
 import type { MenuContext } from '@/types/contexts';
-import type { MenuItemConstructorOptions } from 'electron';
+import type { MenuTemplate } from '@/types/menu';
 
 export const menu = async (
   ctx: MenuContext<SyncedLyricsPluginConfig>,
-): Promise<MenuItemConstructorOptions[]> => {
+): Promise<MenuTemplate> => {
   const config = await ctx.getConfig();
 
   return [

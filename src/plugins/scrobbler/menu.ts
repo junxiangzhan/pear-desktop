@@ -1,13 +1,10 @@
-import prompt from 'custom-electron-prompt';
-import { type BrowserWindow } from 'electron';
-
 import { t } from '@/i18n';
-import promptOptions from '@/providers/prompt-options';
+import prompt from '@/platform/prompt';
 
 import { type ScrobblerPluginConfig } from './index';
 
-import type { MenuTemplate } from '@/menu';
 import type { MenuContext } from '@/types/contexts';
+import type { MenuTemplate } from '@/types/menu';
 
 type SetConfType = (
   conf: Partial<Omit<ScrobblerPluginConfig, 'enabled'>>,
@@ -16,35 +13,30 @@ type SetConfType = (
 async function promptLastFmOptions(
   options: ScrobblerPluginConfig,
   setConfig: SetConfType,
-  window: BrowserWindow,
 ) {
-  const output = await prompt(
-    {
-      title: t('plugins.scrobbler.menu.lastfm.api-settings'),
-      label: t('plugins.scrobbler.menu.lastfm.api-settings'),
-      type: 'multiInput',
-      multiInputOptions: [
-        {
-          label: t('plugins.scrobbler.prompt.lastfm.api-key'),
-          value: options.scrobblers.lastfm?.apiKey,
-          inputAttrs: {
-            type: 'text',
-          },
+  const output = await prompt({
+    title: t('plugins.scrobbler.menu.lastfm.api-settings'),
+    label: t('plugins.scrobbler.menu.lastfm.api-settings'),
+    type: 'multiInput',
+    multiInputOptions: [
+      {
+        label: t('plugins.scrobbler.prompt.lastfm.api-key'),
+        value: options.scrobblers.lastfm?.apiKey,
+        inputAttrs: {
+          type: 'text',
         },
-        {
-          label: t('plugins.scrobbler.prompt.lastfm.api-secret'),
-          value: options.scrobblers.lastfm?.secret,
-          inputAttrs: {
-            type: 'text',
-          },
+      },
+      {
+        label: t('plugins.scrobbler.prompt.lastfm.api-secret'),
+        value: options.scrobblers.lastfm?.secret,
+        inputAttrs: {
+          type: 'text',
         },
-      ],
-      resizable: true,
-      height: 360,
-      ...promptOptions(),
-    },
-    window,
-  );
+      },
+    ],
+    resizable: true,
+    height: 360,
+  });
 
   if (output) {
     if (output[0]) {
@@ -62,18 +54,13 @@ async function promptLastFmOptions(
 async function promptListenbrainzOptions(
   options: ScrobblerPluginConfig,
   setConfig: SetConfType,
-  window: BrowserWindow,
 ) {
-  const output = await prompt(
-    {
-      title: t('plugins.scrobbler.prompt.listenbrainz.token.title'),
-      label: t('plugins.scrobbler.prompt.listenbrainz.token.label'),
-      type: 'input',
-      value: options.scrobblers.listenbrainz?.token,
-      ...promptOptions(),
-    },
-    window,
-  );
+  const output = await prompt({
+    title: t('plugins.scrobbler.prompt.listenbrainz.token.title'),
+    label: t('plugins.scrobbler.prompt.listenbrainz.token.label'),
+    type: 'input',
+    value: options.scrobblers.listenbrainz?.token,
+  });
 
   if (output) {
     options.scrobblers.listenbrainz.token = output;
@@ -82,7 +69,6 @@ async function promptListenbrainzOptions(
 }
 
 export const onMenu = async ({
-  window,
   getConfig,
   setConfig,
 }: MenuContext<ScrobblerPluginConfig>): Promise<MenuTemplate> => {
@@ -132,7 +118,7 @@ export const onMenu = async ({
         {
           label: t('plugins.scrobbler.menu.lastfm.api-settings'),
           click() {
-            promptLastFmOptions(config, setConfig, window);
+            promptLastFmOptions(config, setConfig);
           },
         },
       ],
@@ -153,7 +139,7 @@ export const onMenu = async ({
         {
           label: t('plugins.scrobbler.menu.listenbrainz.token'),
           click() {
-            promptListenbrainzOptions(config, setConfig, window);
+            promptListenbrainzOptions(config, setConfig);
           },
         },
       ],

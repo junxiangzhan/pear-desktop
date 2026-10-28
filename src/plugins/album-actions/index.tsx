@@ -14,7 +14,6 @@ import {
 
 export default createPlugin<
   unknown,
-  unknown,
   {
     observer?: MutationObserver;
     loadObserver?: MutationObserver;
