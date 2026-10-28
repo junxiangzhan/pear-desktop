@@ -298,7 +298,7 @@ export const TitleBar = (props: TitleBarProps) => {
       setIgnoreTransition(false);
     });
     props.ipc.on('toggle-in-app-menu', () => {
-      setCollapsed(!collapsed());
+      setCollapsed((value) => !value);
     });
 
     props.ipc.on('window-maximize', refetchMaximize);
