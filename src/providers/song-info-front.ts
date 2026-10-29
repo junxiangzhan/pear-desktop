@@ -376,8 +376,7 @@ export const setupSongInfo = (api: MusicPlayer) => {
     // response can carry another language's title, e.g. "I Am Fine" for
     // 孫燕姿's 我不難過 on a zh-TW page
     const queueTitle = findQueueTitle(
-      videoData['ytmdWatchNextResponse'] ??
-        api.getWatchNextResponse(),
+      videoData['ytmdWatchNextResponse'] ?? api.getWatchNextResponse(),
       data.videoDetails.videoId,
     );
     if (queueTitle) data.videoDetails.title = queueTitle;

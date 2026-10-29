@@ -165,7 +165,18 @@
     ],
     "@stylistic/comma-dangle": ["error", "always-multiline"],
     "@stylistic/max-len": "off",
-    "@stylistic/no-mixed-operators": "error",
+    "@stylistic/no-mixed-operators": [
+      "error",
+      {
+        "groups": [
+          ["&", "|", "^", "~", "<<", ">>", ">>>"],
+          ["==", "!=", "===", "!==", ">", ">=", "<", "<="],
+          ["&&", "||", "??"],
+          ["in", "instanceof"]
+        ],
+        "allowSamePrecedence": true
+      }
+    ],
     "@stylistic/no-multi-spaces": [
       "error",
       {
