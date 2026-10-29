@@ -1,4 +1,4 @@
-# Tauri v2 移植
+# Pear Tauri 技術文件
 
 中文 · [English](README-en.md)（英文版由這份翻譯，以這份為準；更新時請一併更新）
 
@@ -82,11 +82,11 @@ Rust 擁有 `config.json`（`config.rs`，`defaults.ts` 的移植）。renderer 
 - **do-not-track（廣告阻擋）：** 預設的 **In player** 模式完全在頁面裡執行（包住 `JSON.parse` 與 `Response.json`，刪掉播放器回應裡的 `playerAds`／`adPlacements`／`adSlots`），Windows 與 Android 都可用。**With blocklists** 模式改用 Brave 的 adblock-rust（`plugins/do_not_track.rs`），清單與 Electron 相同（tb.json 列出的預設清單，除非 `disableDefaultLists`，加上 `additionalBlockLists`），scriptlet 與 redirect 用 Ghostery 那份 uBlock Origin 資源；`cache` 開啟且沒有額外清單時快取引擎（和 Electron 一樣不會自動更新）。只有預設清單能用 `trusted-*` scriptlet。**Windows** 在主 webview 的 `WebResourceRequested` 比對每個請求（含 service worker 與 iframe），擋下的回空的 403，redirect 回對應的資源；app 自己的 `*.localhost` 不比對。**Android** 由 pear-gecko extension 的 `webRequest`（blocking）透過 native messaging 問 Rust（`dnt_check`）。兩邊的頁面都在 Electron 載入 Ghostery preload 的地方向 Rust 要這個網址的隱藏 CSS（每個 selector 一條規則，瀏覽器不接受的只會丟掉那一條）與 scriptlet。沒有移植的：Ghostery preload 依 DOM 計算的通用 class/id 隱藏、procedural 過濾、`removeparam`。和 Electron 不同，切回 In player 時引擎會卸載（Electron 要停用插件才會）。頁面端在 `src/plugins/do-not-track/injectors/cosmetic-filters.ts`。
 - **啟用時要求播放器事件：** Electron 的 backend 只在 `peard:player-api-loaded` 時要求 `peard:setup-*-listener`，執行中才啟用的插件會錯過；Rust 版（`plugins::request_player_listeners`）啟動時也會立刻要求一次（頁面端是 singleton，重複要求沒有影響）。
 
-**CSS：** renderer 的 `import 'mdui/mdui.css'` 會被 Vite 抽成獨立 CSS 檔，但 Electron 的 `get-renderer-script` 只讀 `<script>`，所以這份 CSS 在 Electron 裡從未套用。PoC 一度把它內嵌注入，結果 mdui 的 `:root { background-color }` 在 YTM 半透明背景後面畫出灰色色塊；現在改為直接丟棄，行為與 Electron 一致。
+**CSS：** renderer 的 `import 'mdui/mdui.css'` 會被 Vite 抽成獨立 CSS 檔，但 Electron 的 `get-renderer-script` 只讀 `<script>`，所以這份 CSS 在 Electron 裡從未套用。Pear Tauri 一度把它內嵌注入，結果 mdui 的 `:root { background-color }` 在 YTM 半透明背景後面畫出灰色色塊；現在改為直接丟棄，行為與 Electron 一致。
 
 ### 這個環境無法建置測試的平台功能
 
-PoC 只在 Windows 與 Android 上建置、測試，以下功能需要 Linux 或 macOS，沒有實作，只記下移植方向：
+Pear Tauri 目前只在 Windows 與 Android 上建置、測試，以下功能需要 Linux 或 macOS，沒有實作，只記下移植方向：
 
 - **Linux MPRIS（shortcuts 插件的媒體控制）：** Electron 版在 `src/plugins/shortcuts/mpris.ts`。Rust 可用 zbus（已在 lockfile 裡，tauri 的相依）在 session bus 註冊 `org.mpris.MediaPlayer2.*`，屬性與方法對應到 `song_info`（Metadata、PlaybackStatus、Position）與 `song_controls`（Play、Pause、Next、Previous、Seek、Volume、Shuffle、LoopStatus），`Seeked` 訊號接 `peard:seeked`。WebKitGTK 自己是否也會註冊 MPRIS 需要實測，避免出現兩個播放器。
 - **macOS Now Playing：** 用 objc2-media-player 的 `MPNowPlayingInfoCenter`（標題、演出者、專輯、封面、長度、目前時間、播放速率）與 `MPRemoteCommandCenter`（播放、暫停、上一首、下一首、拖動進度）。WKWebView 可能也會回報媒體資訊，同樣要實測。
@@ -94,7 +94,7 @@ PoC 只在 Windows 與 Android 上建置、測試，以下功能需要 Linux 或
 
 ### 尚未移植的 Electron 選項
 
-選單裡除了「設定 Proxy」，下列 Electron 選項沒有移植（選單裡不會出現）：覆寫 user agent（`overrideUserAgent`）、停用硬體加速（`disableHardwareAcceleration`）、啟動時重設快取（`autoResetAppCache`）、隱藏選單列（`hideMenu`）、單一實例開關（PoC 一律是單一實例）、自訂主題 CSS（`themes`）、自動更新（`autoUpdates`；PoC 不打算做）。
+選單裡除了「設定 Proxy」，下列 Electron 選項沒有移植（選單裡不會出現）：覆寫 user agent（`overrideUserAgent`）、停用硬體加速（`disableHardwareAcceleration`）、啟動時重設快取（`autoResetAppCache`）、隱藏選單列（`hideMenu`）、單一實例開關（Pear Tauri 一律是單一實例）、自訂主題 CSS（`themes`）、自動更新（`autoUpdates`；目前不打算做）。
 
 ### 移植時踩到的坑
 
@@ -122,14 +122,16 @@ pnpm build
 cargo run --manifest-path src-tauri/Cargo.toml
 ```
 
+以下是除錯用的環境變數（舊的 `PEAR_POC_*` 名稱暫時仍可用）：
+
 | 環境變數 | 作用 |
 |---|---|
-| `PEAR_POC_DEVTOOLS=1` | 啟動時開 DevTools（看 `[pear-tauri]` log） |
-| `PEAR_POC_USER_AGENT=...` | 覆寫 User-Agent（例如 Google 登入被擋時測試） |
-| `PEAR_POC_NO_INJECT=1` | 不注入，載入原始網站（區分外殼問題與 renderer 問題） |
-| `PEAR_POC_INJECT_FILE=path` | 改注入磁碟上的檔案，免重編譯 |
-| `PEAR_POC_PROFILE_DIR=path` | WebView 資料與 `config.json` 改放在這個資料夾（例如在不動到登入狀態的情況下測未登入） |
-| `PEAR_POC_DEBUG_PORT=9333` | 開啟 Chrome DevTools Protocol（保留 Tauri 預設的 WebView2 參數；不要改用 `WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS`，它會整個覆蓋掉預設參數） |
+| `PEAR_DEVTOOLS=1` | 啟動時開 DevTools（看 `[pear-tauri]` log） |
+| `PEAR_USER_AGENT=...` | 覆寫 User-Agent（例如 Google 登入被擋時測試） |
+| `PEAR_NO_INJECT=1` | 不注入，載入原始網站（區分外殼問題與 renderer 問題） |
+| `PEAR_INJECT_FILE=path` | 改注入磁碟上的檔案，免重編譯 |
+| `PEAR_PROFILE_DIR=path` | WebView 資料與 `config.json` 改放在這個資料夾（例如在不動到登入狀態的情況下測未登入） |
+| `PEAR_DEBUG_PORT=9333` | 開啟 Chrome DevTools Protocol（保留 Tauri 預設的 WebView2 參數；不要改用 `WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS`，它會整個覆蓋掉預設參數） |
 
 測試時請正常關閉視窗。強制結束行程會讓 WebView2 來不及寫回 cookie，登入狀態會遺失；若主行程已無回應，先用 CDP 的 `Browser.close` 讓 WebView2 正常關閉再結束行程。另外，單獨按一下 Alt 會讓視窗進入 Windows 的選單模式，期間 WebView2（至少 DevTools）會停止回應，按 Esc 即可離開。
 
@@ -156,14 +158,14 @@ cd src-tauri && pnpm dlx @tauri-apps/cli@2.12.4 android build --debug --apk --ta
   2. 設定 › 應用程式 › Pear Tauri › 預設開啟：「新增連結」並勾選 `music.youtube.com`。
 
   之後點 `music.youtube.com` 的連結就會用 Pear 開啟（實機確認）。桌面版沒有對應功能（Windows 無法替 https 網址註冊處理程式）。
-- **Google 登入：** 在 WebView 裡無法登入，PoC 不打算繞過。登入頁本身送出的 POST（`AccountsSignInUi/data/batchexecute`、`browserinfo`）都帶 `X-Requested-With`，而 `shouldInterceptRequest` 拿不到 POST 內容，無法不帶標頭重送；`browserinfo` 也會回傳瀏覽器指紋。WebView 版目前只能未登入使用；可行的方向是換成 GeckoView（見下一節）。
+- **Google 登入：** 在 WebView 裡無法登入，Pear Tauri 不打算繞過。登入頁本身送出的 POST（`AccountsSignInUi/data/batchexecute`、`browserinfo`）都帶 `X-Requested-With`，而 `shouldInterceptRequest` 拿不到 POST 內容，無法不帶標頭重送；`browserinfo` 也會回傳瀏覽器指紋。WebView 版目前只能未登入使用；可行的方向是換成 GeckoView（見下一節）。
 - 實機平板請改用 `--target aarch64`。
 - **頁面引擎：** 預設是 GeckoView（Google 登入可用，見「GeckoView 可行性驗證」）。`adb shell am start -n io.github.junxiangzhan.peartauri/.MainActivity --es engine webview` 改回 WebView，`--es engine gecko` 切回；選擇會記住。`MainActivity` 在 Rust 啟動前把它寫進環境變數 `PEAR_ENGINE`（`src/page.rs` 讀取）。下面關於 WebView 的說明只適用於 WebView 引擎。
 - **GeckoView 的 viewport：** UA 是桌面版 Firefox（插件需要桌面版網站），但 viewport 用 `VIEWPORT_MODE_MOBILE`，依 YTM 自己的 `<meta name="viewport" content="width=device-width">` 排版，和 WebView 一樣。`VIEWPORT_MODE_DESKTOP` 會把頁面至少排成 980 CSS px 寬，視窗縮小（分割畫面、浮動視窗、手機）時就不會切換到 YTM 的窄版面；平板浮動視窗（381 dp）實測 viewport 為 385 px。
 - **浮動視窗：** 這台 MIUI 平板把 app 拖成浮動視窗時，先給手機大小的視窗（420×750 dp），約 0.5 秒後改成**整個平板大小的視窗再縮小顯示**（logcat 的 `mFreeFormScale=0.526`，configuration 回到 1164×777 dp）。所以浮動視窗裡是縮小的平板版面，也拉不回手機比例：這是 MIUI 對這個 app 的浮動視窗做法，不是 app 限制的（以 `am start --windowingMode 5` 開啟時可以是手機比例，頁面也會切到窄版面）。
 - **浮動視窗後版面卡在窄版（已處理）：** 播放頁元件消失、側欄出現第二個 YouTube Music 標誌，都是 YTM 的 bug：它用一組 media query 追蹤版面大小級別（-4 到 3），套用時寫成 `size && size >= -1`（側欄常駐）、`size && size >= -2`（播放頁開啟時顯示導覽列與播放列），而級別 0（寬 1150–1363 px，這台平板正好 1173 px）是 falsy，所以從窄版面**直接跳進級別 0** 時什麼都不會更新，版面停在窄版（導覽列、播放列 `visibility: hidden`、側欄維持窄版的覆蓋式抽屜與標頭）。拖曳視窗會先經過級別 -1 所以平常看不到；MIUI 浮動視窗是一次跳過去。Electron 版把窄視窗直接最大化到這個寬度時應該也會遇到。`src/inject/shim.ts` 包住 `MediaQueryList.addListener`：級別 0 的 query 開始成立時，先對 YTM 的級別 -1 listener 回報一次，100 ms 後才送出級別 0，等同拖曳經過 -1。以 `am task resize`（手機大小載入 → 平板大小 → 手機 → 平板）驗證：側欄常駐、標頭隱藏、導覽列與播放列顯示，縮回窄版時照 YTM 原本的方式隱藏。`MainActivity` 會在 logcat（tag `PearMainActivity`）記錄 configuration 變更，`report.js` 記錄最近的視窗大小、devicePixelRatio 與這組 media query 的變化。
 - **全螢幕：** Android 版的「檢視」選單有「切換全螢幕」勾選項，隱藏狀態列與導覽列（三鍵或手勢提示條），從邊緣滑動會暫時顯示；選擇存在 `options.fullscreen`，下次啟動沿用（`src/android_app.rs`、`AndroidAppPlugin.kt`）。
-- **init script 執行兩次：** wry 產生的 Android 程式碼會用 `addDocumentStartJavaScript` 注入 init script，但 `RustWebViewClient.onPageStarted` 又對所有沒被 Rust 攔截的頁面再 `evaluateJavascript` 一次，沒有檢查前者是否可用（wry 的 bug；`generated/` 每次建置都會重新產生，不能直接改）。PoC 的 loader 以 `window.__pearRendererLoaded` 確保每個文件只載入一次 bundle；Tauri 自己的腳本仍會跑兩次，console 會出現無害的 `Cannot redefine property`。
+- **init script 執行兩次：** wry 產生的 Android 程式碼會用 `addDocumentStartJavaScript` 注入 init script，但 `RustWebViewClient.onPageStarted` 又對所有沒被 Rust 攔截的頁面再 `evaluateJavascript` 一次，沒有檢查前者是否可用（wry 的 bug；`generated/` 每次建置都會重新產生，不能直接改）。注入的 loader 以 `window.__pearRendererLoaded` 確保每個文件只載入一次 bundle；Tauri 自己的腳本仍會跑兩次，console 會出現無害的 `Cannot redefine property`。
 - **已知問題：** 偶爾啟動後頁面停在空白（`about:blank`），強制停止再開就會恢復，還沒追查。
 - debug APK 帶完整除錯資訊時約 374 MB（`.so` 240 MB），模擬器空間不足會裝不上；測試時可在建置前設 `CARGO_PROFILE_DEV_DEBUG=0 CARGO_PROFILE_DEV_STRIP=debuginfo`（約 134 MB）。
 
@@ -229,9 +231,9 @@ cd src-tauri && pnpm dlx @tauri-apps/cli@2.12.4 android build --debug --apk --ta
 
 `src/plugins/performance-improvement/scripts/cpu-tamer/cpu-tamer-by-animationframe.js` 會在頁面插入一個隱藏的 `<a-f>` 元素，跑一個 1 ms、無限循環的 CSS 動畫，拿它的 `animationiteration` 事件當時脈（每個 frame 觸發一次），並改寫全域的 `setTimeout`/`setInterval`：媒體播放中時，YTM 的計時器會被延到下一個時脈才執行。在高更新率螢幕（例如 165 Hz）上，主執行緒每個 frame 都要被喚醒一次，捲動時就會掉幀，感覺像是「動一下、卡一下」，容易誤以為是 GC。
 
-**已修正**（[pear-devs/pear-desktop#4772](https://github.com/pear-devs/pear-desktop/pull/4772)，已合併進 `master`）：時脈改用 `requestAnimationFrame`，只有在有計時器等待時才要求下一個 frame。計時器的延後與合併行為不變（播放中 1 ms `setInterval` 每秒仍約 164 次）。因此 PoC 不再預設停用這個插件。
+**已修正**（[pear-devs/pear-desktop#4772](https://github.com/pear-devs/pear-desktop/pull/4772)，已合併進 `master`）：時脈改用 `requestAnimationFrame`，只有在有計時器等待時才要求下一個 frame。計時器的延後與合併行為不變（播放中 1 ms `setInterval` 每秒仍約 164 次）。因此 Pear Tauri 不再預設停用這個插件。
 
-修正後在 PoC 重新量測（Windows、WebView2、已登入、未播放、165 Hz、視窗 1100×700 置頂；與 Electron 相同的模擬滾輪：每 33 ms 一格 120 px、每 2 秒反向；每種情況 15 秒 × 2 次取平均；以 `PEAR_POC_INJECT_FILE` 切換 bundle）：
+修正後在 Pear Tauri 重新量測（Windows、WebView2、已登入、未播放、165 Hz、視窗 1100×700 置頂；與 Electron 相同的模擬滾輪：每 33 ms 一格 120 px、每 2 秒反向；每種情況 15 秒 × 2 次取平均；以 `PEAR_INJECT_FILE` 切換 bundle）：
 
 | 情況 | 插件關閉 | 修正前（CSS 動畫時脈） | 修正後（rAF 時脈） |
 |---|---|---|---|
@@ -240,7 +242,7 @@ cd src-tauri && pnpm dlx @tauri-apps/cli@2.12.4 android build --debug --apk --ta
 | 靜置：主執行緒忙碌 | 4.3% | 33.0% | 4.3% |
 | 靜置：`animationiteration` / main frame | 0 / 4 | 2,555 / 2,518 | 0 / 4 |
 
-播放中的情況沒有在 PoC 量（會寫入帳號的播放紀錄）；Electron 版未登入播放時的量測見 #4772。
+播放中的情況沒有在 Pear Tauri 量（會寫入帳號的播放紀錄）；Electron 版未登入播放時的量測見 #4772。
 
 ## 第一輪移植的驗證結果（Windows，2026-10-23）
 
@@ -271,14 +273,14 @@ cd src-tauri && pnpm dlx @tauri-apps/cli@2.12.4 android build --debug --apk --ta
 | api-server | 未帶 token 401、`/auth/{id}`（已授權 client）取得 token、song／volume／like-state／shuffle／repeat-mode／queue/next 回應正確、竄改的 token 401、CORS preflight（含 Private-Network）；WebSocket：`PLAYER_INFO`、暫停／播放的 `PLAYER_STATE_CHANGED`、`VOLUME_CHANGED`、`POSITION_CHANGED`，無 token 以 1008 關閉；重開 app 後自動啟動 |
 | amuse | `/` 回傳翻譯文字、`/query` 回傳目前歌曲、CORS |
 | Android 背景播放 | 模擬器（API 34）：foreground service（type mediaPlayback）、MediaSession 顯示封面／標題／進度；背景 30 秒持續播放；媒體鍵暫停／播放／下一首在背景有效；正常播放時 30 秒內 0 次 session 更新 |
-| do-not-track（In player） | 未登入的獨立設定檔（`PEAR_POC_PROFILE_DIR`／Android 模擬器），每次播 6 首歌，比對 YouTube 送來的原始 `/youtubei/v1/player` 回應與播放器實際拿到的 `getPlayerResponse()`。**Windows：** 關閉時原始回應 6/6 含廣告欄位、播放器拿到 6/6、播出 1 則廣告；開啟時原始回應仍 6/6 含廣告，播放器拿到 **0/6**、播出 **0** 則。**Android：** 開啟時原始回應 5/5 含廣告（第一首來自頁面 HTML），播放器拿到 **0/6**、播出 0 則 |
+| do-not-track（In player） | 未登入的獨立設定檔（`PEAR_PROFILE_DIR`／Android 模擬器），每次播 6 首歌，比對 YouTube 送來的原始 `/youtubei/v1/player` 回應與播放器實際拿到的 `getPlayerResponse()`。**Windows：** 關閉時原始回應 6/6 含廣告欄位、播放器拿到 6/6、播出 1 則廣告；開啟時原始回應仍 6/6 含廣告，播放器拿到 **0/6**、播出 **0** 則。**Android：** 開啟時原始回應 5/5 含廣告（第一首來自頁面 HTML），播放器拿到 **0/6**、播出 0 則 |
 | Electron 不受影響 | `pnpm typecheck`、`pnpm lint`、`pnpm build` 通過；`cargo test`（24）、`cargo clippy` 無警告；Android 版可編譯 |
 
 未驗證：真正的 Discord 用戶端、api-server 的 Allow/Deny 對話框與 HTTPS、HTTPS 憑證選檔對話框、Android 上的 api-server／discord。
 
 ## 第三輪移植的驗證結果（Windows，2026-10-24）
 
-未登入的獨立設定檔（`PEAR_POC_PROFILE_DIR`），用 WebView2 的除錯埠操作頁面。Android 的結果在表格後面。
+未登入的獨立設定檔（`PEAR_PROFILE_DIR`），用 WebView2 的除錯埠操作頁面。Android 的結果在表格後面。
 
 | 項目 | 結果 |
 |---|---|

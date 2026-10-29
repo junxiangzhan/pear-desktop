@@ -85,4 +85,4 @@ body:
 - type: textarea
   attributes:
     label: Additional Information
-    description: Anything else that helps, such as logs (`PEAR_POC_DEVTOOLS=1` on Windows, logcat on Android) or screenshots.
+    description: Anything else that helps, such as logs (`PEAR_DEVTOOLS=1` on Windows, logcat on Android) or screenshots.

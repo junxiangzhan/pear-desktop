@@ -30,7 +30,7 @@ A desktop and Android client for YouTube Music built on [Tauri v2](https://tauri
 
 The Tauri shell is in `src-tauri/` (Rust) and the page side in `src/` (the renderer, plugins and `src/inject/`). More in `docs/`:
 
-- [README (中文)](docs/README.md) · [README (English)](docs/README-en.md): architecture, plugin status, running on Windows and Android, releases
+- [技術文件（中文）](docs/README.md) · [Technical notes (English)](docs/README-en.md): architecture, plugin status, running on Windows and Android, releases
 - [GeckoView plan](docs/GECKOVIEW-PLAN.md)
 
 Quick start on Windows:
