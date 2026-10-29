@@ -55,6 +55,13 @@ const RENDERER_URL: &str = "pear://localhost/renderer.js";
 /// The bundle served at `RENDERER_URL`.
 struct RendererBundle(String);
 
+/// A diagnostic switch from the environment: `PEAR_<name>`, or the
+/// `PEAR_POC_<name>` spelling from before the rename.
+pub(crate) fn diagnostic_var(name: &str) -> Option<std::ffi::OsString> {
+    std::env::var_os(format!("PEAR_{name}"))
+        .or_else(|| std::env::var_os(format!("PEAR_POC_{name}")))
+}
+
 /// Tiny init script that runs the payload in the top frame before page scripts.
 ///
 /// The bundle is not passed as the init script itself: WebView2 injects init
@@ -239,9 +246,9 @@ pub fn run() {
             }
 
             // Diagnostic switch: inject a file from disk instead of the built-in bundle
-            let bundle = match std::env::var("PEAR_POC_INJECT_FILE") {
-                Ok(path) => fs::read_to_string(path)?,
-                Err(_) => RENDERER_JS.to_owned(),
+            let bundle = match diagnostic_var("INJECT_FILE") {
+                Some(path) => fs::read_to_string(path)?,
+                None => RENDERER_JS.to_owned(),
             };
             app.manage(RendererBundle(bundle));
 
@@ -283,7 +290,7 @@ fn create_main_window(app: &tauri::App) -> tauri::Result<()> {
         WebviewUrl::External(start_url),
     ));
     // Diagnostic switch: load the bare site to tell shell issues from renderer issues
-    if std::env::var_os("PEAR_POC_NO_INJECT").is_none() && !page::in_gecko() {
+    if diagnostic_var("NO_INJECT").is_none() && !page::in_gecko() {
         builder = builder.initialization_script_for_all_frames(loader_script());
     }
 
@@ -311,7 +318,9 @@ fn create_main_window(app: &tauri::App) -> tauri::Result<()> {
 
     // On Android, MainActivity presents the WebView as desktop Chrome (the
     // plugins need the desktop site, and Google sign-in refuses WebViews)
-    if let Ok(user_agent) = std::env::var("PEAR_POC_USER_AGENT") {
+    if let Some(user_agent) =
+        diagnostic_var("USER_AGENT").and_then(|value| value.into_string().ok())
+    {
         builder = builder.user_agent(&user_agent);
     }
 
@@ -320,7 +329,7 @@ fn create_main_window(app: &tauri::App) -> tauri::Result<()> {
     window::install_close_to_tray(&window);
     #[cfg(windows)]
     plugins::do_not_track::install(&window);
-    if std::env::var_os("PEAR_POC_DEVTOOLS").is_some() {
+    if diagnostic_var("DEVTOOLS").is_some() {
         window.open_devtools();
     }
     Ok(())

@@ -53,17 +53,17 @@ fn windows_browser_args() -> String {
         }
     }
     // Diagnostic switch: expose the Chrome DevTools Protocol on this port
-    if let Ok(port) = std::env::var("PEAR_POC_DEBUG_PORT") {
-        args.push_str(&format!(" --remote-debugging-port={port}"));
+    if let Some(port) = crate::diagnostic_var("DEBUG_PORT") {
+        args.push_str(&format!(" --remote-debugging-port={}", port.to_string_lossy()));
     }
     args
 }
 
-/// Diagnostic switch: `PEAR_POC_PROFILE_DIR` keeps the WebView data and
+/// Diagnostic switch: `PEAR_PROFILE_DIR` keeps the WebView data and
 /// `config.json` in that folder instead of the user's profile, e.g. to test
 /// logged out without touching the real login.
 pub fn profile_dir() -> Option<std::path::PathBuf> {
-    std::env::var_os("PEAR_POC_PROFILE_DIR").map(std::path::PathBuf::from)
+    crate::diagnostic_var("PROFILE_DIR").map(std::path::PathBuf::from)
 }
 
 /// The last document title, so a cleared custom title can fall back to it.

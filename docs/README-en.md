@@ -1,4 +1,4 @@
-# Tauri v2 port
+# Pear Tauri technical notes
 
 [中文](README.md) · English (translated from the Chinese README, which is the primary version)
 
@@ -82,11 +82,11 @@ Rust owns `config.json` (`config.rs`, a port of `defaults.ts`). The renderer rea
 - **do-not-track (ad blocking):** the default **In player** mode runs entirely in the page (wraps `JSON.parse` and `Response.json` and deletes `playerAds` / `adPlacements` / `adSlots` from player responses) and works on Windows and Android. The **With blocklists** mode uses Brave's adblock-rust (`plugins/do_not_track.rs`) with the same lists as Electron (the default lists from tb.json unless `disableDefaultLists`, plus `additionalBlockLists`), and Ghostery's copy of uBlock Origin's resources for scriptlets and redirects; with `cache` on and no additional lists the engine is cached (and, like Electron, never refreshed automatically). Only the default lists may use `trusted-*` scriptlets. **Windows** checks every request of the main webview in `WebResourceRequested` (including service workers and iframes); blocked requests get an empty 403 and redirects get their resource; the app's own `*.localhost` is never checked. **Android:** the pear-gecko extension's `webRequest` (blocking) asks Rust over native messaging (`dnt_check`). On both, the page asks Rust for the URL's hiding CSS (one rule per selector, so a selector the browser rejects only drops its own rule) and scriptlets where Electron loaded the Ghostery preload. Not ported: the generic class/id hiding the Ghostery preload computes from the DOM, procedural filters and `removeparam`. Unlike Electron, the engine is unloaded when switching back to In player (Electron only does so when the plugin is turned off). The page side is `src/plugins/do-not-track/injectors/cosmetic-filters.ts`.
 - **Player events requested on start:** Electron's backends only request `peard:setup-*-listener` on `peard:player-api-loaded`, which a plugin enabled while running misses; the Rust version (`plugins::request_player_listeners`) also requests them right away when it starts (the page side is a singleton, so asking twice is harmless).
 
-**CSS:** the renderer's `import 'mdui/mdui.css'` is extracted by Vite into a separate CSS file, but Electron's `get-renderer-script` only reads the `<script>`, so that CSS was never applied in Electron. The PoC once inlined it, and mdui's `:root { background-color }` painted grey patches behind YTM's translucent backgrounds; it is now dropped, matching Electron.
+**CSS:** the renderer's `import 'mdui/mdui.css'` is extracted by Vite into a separate CSS file, but Electron's `get-renderer-script` only reads the `<script>`, so that CSS was never applied in Electron. Pear Tauri once inlined it, and mdui's `:root { background-color }` painted grey patches behind YTM's translucent backgrounds; it is now dropped, matching Electron.
 
 ### Platform features this environment can't build or test
 
-The PoC is only built and tested on Windows and Android. These features need Linux or macOS and are not implemented; only porting notes are kept:
+Pear Tauri is only built and tested on Windows and Android for now. These features need Linux or macOS and are not implemented; only porting notes are kept:
 
 - **Linux MPRIS (the shortcuts plugin's media controls):** the Electron version is `src/plugins/shortcuts/mpris.ts`. Rust could use zbus (already in the lockfile as a Tauri dependency) to register `org.mpris.MediaPlayer2.*` on the session bus, mapping properties and methods to `song_info` (Metadata, PlaybackStatus, Position) and `song_controls` (Play, Pause, Next, Previous, Seek, Volume, Shuffle, LoopStatus), with the `Seeked` signal driven by `peard:seeked`. Whether WebKitGTK registers its own MPRIS player needs testing, to avoid two players.
 - **macOS Now Playing:** objc2-media-player's `MPNowPlayingInfoCenter` (title, artist, album, cover, duration, current time, playback rate) and `MPRemoteCommandCenter` (play, pause, previous, next, seeking). WKWebView may report media info as well; that needs testing too.
@@ -94,7 +94,7 @@ The PoC is only built and tested on Windows and Android. These features need Lin
 
 ### Electron options not ported yet
 
-Apart from "Set proxy", these Electron options are not ported (they don't appear in the menu): user-agent override (`overrideUserAgent`), disable hardware acceleration (`disableHardwareAcceleration`), reset the cache on start (`autoResetAppCache`), hide the menu bar (`hideMenu`), the single-instance toggle (the PoC is always single-instance), custom theme CSS (`themes`), and auto-update (`autoUpdates`; not planned for the PoC).
+Apart from "Set proxy", these Electron options are not ported (they don't appear in the menu): user-agent override (`overrideUserAgent`), disable hardware acceleration (`disableHardwareAcceleration`), reset the cache on start (`autoResetAppCache`), hide the menu bar (`hideMenu`), the single-instance toggle (Pear Tauri is always single-instance), custom theme CSS (`themes`), and auto-update (`autoUpdates`; not planned for now).
 
 ### Pitfalls met while porting
 
@@ -122,14 +122,16 @@ pnpm build
 cargo run --manifest-path src-tauri/Cargo.toml
 ```
 
+These environment variables help with debugging (the old `PEAR_POC_*` names still work for now):
+
 | Environment variable | Effect |
 |---|---|
-| `PEAR_POC_DEVTOOLS=1` | Opens DevTools on start (look for `[pear-tauri]` logs) |
-| `PEAR_POC_USER_AGENT=...` | Overrides the User-Agent (e.g. to test when Google sign-in is blocked) |
-| `PEAR_POC_NO_INJECT=1` | No injection; loads the plain site (to tell shell problems from renderer problems) |
-| `PEAR_POC_INJECT_FILE=path` | Injects a file from disk instead, no rebuild needed |
-| `PEAR_POC_PROFILE_DIR=path` | Keeps the WebView data and `config.json` in this folder (e.g. to test signed out without touching the real login) |
-| `PEAR_POC_DEBUG_PORT=9333` | Opens the Chrome DevTools Protocol (keeps Tauri's default WebView2 arguments; don't use `WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS` instead, it replaces the defaults entirely) |
+| `PEAR_DEVTOOLS=1` | Opens DevTools on start (look for `[pear-tauri]` logs) |
+| `PEAR_USER_AGENT=...` | Overrides the User-Agent (e.g. to test when Google sign-in is blocked) |
+| `PEAR_NO_INJECT=1` | No injection; loads the plain site (to tell shell problems from renderer problems) |
+| `PEAR_INJECT_FILE=path` | Injects a file from disk instead, no rebuild needed |
+| `PEAR_PROFILE_DIR=path` | Keeps the WebView data and `config.json` in this folder (e.g. to test signed out without touching the real login) |
+| `PEAR_DEBUG_PORT=9333` | Opens the Chrome DevTools Protocol (keeps Tauri's default WebView2 arguments; don't use `WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS` instead, it replaces the defaults entirely) |
 
 Close the window normally when testing. Killing the process gives WebView2 no time to write cookies back, and the login is lost; if the main process has stopped responding, use CDP's `Browser.close` to close WebView2 cleanly before ending the process. Also, pressing Alt on its own puts the window in Windows' menu mode, during which WebView2 (DevTools at least) stops responding; press Esc to leave it.
 
@@ -156,14 +158,14 @@ cd src-tauri && pnpm dlx @tauri-apps/cli@2.12.4 android build --debug --apk --ta
   2. Settings › Apps › Pear Tauri › Open by default: "Add link" and tick `music.youtube.com`.
 
   After that, `music.youtube.com` links open in Pear (confirmed on a device). The desktop version has no equivalent (Windows can't register a handler for https URLs).
-- **Google sign-in:** not possible in WebView, and the PoC won't work around it. The POSTs the sign-in page itself sends (`AccountsSignInUi/data/batchexecute`, `browserinfo`) all carry `X-Requested-With`, and `shouldInterceptRequest` can't read POST bodies, so they can't be resent without the header; `browserinfo` also returns a browser fingerprint. The WebView version can only be used signed out; the way forward is GeckoView (see the next section).
+- **Google sign-in:** not possible in WebView, and Pear Tauri won't work around it. The POSTs the sign-in page itself sends (`AccountsSignInUi/data/batchexecute`, `browserinfo`) all carry `X-Requested-With`, and `shouldInterceptRequest` can't read POST bodies, so they can't be resent without the header; `browserinfo` also returns a browser fingerprint. The WebView version can only be used signed out; the way forward is GeckoView (see the next section).
 - On a real tablet use `--target aarch64` instead.
 - **Page engine:** GeckoView by default (Google sign-in works, see "GeckoView feasibility check"). `adb shell am start -n io.github.junxiangzhan.peartauri/.MainActivity --es engine webview` switches back to WebView and `--es engine gecko` back again; the choice is remembered. `MainActivity` writes it to the `PEAR_ENGINE` environment variable before Rust starts (read by `src/page.rs`). The WebView notes below apply only to the WebView engine.
 - **GeckoView viewport:** the UA is desktop Firefox (plugins need the desktop site), but the viewport uses `VIEWPORT_MODE_MOBILE`, laying out by YTM's own `<meta name="viewport" content="width=device-width">` like WebView. `VIEWPORT_MODE_DESKTOP` lays the page out at least 980 CSS px wide, so a smaller window (split screen, floating window, phone) never switches to YTM's narrow layout; a tablet floating window (381 dp) measured a 385 px viewport.
 - **Floating windows:** when this MIUI tablet turns the app into a floating window, it first gives it a phone-sized window (420×750 dp), and after about 0.5 s switches to **a full tablet-sized window shown scaled down** (logcat's `mFreeFormScale=0.526`; the configuration returns to 1164×777 dp). So the floating window shows a scaled-down tablet layout and can't be resized back to phone proportions: this is how MIUI does floating windows for this app, not an app limitation (opened with `am start --windowingMode 5` it can be phone-shaped, and the page switches to the narrow layout).
 - **Layout stuck in the narrow mode after a floating window (fixed):** missing player page elements and a second YouTube Music logo in the sidebar are both YTM bugs: it tracks the layout size class (-4 to 3) with media queries and applies it with checks like `size && size >= -1` (persistent sidebar) and `size && size >= -2` (showing the nav bar and player bar while the player page is open), and class 0 (1150–1363 px wide; this tablet is exactly 1173 px) is falsy, so **jumping straight into class 0** from a narrow layout updates nothing and the layout stays narrow (nav bar and player bar `visibility: hidden`, the sidebar left as the narrow layout's overlay drawer and header). Dragging a window passes through class -1, so it usually doesn't show; the MIUI floating window jumps in one go. Electron should hit it too when maximizing a narrow window straight to this width. `src/inject/shim.ts` wraps `MediaQueryList.addListener`: when the class 0 query starts matching, it first reports class -1 to YTM's listeners and only sends class 0 100 ms later, like a drag passing through -1. Verified with `am task resize` (load phone-sized → tablet → phone → tablet): the sidebar is persistent, the header hidden, the nav bar and player bar shown, and shrinking back hides them the way YTM normally does. `MainActivity` logs configuration changes to logcat (tag `PearMainActivity`), and `report.js` records recent window sizes, devicePixelRatio and changes to these media queries.
 - **Full screen:** the Android "View" menu has a "Toggle full screen" check item that hides the status bar and navigation bar (three buttons or the gesture hint); swiping from an edge shows them for a moment. The choice is kept in `options.fullscreen` and used on the next start (`src/android_app.rs`, `AndroidAppPlugin.kt`).
-- **The init script runs twice:** wry's generated Android code injects the init script with `addDocumentStartJavaScript`, but `RustWebViewClient.onPageStarted` also runs `evaluateJavascript` for every page Rust didn't intercept, without checking whether the former is available (a wry bug; `generated/` is regenerated on every build, so it can't be edited). The PoC's loader uses `window.__pearRendererLoaded` to load the bundle only once per document; Tauri's own scripts still run twice, and the console shows a harmless `Cannot redefine property`.
+- **The init script runs twice:** wry's generated Android code injects the init script with `addDocumentStartJavaScript`, but `RustWebViewClient.onPageStarted` also runs `evaluateJavascript` for every page Rust didn't intercept, without checking whether the former is available (a wry bug; `generated/` is regenerated on every build, so it can't be edited). The injected loader uses `window.__pearRendererLoaded` to load the bundle only once per document; Tauri's own scripts still run twice, and the console shows a harmless `Cannot redefine property`.
 - **Known issue:** occasionally the page stays blank (`about:blank`) after start; force-stopping and reopening fixes it. Not investigated yet.
 - A debug APK with full debug info is about 374 MB (`.so` 240 MB) and may not install on an emulator short of space; for testing, set `CARGO_PROFILE_DEV_DEBUG=0 CARGO_PROFILE_DEV_STRIP=debuginfo` before building (about 134 MB).
 
@@ -229,9 +231,9 @@ cd src-tauri && pnpm dlx @tauri-apps/cli@2.12.4 android build --debug --apk --ta
 
 `src/plugins/performance-improvement/scripts/cpu-tamer/cpu-tamer-by-animationframe.js` inserts a hidden `<a-f>` element running a 1 ms infinite CSS animation, uses its `animationiteration` event as a clock (fired every frame), and rewrites the global `setTimeout`/`setInterval`: while media plays, YTM's timers are deferred to the next clock tick. On a high-refresh display (e.g. 165 Hz) the main thread is woken every frame, so scrolling drops frames and feels like "move, stall, move", easily mistaken for GC.
 
-**Fixed** ([pear-devs/pear-desktop#4772](https://github.com/pear-devs/pear-desktop/pull/4772), merged into `master`): the clock uses `requestAnimationFrame` and only requests the next frame while timers are waiting. Timer deferral and coalescing are unchanged (a 1 ms `setInterval` still fires about 164 times a second while playing). So the PoC no longer turns this plugin off by default.
+**Fixed** ([pear-devs/pear-desktop#4772](https://github.com/pear-devs/pear-desktop/pull/4772), merged into `master`): the clock uses `requestAnimationFrame` and only requests the next frame while timers are waiting. Timer deferral and coalescing are unchanged (a 1 ms `setInterval` still fires about 164 times a second while playing). So Pear Tauri no longer turns this plugin off by default.
 
-Re-measured in the PoC after the fix (Windows, WebView2, signed in, not playing, 165 Hz, 1100×700 window on top; the same simulated wheel as Electron: 120 px every 33 ms, reversing every 2 seconds; each case 15 s × 2, averaged; bundles switched with `PEAR_POC_INJECT_FILE`):
+Re-measured in Pear Tauri after the fix (Windows, WebView2, signed in, not playing, 165 Hz, 1100×700 window on top; the same simulated wheel as Electron: 120 px every 33 ms, reversing every 2 seconds; each case 15 s × 2, averaged; bundles switched with `PEAR_INJECT_FILE`):
 
 | Case | Plugin off | Before the fix (CSS animation clock) | After the fix (rAF clock) |
 |---|---|---|---|
@@ -240,7 +242,7 @@ Re-measured in the PoC after the fix (Windows, WebView2, signed in, not playing,
 | Idle: main thread busy | 4.3% | 33.0% | 4.3% |
 | Idle: `animationiteration` / main frames | 0 / 4 | 2,555 / 2,518 | 0 / 4 |
 
-Playback wasn't measured in the PoC (it would write to the account's history); for Electron measured while playing signed out, see #4772.
+Playback wasn't measured in Pear Tauri (it would write to the account's history); for Electron measured while playing signed out, see #4772.
 
 ## First round results (Windows, 2026-10-23)
 
@@ -271,14 +273,14 @@ Not verified: whether notifications actually show (no errors logged, but not che
 | api-server | 401 without a token, `/auth/{id}` (authorized client) gets a token, song / volume / like-state / shuffle / repeat-mode / queue/next answer correctly, a tampered token gets 401, CORS preflight (including Private-Network); WebSocket: `PLAYER_INFO`, `PLAYER_STATE_CHANGED` on pause/play, `VOLUME_CHANGED`, `POSITION_CHANGED`, closed with 1008 without a token; starts automatically after reopening the app |
 | amuse | `/` returns the translated text, `/query` returns the current song, CORS |
 | Android background playback | Emulator (API 34): foreground service (type mediaPlayback), MediaSession shows cover / title / progress; keeps playing 30 s in the background; media keys pause / play / next work in the background; 0 session updates in 30 s of normal playback |
-| do-not-track (In player) | A signed-out separate profile (`PEAR_POC_PROFILE_DIR` / Android emulator), 6 songs each time, comparing YouTube's raw `/youtubei/v1/player` responses with the `getPlayerResponse()` the player actually got. **Windows:** off: 6/6 raw responses with ad fields, the player got 6/6, 1 ad played; on: raw responses still 6/6 with ads, the player got **0/6**, **0** ads played. **Android:** on: 5/5 raw responses with ads (the first song comes from the page HTML), the player got **0/6**, 0 ads played |
+| do-not-track (In player) | A signed-out separate profile (`PEAR_PROFILE_DIR` / Android emulator), 6 songs each time, comparing YouTube's raw `/youtubei/v1/player` responses with the `getPlayerResponse()` the player actually got. **Windows:** off: 6/6 raw responses with ad fields, the player got 6/6, 1 ad played; on: raw responses still 6/6 with ads, the player got **0/6**, **0** ads played. **Android:** on: 5/5 raw responses with ads (the first song comes from the page HTML), the player got **0/6**, 0 ads played |
 | Electron unaffected | `pnpm typecheck`, `pnpm lint`, `pnpm build` pass; `cargo test` (24) and `cargo clippy` clean; the Android version compiles |
 
 Not verified: a real Discord client, api-server's Allow/Deny dialog and HTTPS, the HTTPS certificate file picker, api-server / discord on Android.
 
 ## Third round results (Windows, 2026-10-24)
 
-A signed-out separate profile (`PEAR_POC_PROFILE_DIR`), with the page driven through WebView2's debugging port. The Android results follow the table.
+A signed-out separate profile (`PEAR_PROFILE_DIR`), with the page driven through WebView2's debugging port. The Android results follow the table.
 
 | Item | Result |
 |---|---|
