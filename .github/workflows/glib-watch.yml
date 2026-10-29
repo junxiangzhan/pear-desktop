@@ -1,0 +1,38 @@
+# Weekly check for when Tauri's Linux GTK stack moves past glib 0.18, whose
+# advisory (GHSA-wrw7-89jp-8q8g) dependency-review.yml allows for now.
+# The run fails, which GitHub reports by email, once `cargo update` can drop
+# glib 0.18/0.19. Then update src-tauri/Cargo.lock, remove `allow-ghsas` from
+# dependency-review.yml, and delete this workflow.
+
+name: glib advisory watch
+
+on:
+  schedule:
+    - cron: "0 3 * * 1"
+  workflow_dispatch:
+
+permissions: {}
+
+jobs:
+  watch:
+    name: Is glib 0.18 still needed?
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd
+
+      - name: Resolve the newest compatible crates
+        run: cargo update --manifest-path src-tauri/Cargo.toml
+
+      - name: Look for glib older than 0.20 on Linux
+        run: |
+          old=$(cargo tree --manifest-path src-tauri/Cargo.toml \
+            --target x86_64-unknown-linux-gnu -e normal --prefix none \
+            | grep -E '^glib v0\.1[0-9]\.' | sort -u || true)
+          if [ -n "$old" ]; then
+            echo "Still needed: $old"
+            exit 0
+          fi
+          echo "::error::Tauri no longer needs glib < 0.20. Run cargo update in src-tauri, remove allow-ghsas from dependency-review.yml and delete glib-watch.yml."
+          exit 1
