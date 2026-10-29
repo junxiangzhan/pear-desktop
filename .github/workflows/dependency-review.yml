@@ -20,3 +20,9 @@ jobs:
 
       - name: "Dependency Review"
         uses: actions/dependency-review-action@f5b971718edcbb31275a1db40004592335c0e031
+        with:
+          # glib 0.18 (unsound VariantStrIter) comes only with Tauri's Linux
+          # GTK stack (gtk-rs 0.18, which Tauri 2 pins). Pear Tauri builds for
+          # Windows and Android, where it isn't compiled. glib-watch.yml checks
+          # weekly whether an update can drop it; then remove this.
+          allow-ghsas: GHSA-wrw7-89jp-8q8g

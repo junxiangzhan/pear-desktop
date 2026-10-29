@@ -1,5 +1,5 @@
 // The discord menu's view of the Rust service
-// (tauri-poc/src-tauri/src/plugins/discord.rs), which owns the RPC client.
+// (src-tauri/src/plugins/discord.rs), which owns the RPC client.
 const { ipcRenderer } = window;
 
 let connected = false;

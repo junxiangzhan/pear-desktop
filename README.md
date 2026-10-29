@@ -28,17 +28,17 @@ A desktop and Android client for YouTube Music built on [Tauri v2](https://tauri
 
 ## Documentation
 
-Everything about the port lives in `tauri-poc/` (the folder keeps its name for now):
+The Tauri shell is in `src-tauri/` (Rust) and the page side in `src/` (the renderer, plugins and `src/inject/`). More in `docs/`:
 
-- [README (中文)](tauri-poc/README.md) · [README (English)](tauri-poc/README-en.md): architecture, plugin status, running on Windows and Android, releases
-- [GeckoView plan](tauri-poc/GECKOVIEW-PLAN.md)
+- [README (中文)](docs/README.md) · [README (English)](docs/README-en.md): architecture, plugin status, running on Windows and Android, releases
+- [GeckoView plan](docs/GECKOVIEW-PLAN.md)
 
 Quick start on Windows:
 
 ```bash
 pnpm install --frozen-lockfile
-pnpm exec vite build -c tauri-poc/vite.inject.config.mts
-cargo run --manifest-path tauri-poc/src-tauri/Cargo.toml
+pnpm build
+cargo run --manifest-path src-tauri/Cargo.toml
 ```
 
 ## Translation

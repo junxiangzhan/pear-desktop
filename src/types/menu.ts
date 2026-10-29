@@ -1,5 +1,5 @@
 // Plugin menus: templates that plugins build in the page (`menu(ctx)`) and
-// the Rust shell draws as native menus (tauri-poc/inject/menu-runtime.ts).
+// the Rust shell draws as native menus (src/inject/menu-runtime.ts).
 // The shape follows Electron's MenuItemConstructorOptions, which the menus
 // were written against; these are the fields that reach the native menu.
 

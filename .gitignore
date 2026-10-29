@@ -19,3 +19,10 @@ node_modules
 # Release signing keys (CI gets them from secrets)
 *.jks
 *.keystore
+
+# Tauri
+src-tauri/target
+src-tauri/gen/schemas
+src-tauri/gen/android/.kotlin
+# Page bundle built by `pnpm build`
+src-tauri/inject

@@ -1,4 +1,4 @@
-// The song info the page reports to Rust (tauri-poc/src-tauri/src/song_info.rs)
+// The song info the page reports to Rust (src-tauri/src/song_info.rs)
 // and hands to plugins; see ./song-info-front.ts.
 
 export enum MediaType {
