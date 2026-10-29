@@ -15,6 +15,7 @@
     "coverage/",
     "pnpm-lock.yaml",
     "changelog.md",
+    "src/i18n/resources/",
     "**/*.d.ts",
     "src/plugins/performance-improvement/scripts/**/*.js"
   ]
