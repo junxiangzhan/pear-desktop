@@ -21,6 +21,7 @@
   ],
   "scripts": {
     "build": "vite build",
+    "test": "vitest run",
     "clean": "pnpm del-cli src-tauri/inject",
     "lint": "pnpm oxlint --type-aware src",
     "format": "pnpm oxfmt --write src",
@@ -86,6 +87,7 @@
     "typescript": "7.0.1-rc",
     "vite": "8.1.0",
     "vite-plugin-resolve": "2.5.2",
-    "vite-plugin-solid": "2.11.12"
+    "vite-plugin-solid": "2.11.12",
+    "vitest": "5.0.5"
   }
 }

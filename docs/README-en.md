@@ -137,6 +137,8 @@ Close the window normally when testing. Killing the process gives WebView2 no ti
 
 Rust unit tests: `cargo test --manifest-path src-tauri/Cargo.toml --lib` (song info parsing, config merging, SponsorBlock segment merging, Last.fm signatures, shortcut name conversion, the `net_fetch` allowlist, etc.).
 
+Page-side unit tests: `pnpm test` (vitest, run in Node, e.g. `src/plugins/synced-lyrics/parsers/lrc.test.ts`; configured in `vitest.config.mts`, files end in `.test.ts`).
+
 ## Running (Android)
 
 Needs a JDK (the JBR bundled with Android Studio will do) and the NDK:
