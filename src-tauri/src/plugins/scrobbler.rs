@@ -271,8 +271,8 @@ async fn listenbrainz_submit(app: &AppHandle, song: &SongInfo, listen_type: &str
             "track_name": title,
             "release_name": song.album,
             "additional_info": {
-                "media_player": "Pear Desktop App",
-                "submission_client": "Pear Desktop App - Scrobbler Plugin",
+                "media_player": "Pear Tauri",
+                "submission_client": "Pear Tauri - Scrobbler Plugin",
                 "origin_url": song.url,
                 "duration": song.song_duration,
             }

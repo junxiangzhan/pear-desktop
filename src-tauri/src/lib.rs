@@ -1,4 +1,4 @@
-//! Tauri shell for Pear Desktop: hosts music.youtube.com with the renderer
+//! Tauri shell of Pear Tauri: hosts music.youtube.com with the renderer
 //! bundle injected, and reimplements the Electron main process in Rust.
 
 #[cfg(target_os = "android")]
@@ -304,7 +304,7 @@ fn create_main_window(app: &tauri::App) -> tauri::Result<()> {
         let tray = config.get_bool("options.tray");
         builder = builder
             .decorations(!in_app_menu)
-            .title("Pear Desktop")
+            .title("Pear Tauri")
             .inner_size(1100.0, 700.0)
             .min_inner_size(325.0, 425.0)
             .always_on_top(config.get_bool("options.alwaysOnTop"))

@@ -439,7 +439,7 @@ fn build(app: &AppHandle, data: &MenuData) -> tauri::Result<NativeMenu> {
     // A submenu like Electron's (`submenu: [{ role: 'about' }]`): in-app-menu's
     // top-level buttons only open submenus
     let about_label = b.label("about");
-    let about_item = b.item("act:about", &format!("{about_label} Pear Desktop"), true, None);
+    let about_item = b.item("act:about", &format!("{about_label} Pear Tauri"), true, None);
     let about = b.submenu(&about_label, vec![about_item]);
 
     let top = [plugins, options, view, navigation, about];

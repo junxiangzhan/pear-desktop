@@ -42,10 +42,10 @@ fn icon(paused: bool) -> Image<'static> {
 
 fn tooltip(app: &AppHandle, song: Option<&SongInfo>) -> String {
     match song {
-        Some(song) => label(app, "main.tray.tooltip.with-song-info", "Pear Desktop: {artist} - {title}")
+        Some(song) => label(app, "main.tray.tooltip.with-song-info", "Pear Tauri: {artist} - {title}")
             .replace("{artist}", &song.artist)
             .replace("{title}", &song.title),
-        None => label(app, "main.tray.tooltip.default", "Pear Desktop"),
+        None => label(app, "main.tray.tooltip.default", "Pear Tauri"),
     }
 }
 

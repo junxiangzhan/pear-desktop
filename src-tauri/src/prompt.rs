@@ -68,7 +68,7 @@ pub async fn open(app: &AppHandle, options: Value) -> Result<Value, String> {
     prompts.pending.lock().unwrap().insert(label.clone(), sender);
 
     let (width, height) = default_size(&options);
-    let title = options["title"].as_str().unwrap_or("Pear Desktop").to_owned();
+    let title = options["title"].as_str().unwrap_or("Pear Tauri").to_owned();
     let builder = WebviewWindowBuilder::new(app, &label, WebviewUrl::App("prompt.html".into()));
     let mut builder = crate::window::shared_webview_options(builder)
         .title(title)

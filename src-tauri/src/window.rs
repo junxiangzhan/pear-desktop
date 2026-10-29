@@ -84,7 +84,7 @@ pub fn apply_title(window: &WebviewWindow, page_title: Option<String>) {
     let title = match (custom.is_empty(), remembered.is_empty()) {
         (false, _) => custom,
         (true, false) => remembered,
-        (true, true) => "Pear Desktop".to_owned(),
+        (true, true) => "Pear Tauri".to_owned(),
     };
     let _ = window.set_title(&title);
 }
