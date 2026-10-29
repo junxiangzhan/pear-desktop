@@ -7,7 +7,8 @@
 use std::{
     collections::{HashMap, HashSet},
     fs,
-    path::PathBuf,
+    io::{self, Write},
+    path::{Path, PathBuf},
     sync::{Mutex, OnceLock},
     time::Duration,
 };
@@ -127,12 +128,51 @@ pub fn unavailable_plugins() -> &'static HashSet<String> {
     })
 }
 
+/// The stored config, or `{}` when there is none. A file that exists but
+/// isn't a JSON object (a write cut short, a hand edit gone wrong) is moved
+/// aside to `config.json.bad`; otherwise the next save would replace it
+/// with the defaults and the settings would be gone without a trace.
+fn read_stored(path: &Path) -> Value {
+    let text = match fs::read_to_string(path) {
+        Ok(text) => text,
+        Err(error) if error.kind() == io::ErrorKind::NotFound => return json!({}),
+        Err(error) => {
+            log::error!("reading {} failed: {error}", path.display());
+            return json!({});
+        }
+    };
+    match serde_json::from_str::<Value>(&text) {
+        Ok(stored @ Value::Object(_)) => stored,
+        result => {
+            let bad = path.with_extension("json.bad");
+            let reason = result.err().map_or("not an object".to_owned(), |e| e.to_string());
+            let shown = path.display();
+            match fs::rename(path, &bad) {
+                Ok(()) => log::error!("{shown} is unreadable ({reason}); kept as {}", bad.display()),
+                Err(error) => log::error!("{shown} is unreadable ({reason}); moving it failed: {error}"),
+            }
+            json!({})
+        }
+    }
+}
+
+/// Replaces `path` without ever leaving it half-written: the text goes to a
+/// temporary file next to it, which is flushed and then renamed over it.
+fn write_atomically(path: &Path, text: &str) -> io::Result<()> {
+    if let Some(dir) = path.parent() {
+        fs::create_dir_all(dir)?;
+    }
+    let temp = path.with_extension("json.tmp");
+    let mut file = fs::File::create(&temp)?;
+    file.write_all(text.as_bytes())?;
+    file.sync_all()?;
+    drop(file);
+    fs::rename(&temp, path)
+}
+
 impl Config {
     pub fn load(path: PathBuf) -> Self {
-        let stored = fs::read_to_string(&path)
-            .ok()
-            .and_then(|text| serde_json::from_str::<Value>(&text).ok())
-            .unwrap_or_else(|| json!({}));
+        let stored = read_stored(&path);
         Self {
             path,
             store: Mutex::new(merge(&defaults(), &stored)),
@@ -159,13 +199,11 @@ impl Config {
         self.get(key).as_str().unwrap_or_default().to_owned()
     }
 
+    /// Saves the store. Called with the store locked, so saves land in order.
     fn persist(&self, store: &Value) {
-        if let Some(dir) = self.path.parent() {
-            let _ = fs::create_dir_all(dir);
-        }
         match serde_json::to_string_pretty(store) {
             Ok(text) => {
-                if let Err(error) = fs::write(&self.path, text) {
+                if let Err(error) = write_atomically(&self.path, &text) {
                     log::error!("writing {} failed: {error}", self.path.display());
                 }
             }
@@ -367,6 +405,52 @@ mod tests {
         set_path(&mut root, "plugins.foo.enabled", json!(true));
         assert_eq!(root, json!({ "plugins": { "foo": { "enabled": true } } }));
         assert_eq!(get_path(&root, "plugins.foo.enabled"), Some(&json!(true)));
+    }
+
+    /// A fresh, empty directory under the system temp dir for one test.
+    fn temp_dir(name: &str) -> PathBuf {
+        let dir = std::env::temp_dir()
+            .join(format!("pear-tauri-config-{name}-{}", std::process::id()));
+        let _ = fs::remove_dir_all(&dir);
+        fs::create_dir_all(&dir).unwrap();
+        dir
+    }
+
+    #[test]
+    fn missing_config_reads_as_empty() {
+        let dir = temp_dir("missing");
+        assert_eq!(read_stored(&dir.join("config.json")), json!({}));
+        assert!(!dir.join("config.json.bad").exists());
+        fs::remove_dir_all(dir).unwrap();
+    }
+
+    #[test]
+    fn unreadable_config_is_kept_aside() {
+        let dir = temp_dir("bad");
+        let path = dir.join("config.json");
+        fs::write(&path, r#"{ "options": { "tray": tr"#).unwrap();
+        assert_eq!(read_stored(&path), json!({}));
+        assert!(!path.exists());
+        assert_eq!(
+            fs::read_to_string(dir.join("config.json.bad")).unwrap(),
+            r#"{ "options": { "tray": tr"#
+        );
+
+        fs::write(&path, "null").unwrap();
+        assert_eq!(read_stored(&path), json!({}));
+        assert_eq!(fs::read_to_string(dir.join("config.json.bad")).unwrap(), "null");
+        fs::remove_dir_all(dir).unwrap();
+    }
+
+    #[test]
+    fn atomic_write_replaces_the_file_and_leaves_no_temp_file() {
+        let dir = temp_dir("write");
+        let path = dir.join("nested").join("config.json");
+        write_atomically(&path, r#"{"a":1}"#).unwrap();
+        write_atomically(&path, r#"{"a":2}"#).unwrap();
+        assert_eq!(read_stored(&path), json!({ "a": 2 }));
+        assert!(!path.with_extension("json.tmp").exists());
+        fs::remove_dir_all(dir).unwrap();
     }
 
     #[test]
