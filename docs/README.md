@@ -137,6 +137,8 @@ cargo run --manifest-path src-tauri/Cargo.toml
 
 Rust 單元測試：`cargo test --manifest-path src-tauri/Cargo.toml --lib`（歌曲資訊解析、設定合併、SponsorBlock 片段合併、Last.fm 簽章、快捷鍵名稱轉換、`net_fetch` 白名單等）。
 
+頁面端單元測試：`pnpm test`（vitest，在 Node 裡跑，例如 `src/plugins/synced-lyrics/parsers/lrc.test.ts`；設定在 `vitest.config.mts`，檔名以 `.test.ts` 結尾）。
+
 ## 執行（Android）
 
 需要 JDK（Android Studio 內附的 JBR 即可）與 NDK：

@@ -1,6 +1,6 @@
-# Typechecks, lints and format-checks src, builds the page bundle and runs
-# the Rust tests on every push to master and every pull request. Releases
-# are release.yml.
+# Typechecks, lints, format-checks and unit-tests src, builds the page bundle
+# and runs the Rust tests on every push to master and every pull request.
+# Releases are release.yml.
 
 name: Pear Tauri check
 
@@ -66,6 +66,9 @@ jobs:
 
       - name: Format
         run: pnpm format:check
+
+      - name: Unit tests
+        run: pnpm test
 
       - name: Build the page bundle
         run: pnpm build
