@@ -20,8 +20,8 @@
     }
   ],
   "scripts": {
-    "build": "vite build -c tauri-poc/vite.inject.config.mts",
-    "clean": "pnpm del-cli tauri-poc/src-tauri/inject",
+    "build": "vite build",
+    "clean": "pnpm del-cli src-tauri/inject",
     "lint": "pnpm oxlint --type-aware src",
     "format": "pnpm oxfmt --write src",
     "format:check": "pnpm oxfmt --check src",

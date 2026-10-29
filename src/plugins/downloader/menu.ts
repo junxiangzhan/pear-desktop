@@ -194,7 +194,7 @@ export const onMenu = async ({
 
     {
       label: t('plugins.downloader.menu.download-playlist'),
-      // Answered by the page-side downloader (tauri-poc/inject/downloader.ts)
+      // Answered by the page-side downloader (src/inject/downloader.ts)
       click() {
         window.ipcRenderer
           .invoke('download-playlist-request')

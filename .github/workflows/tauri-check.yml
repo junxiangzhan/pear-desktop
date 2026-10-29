@@ -1,5 +1,5 @@
 # Typechecks src, builds the page bundle and runs the Rust tests on every
-# push to master and every pull request. Releases are tauri-poc-release.yml.
+# push to master and every pull request. Releases are release.yml.
 
 name: Pear Tauri check
 
@@ -51,8 +51,8 @@ jobs:
           path: |
             ~/.cargo/registry
             ~/.cargo/git
-            tauri-poc/src-tauri/target
-          key: cargo-check-windows-${{ hashFiles('tauri-poc/src-tauri/Cargo.lock') }}
+            src-tauri/target
+          key: cargo-check-windows-${{ hashFiles('src-tauri/Cargo.lock') }}
           restore-keys: |
             cargo-check-windows-
             cargo-windows-
@@ -61,7 +61,7 @@ jobs:
         run: pnpm typecheck
 
       - name: Build the page bundle
-        run: pnpm exec vite build -c tauri-poc/vite.inject.config.mts
+        run: pnpm build
 
       - name: Rust tests
-        run: cargo test --manifest-path tauri-poc/src-tauri/Cargo.toml --lib
+        run: cargo test --manifest-path src-tauri/Cargo.toml --lib

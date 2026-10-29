@@ -1,5 +1,5 @@
 // `window.ipcRenderer`, backed by the Rust dispatcher
-// (tauri-poc/src-tauri/src/ipc.rs).
+// (src-tauri/src/ipc.rs).
 // Sends and invokes go to Rust as `{ channel, args }`; Rust pushes messages
 // back as `pear:ipc` events, which are fanned out to `on`/`once` listeners
 // with an Electron-style `(event, ...args)` signature.

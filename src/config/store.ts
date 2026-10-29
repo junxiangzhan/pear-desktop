@@ -1,5 +1,5 @@
 // The page's mirror of the config that Rust owns
-// (tauri-poc/src-tauri/src/config.rs). Reads are synchronous from the mirror,
+// (src-tauri/src/config.rs). Reads are synchronous from the mirror,
 // seeded from the payload Rust bakes into the page; writes go to Rust, which
 // persists them, runs the plugin watcher and broadcasts the new store back as
 // `pear:config`.

@@ -1,6 +1,6 @@
 // Prompt dialogs (input, select, counter, keybind, multi-input), rendered by
-// the Rust prompt window (tauri-poc/src-tauri/src/prompt.rs,
-// tauri-poc/placeholder/prompt.html). Same options and results as
+// the Rust prompt window (src-tauri/src/prompt.rs,
+// placeholder/prompt.html). Same options and results as
 // custom-electron-prompt, which plugin menus were written against; resolves
 // to null when cancelled.
 import { invoke } from './tauri';

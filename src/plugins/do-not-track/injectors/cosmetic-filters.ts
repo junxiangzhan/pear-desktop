@@ -1,5 +1,5 @@
 // do-not-track's blocklist mode in the page. The network side runs in Rust
-// (tauri-poc/src-tauri/src/plugins/do_not_track.rs); what Electron's Ghostery
+// (src-tauri/src/plugins/do_not_track.rs); what Electron's Ghostery
 // preload did in the page, the URL's cosmetic filters (hiding CSS and
 // scriptlets), is asked from Rust here.
 const { ipcRenderer } = window;

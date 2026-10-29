@@ -1,5 +1,5 @@
 // Native file and folder pickers, opened by the Rust shell
-// (`pear:show-open-dialog` in tauri-poc/src-tauri/src/dialogs.rs).
+// (`pear:show-open-dialog` in src-tauri/src/dialogs.rs).
 import { ipcRenderer } from './ipc';
 
 export interface OpenDialogOptions {
