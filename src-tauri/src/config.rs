@@ -19,7 +19,7 @@ use tauri::{AppHandle, Manager};
 use tokio::sync::watch;
 
 use crate::{
-    ipc::{self, Ipc},
+    ipc::{self, arg, Ipc},
     plugins::Plugins,
 };
 
@@ -338,14 +338,14 @@ impl Config {
 /// Registers the config IPC used by the renderer's plugin contexts.
 pub fn register_ipc(ipc: &Ipc) {
     ipc.handle("core", "peard:get-config", |app, args| async move {
-        let id = args.first().and_then(Value::as_str).unwrap_or_default().to_owned();
+        let id: String = arg(&args, 0)?;
         let config = app.state::<Config>();
         config.wait_for_manifest().await;
         Ok(config.plugin_config(&id))
     });
     ipc.handle("core", "peard:set-config", |app, args| async move {
-        let id = args.first().and_then(Value::as_str).unwrap_or_default().to_owned();
-        let value = args.get(1).cloned().unwrap_or(Value::Null);
+        let id: String = arg(&args, 0)?;
+        let value: Value = arg(&args, 1)?;
         let config = app.state::<Config>();
         config.wait_for_manifest().await;
         let default = config.plugin_default(&id);

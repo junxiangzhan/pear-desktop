@@ -9,13 +9,13 @@
 use std::sync::{Arc, Mutex, OnceLock};
 
 use regex::Regex;
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 use tauri::{AppHandle, Manager};
 
 use crate::{
     config::Config,
-    ipc::{self, Ipc},
+    ipc::{self, arg_or_warn, Ipc},
 };
 
 #[derive(Serialize, Clone, Copy, Debug, PartialEq, Eq, Default)]
@@ -271,11 +271,19 @@ async fn handle_data(app: &AppHandle, data: &Value) -> Option<SongInfo> {
     Some(info)
 }
 
+/// What `peard:play-or-paused` carries.
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct PlayState {
+    is_paused: Option<bool>,
+    elapsed_seconds: Option<f64>,
+}
+
 /// Like `setupSongInfo(win)`: the provider's three IPC listeners.
 pub fn register_ipc(ipc: &Ipc) {
     ipc.on("core", "peard:video-src-changed", |app, args| {
         let app = app.clone();
-        let data = args.first().cloned().unwrap_or(Value::Null);
+        let Some(data) = arg_or_warn::<Value>("peard:video-src-changed", args, 0) else { return };
         tauri::async_runtime::spawn(async move {
             let provider = app.state::<SongInfoProvider>();
             // Held across the fetch, like the async-mutex in song-info.ts
@@ -289,13 +297,13 @@ pub fn register_ipc(ipc: &Ipc) {
 
     ipc.on("core", "peard:play-or-paused", |app, args| {
         let app = app.clone();
-        let state = args.first().cloned().unwrap_or(Value::Null);
+        let Some(state) = arg_or_warn::<PlayState>("peard:play-or-paused", args, 0) else { return };
         tauri::async_runtime::spawn(async move {
             let provider = app.state::<SongInfoProvider>();
             let mut current = provider.current.lock().await;
             let Some(info) = current.as_mut() else { return };
-            info.is_paused = state["isPaused"].as_bool();
-            info.elapsed_seconds = state["elapsedSeconds"].as_f64();
+            info.is_paused = state.is_paused;
+            info.elapsed_seconds = state.elapsed_seconds;
             let info = info.clone();
             drop(current);
             provider.notify(&app, &info, SongInfoEvent::PlayOrPaused);
@@ -304,12 +312,12 @@ pub fn register_ipc(ipc: &Ipc) {
 
     ipc.on("core", "peard:time-changed", |app, args| {
         let app = app.clone();
-        let seconds = args.first().and_then(Value::as_f64);
+        let Some(seconds) = arg_or_warn::<f64>("peard:time-changed", args, 0) else { return };
         tauri::async_runtime::spawn(async move {
             let provider = app.state::<SongInfoProvider>();
             let mut current = provider.current.lock().await;
             let Some(info) = current.as_mut() else { return };
-            info.elapsed_seconds = seconds;
+            info.elapsed_seconds = Some(seconds);
             let info = info.clone();
             drop(current);
             provider.notify(&app, &info, SongInfoEvent::TimeChanged);

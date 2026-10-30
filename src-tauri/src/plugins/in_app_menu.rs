@@ -21,7 +21,7 @@ use tauri::WindowEvent;
 
 use super::Plugin;
 #[cfg(desktop)]
-use crate::ipc::{send_to_page, MAIN_WEBVIEW};
+use crate::ipc::{arg, send_to_page, MAIN_WEBVIEW};
 use crate::{ipc::Ipc, menu};
 
 pub struct InAppMenu {
@@ -65,11 +65,11 @@ impl Plugin for InAppMenu {
         let id = self.id();
         ipc.handle(id, "get-menu", |app, _| async move { Ok(menu::electron_menu(&app)) });
         ipc.handle(id, "get-menu-by-id", |app, args| async move {
-            let command_id = args.first().and_then(Value::as_u64).unwrap_or_default();
+            let command_id: u64 = arg(&args, 0)?;
             Ok(menu::electron_item(&app, command_id))
         });
         ipc.handle(id, "peard:menu-event", |app, args| async move {
-            let command_id = args.first().and_then(Value::as_u64).unwrap_or_default();
+            let command_id: u64 = arg(&args, 0)?;
             // Menu items touch the window; run them on the main thread
             let handle = app.clone();
             app.run_on_main_thread(move || menu::click_by_command_id(&handle, command_id))

@@ -40,7 +40,7 @@ use tokio::sync::{broadcast, oneshot};
 use super::Plugin;
 use crate::{
     config::Config,
-    ipc::{send_to_page, Ipc},
+    ipc::{arg_or_warn, send_to_page, Ipc},
     menu::label,
     song_controls,
     song_info::{SongInfo, SongInfoEvent, SongInfoProvider},
@@ -194,7 +194,7 @@ impl Plugin for ApiServer {
         let ipc = app.state::<Ipc>();
         let state = shared.clone();
         ipc.on(ID, "peard:volume-changed", move |_, args| {
-            let volume = args.first().cloned().unwrap_or(Value::Null);
+            let Some(volume) = arg_or_warn::<Value>("peard:volume-changed", args, 0) else { return };
             state.broadcast(
                 "VOLUME_CHANGED",
                 json!({ "volume": volume["state"], "muted": volume["isMuted"] }),
@@ -203,17 +203,18 @@ impl Plugin for ApiServer {
         });
         let state = shared.clone();
         ipc.on(ID, "peard:repeat-changed", move |_, args| {
-            let mode = args.first().cloned().unwrap_or(Value::Null);
+            let Some(mode) = arg_or_warn::<Value>("peard:repeat-changed", args, 0) else { return };
             state.broadcast("REPEAT_CHANGED", json!({ "repeat": mode }));
             *state.repeat.lock().unwrap() = Some(mode);
         });
         let state = shared.clone();
         ipc.on(ID, "peard:seeked", move |_, args| {
-            state.broadcast("POSITION_CHANGED", json!({ "position": args.first() }));
+            let Some(position) = arg_or_warn::<f64>("peard:seeked", args, 0) else { return };
+            state.broadcast("POSITION_CHANGED", json!({ "position": position }));
         });
         let state = shared.clone();
         ipc.on(ID, "peard:shuffle-changed", move |_, args| {
-            let shuffle = args.first().and_then(Value::as_bool).unwrap_or(false);
+            let Some(shuffle) = arg_or_warn::<bool>("peard:shuffle-changed", args, 0) else { return };
             state.shuffle.store(shuffle, Ordering::Relaxed);
             state.broadcast("SHUFFLE_CHANGED", json!({ "shuffle": shuffle }));
         });
