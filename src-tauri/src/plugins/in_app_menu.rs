@@ -21,8 +21,11 @@ use tauri::WindowEvent;
 
 use super::Plugin;
 #[cfg(desktop)]
-use crate::ipc::{arg, send_to_page, MAIN_WEBVIEW};
-use crate::{ipc::Ipc, menu};
+use crate::ipc::{send_to_page, MAIN_WEBVIEW};
+use crate::{
+    ipc::{arg, Ipc},
+    menu,
+};
 
 pub struct InAppMenu {
     /// Gates the window-event handler of the current run (it can't be removed)
