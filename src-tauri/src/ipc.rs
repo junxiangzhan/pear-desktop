@@ -6,7 +6,8 @@
 //! - Rust → page: [`send_to_page`] emits `pear:ipc` to the page
 //!
 //! Listeners and handlers carry an owner (`"core"` or a plugin id) so a
-//! plugin's registrations can be dropped when it stops.
+//! plugin's registrations can be dropped when it stops. They decode their
+//! arguments with [`arg`] (or [`arg_or_warn`] for listeners).
 
 use std::{
     collections::HashMap,
@@ -15,7 +16,7 @@ use std::{
 };
 
 use futures::future::BoxFuture;
-use serde::Serialize;
+use serde::{de::DeserializeOwned, Serialize};
 use serde_json::Value;
 use tauri::{AppHandle, Manager};
 use tokio::sync::oneshot;
@@ -132,6 +133,22 @@ impl Ipc {
     }
 }
 
+/// Argument `index` of a page message, decoded into `T`. A missing argument
+/// decodes like `null` (what the page sends for `undefined`), so `Option<T>`
+/// makes it optional and any other type makes it required.
+pub fn arg<T: DeserializeOwned>(args: &[Value], index: usize) -> Result<T, String> {
+    T::deserialize(args.get(index).unwrap_or(&Value::Null))
+        .map_err(|error| format!("argument {index}: {error}"))
+}
+
+/// [`arg`] for listeners, which have no caller to answer: a bad argument
+/// is logged and the message skipped.
+pub fn arg_or_warn<T: DeserializeOwned>(channel: &str, args: &[Value], index: usize) -> Option<T> {
+    arg(args, index)
+        .map_err(|error| log::warn!("ignoring '{channel}': {error}"))
+        .ok()
+}
+
 /// Like `webContents.send(channel, ...args)`.
 pub fn send_to_page(app: &AppHandle, channel: &str, args: &[Value]) {
     crate::page::emit(app, "pear:ipc", PageMessage { channel, args });
@@ -146,4 +163,30 @@ pub fn ipc_send(app: AppHandle, channel: String, args: Vec<Value>) {
 pub async fn ipc_invoke(app: AppHandle, channel: String, args: Vec<Value>) -> Result<Value, String> {
     let ipc = app.state::<Ipc>();
     ipc.invoke(app.clone(), &channel, args).await
+}
+
+#[cfg(test)]
+mod tests {
+    use serde_json::json;
+
+    use super::*;
+
+    #[test]
+    fn arg_decodes_by_type() {
+        let args = [json!("downloader"), json!({ "enabled": true }), json!(3)];
+        assert_eq!(arg::<String>(&args, 0).unwrap(), "downloader");
+        assert_eq!(arg::<Value>(&args, 1).unwrap(), json!({ "enabled": true }));
+        assert_eq!(arg::<u64>(&args, 2).unwrap(), 3);
+    }
+
+    #[test]
+    fn missing_arguments_are_only_allowed_when_optional() {
+        let args = [json!(null)];
+        assert_eq!(arg::<Option<String>>(&args, 0).unwrap(), None);
+        assert_eq!(arg::<Option<String>>(&args, 5).unwrap(), None);
+        assert_eq!(arg::<Value>(&args, 5).unwrap(), Value::Null);
+        assert!(arg::<String>(&args, 0).unwrap_err().starts_with("argument 0:"));
+        assert!(arg::<u64>(&[json!("7")], 0).is_err());
+        assert_eq!(arg_or_warn::<bool>("test", &[], 0), None);
+    }
 }

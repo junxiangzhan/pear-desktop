@@ -29,7 +29,8 @@ pub fn register_ipc(ipc: &Ipc) {
         Ok(json!(dir))
     });
     ipc.handle("core", "peard:get-path", |_, args| async move {
-        let path: PathBuf = args.iter().filter_map(Value::as_str).collect();
+        let parts: Vec<String> = serde_json::from_value(Value::Array(args)).map_err(|e| e.to_string())?;
+        let path: PathBuf = parts.iter().collect();
         Ok(json!(path))
     });
 }

@@ -1,11 +1,12 @@
 //! Message boxes from `src/index.ts`, on `tauri-plugin-dialog`.
 
-use serde_json::{json, Value};
+use serde::Deserialize;
+use serde_json::json;
 use tauri::AppHandle;
 use tauri_plugin_dialog::{DialogExt, MessageDialogButtons, MessageDialogKind};
 use tokio::sync::oneshot;
 
-use crate::ipc::Ipc;
+use crate::ipc::{arg, Ipc};
 
 /// The "About" menu item (Electron's `role: 'about'`). Says it is not an
 /// official Pear Desktop release, so problems aren't reported there.
@@ -52,30 +53,39 @@ pub fn need_restart(app: &AppHandle, plugin_id: &str) {
         });
 }
 
+/// `OpenDialogOptions` in src/platform/dialog.ts.
+#[derive(Deserialize, Default)]
+#[serde(default, rename_all = "camelCase")]
+struct OpenDialogOptions {
+    title: Option<String>,
+    default_path: Option<String>,
+    filters: Vec<DialogFilter>,
+    properties: Vec<String>,
+}
+
+#[derive(Deserialize)]
+struct DialogFilter {
+    name: String,
+    extensions: Vec<String>,
+}
+
 /// `showOpenDialog` for page-side menus (`src/platform/dialog.ts`):
 /// title, filters and `defaultPath`, one file or one folder
 /// (`openDirectory`), answered like Electron.
 pub fn register_ipc(ipc: &Ipc) {
     ipc.handle("core", "pear:show-open-dialog", |app, args| async move {
-        let options = args.into_iter().next().unwrap_or(Value::Null);
+        let options: OpenDialogOptions = arg(&args, 0)?;
         let mut dialog = app.dialog().file();
-        if let Some(title) = options["title"].as_str() {
+        if let Some(title) = &options.title {
             dialog = dialog.set_title(title);
         }
-        if let Some(path) = options["defaultPath"].as_str().filter(|path| !path.is_empty()) {
+        if let Some(path) = options.default_path.as_deref().filter(|path| !path.is_empty()) {
             dialog = dialog.set_directory(path);
         }
-        let folder = options["properties"]
-            .as_array()
-            .is_some_and(|properties| properties.iter().any(|p| p == "openDirectory"));
-        for filter in options["filters"].as_array().into_iter().flatten() {
-            let extensions: Vec<&str> = filter["extensions"]
-                .as_array()
-                .into_iter()
-                .flatten()
-                .filter_map(Value::as_str)
-                .collect();
-            dialog = dialog.add_filter(filter["name"].as_str().unwrap_or_default(), &extensions);
+        let folder = options.properties.iter().any(|property| property == "openDirectory");
+        for filter in &options.filters {
+            let extensions: Vec<&str> = filter.extensions.iter().map(String::as_str).collect();
+            dialog = dialog.add_filter(&filter.name, &extensions);
         }
         let (tx, rx) = oneshot::channel();
         let answer = move |path| {

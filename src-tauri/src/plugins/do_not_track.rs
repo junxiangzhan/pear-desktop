@@ -43,7 +43,7 @@ use tauri::{AppHandle, Manager};
 use tokio::sync::watch;
 
 use super::Plugin;
-use crate::ipc::Ipc;
+use crate::ipc::{arg, Ipc};
 
 const ID: &str = "do-not-track";
 const WITH_BLOCKLISTS: &str = "With blocklists";
@@ -73,7 +73,7 @@ impl Plugin for DoNotTrack {
 
     fn start(&self, app: &AppHandle, config: &Value) {
         app.state::<Ipc>().handle(ID, "do-not-track:cosmetics", |_, args| async move {
-            let url = args.first().and_then(Value::as_str).unwrap_or_default().to_owned();
+            let url: String = arg(&args, 0)?;
             Ok(cosmetics(&url).await)
         });
         self.on_config_change(app, config);

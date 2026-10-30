@@ -8,7 +8,7 @@ use serde_json::{json, Value};
 use tauri::{AppHandle, Manager};
 
 use super::Plugin;
-use crate::ipc::Ipc;
+use crate::ipc::{arg, Ipc};
 
 pub struct SyncedLyrics;
 
@@ -34,11 +34,11 @@ impl Plugin for SyncedLyrics {
 
     fn start(&self, app: &AppHandle, _config: &Value) {
         app.state::<Ipc>().handle(self.id(), "synced-lyrics:fetch", |_, args| async move {
-            let url = args.first().and_then(Value::as_str).ok_or("missing url")?.to_owned();
+            let url: String = arg(&args, 0)?;
             if !url.starts_with("https://") {
                 return Err("synced-lyrics:fetch only allows https".into());
             }
-            let init = args.get(1).cloned().unwrap_or(Value::Null);
+            let init: Value = arg(&args, 1)?;
             let mut request = crate::net::client().request(
                 init["method"].as_str().unwrap_or("GET").parse().map_err(|_| "bad method")?,
                 &url,

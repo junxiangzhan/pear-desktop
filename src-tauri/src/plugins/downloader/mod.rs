@@ -36,7 +36,7 @@ use tokio::io::AsyncWriteExt;
 use super::Plugin;
 use crate::{
     config::Config,
-    ipc::{send_to_page, Ipc},
+    ipc::{arg, arg_or_warn, send_to_page, Ipc},
     song_info::{cleanup_name, SongInfo, SongInfoEvent, SongInfoProvider},
 };
 
@@ -105,20 +105,23 @@ impl Plugin for Downloader {
     fn start(&self, app: &AppHandle, _config: &Value) {
         let ipc = app.state::<Ipc>();
         ipc.handle(ID, "downloader:save", |app, args| async move {
-            let request: SaveRequest = serde_json::from_value(args.into_iter().next().unwrap_or_default())
-                .map_err(|error| error.to_string())?;
+            let request: SaveRequest = arg(&args, 0)?;
             save(&app, request).await
         });
         ipc.handle(ID, "downloader:prepare-folder", |app, args| async move {
-            let title = args.first().and_then(Value::as_str).unwrap_or_default();
-            prepare_folder(&app, title)
+            // No subfolder when the page passes `undefined`
+            let title: Option<String> = arg(&args, 0)?;
+            prepare_folder(&app, title.as_deref().unwrap_or_default())
         });
         ipc.handle(ID, "downloader:dialog", |app, args| async move {
-            show_dialog(&app, args.first().unwrap_or(&Value::Null));
+            let options: Value = arg(&args, 0)?;
+            show_dialog(&app, &options);
             Ok(Value::Null)
         });
         ipc.on(ID, "downloader:progress-bar", |app, args| {
-            set_progress_bar(app, args.first().and_then(Value::as_f64).unwrap_or(-1.0));
+            if let Some(value) = arg_or_warn("downloader:progress-bar", args, 0) {
+                set_progress_bar(app, value);
+            }
         });
         download_on_finish_setup(app);
     }
