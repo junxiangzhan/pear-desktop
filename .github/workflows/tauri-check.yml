@@ -1,6 +1,7 @@
 # Typechecks, lints, format-checks and unit-tests src, builds the page bundle
-# and runs the Rust tests on every push to master and every pull request.
-# Releases are release.yml.
+# and runs the Rust tests on every push to master and every pull request, and
+# checks that the Rust side still compiles for Android (whose cfg(mobile) code
+# the Windows build never sees). Releases are release.yml.
 
 name: Pear Tauri check
 
@@ -17,6 +18,8 @@ concurrency:
 
 env:
   NODE_VERSION: "24.x"
+  # Same NDK as release.yml
+  NDK_VERSION: "28.0.13004108"
 
 jobs:
   check:
@@ -75,3 +78,70 @@ jobs:
 
       - name: Rust tests
         run: cargo test --manifest-path src-tauri/Cargo.toml --lib
+
+  android:
+    name: Android compile check
+    if: github.event.pull_request.draft != true
+    # Same host as release.yml's Android build (see .cargo/config.toml)
+    runs-on: windows-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd
+
+      - name: Install pnpm
+        uses: pnpm/action-setup@fc06bc1257f339d1d5d8b3a19a8cae5388b55320
+        with:
+          version: 11
+          run_install: false
+
+      - name: Setup NodeJS
+        uses: actions/setup-node@53b83947a5a98c8d113130e565377fae1a50d02f
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: "pnpm"
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Install the NDK
+        shell: pwsh
+        run: |
+          $sdkmanager = "$env:ANDROID_HOME\cmdline-tools\latest\bin\sdkmanager.bat"
+          "y`n" * 20 | & $sdkmanager --licenses | Out-Null
+          & $sdkmanager --install "ndk;$env:NDK_VERSION"
+          if ($LASTEXITCODE) { exit $LASTEXITCODE }
+          "NDK_HOME=$env:ANDROID_HOME\ndk\$env:NDK_VERSION" | Out-File $env:GITHUB_ENV -Append
+
+      - name: Update Rust
+        run: |
+          rustup update stable --no-self-update
+          rustup target add aarch64-linux-android
+
+      - name: Cache Cargo
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            src-tauri/target
+          key: cargo-check-android-${{ hashFiles('src-tauri/Cargo.lock') }}
+          restore-keys: |
+            cargo-check-android-
+            cargo-android-
+
+      # The Rust side embeds the bundle (include_str!)
+      - name: Build the page bundle
+        run: pnpm build
+
+      - name: Check the Rust side for Android arm64
+        shell: pwsh
+        # From src-tauri, so its .cargo/config.toml (the LAME header fix) applies
+        working-directory: src-tauri
+        run: |
+          # The app's minSdk (gen/android/app/build.gradle.kts)
+          $clang = "$env:NDK_HOME\toolchains\llvm\prebuilt\windows-x86_64\bin\aarch64-linux-android26-clang.cmd"
+          $env:CC_aarch64_linux_android = $clang
+          $env:CARGO_TARGET_AARCH64_LINUX_ANDROID_LINKER = $clang
+          $env:AR_aarch64_linux_android = "$env:NDK_HOME\toolchains\llvm\prebuilt\windows-x86_64\bin\llvm-ar.exe"
+          cargo check --lib --target aarch64-linux-android

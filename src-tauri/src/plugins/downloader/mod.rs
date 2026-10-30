@@ -22,8 +22,10 @@
 //! through MediaStore (`android_app::save_audio`); its folder settings are
 //! hidden.
 
+#[cfg(desktop)]
+use std::path::PathBuf;
 use std::{
-    path::{Path, PathBuf},
+    path::Path,
     sync::{Arc, Mutex},
     time::{Duration, Instant},
 };

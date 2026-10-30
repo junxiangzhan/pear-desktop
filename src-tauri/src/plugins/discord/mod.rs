@@ -19,7 +19,7 @@ use std::{
 use serde_json::{json, Value};
 use tauri::{AppHandle, Manager};
 use tokio::{
-    io::{AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt},
+    io::AsyncWriteExt,
     sync::mpsc,
     time::{sleep_until, Instant},
 };
@@ -30,21 +30,19 @@ use crate::{
     song_info::{SongInfo, SongInfoEvent, SongInfoProvider},
 };
 
+mod activity;
+mod rpc;
+
+use activity::{build_activity, is_seek};
+use rpc::{
+    open_socket, read_frames, write_frame, Writer, OP_CLOSE, OP_FRAME, OP_HANDSHAKE, OP_PING, OP_PONG,
+};
+
 /// Application ID registered by the pear-desktop team (constants.ts)
 const CLIENT_ID: &str = "1177081335727267940";
 const PROGRESS_THROTTLE: Duration = Duration::from_millis(15_000);
 const TIME_UPDATE_DEBOUNCE: Duration = Duration::from_millis(5000);
 const RETRY_DELAY: Duration = Duration::from_millis(5000);
-const HANGUL_FILLER: char = '\u{3164}';
-const APPLICATION_NAME: &str = "\u{59}\u{6f}\u{75}\u{54}\u{75}\u{62}\u{65} \u{4d}\u{75}\u{73}\u{69}\u{63}";
-const PLAY_ON_KEY: &str = "playOn\u{59}\u{6f}\u{75}\u{54}\u{75}\u{62}\u{65}\u{4d}\u{75}\u{73}\u{69}\u{63}";
-
-// Opcodes of Discord's IPC frames
-const OP_HANDSHAKE: u32 = 0;
-const OP_FRAME: u32 = 1;
-const OP_CLOSE: u32 = 2;
-const OP_PING: u32 = 3;
-const OP_PONG: u32 = 4;
 
 enum Command {
     Connect,
@@ -119,8 +117,6 @@ impl Plugin for Discord {
         self.send(Command::Config(config.clone()));
     }
 }
-
-type Writer = Box<dyn AsyncWrite + Send + Unpin>;
 
 /// `DiscordService` plus the debounce of `main.ts`.
 struct Service {
@@ -441,234 +437,4 @@ impl Service {
 
 fn now_ms() -> f64 {
     SystemTime::now().duration_since(UNIX_EPOCH).unwrap_or_default().as_millis() as f64
-}
-
-/// Like `isSeek` in utils.ts.
-fn is_seek(old_seconds: f64, new_seconds: f64) -> bool {
-    (new_seconds - old_seconds).abs() > 2.0
-}
-
-/// Like `truncateString` in utils.ts, counting UTF-16 units like JS.
-fn truncate(text: &str, length: usize) -> String {
-    if text.encode_utf16().count() <= length {
-        return text.to_owned();
-    }
-    let mut units = 0;
-    let kept: String = text
-        .chars()
-        .take_while(|c| {
-            units += c.len_utf16();
-            units <= length - 3
-        })
-        .collect();
-    format!("{kept}...")
-}
-
-/// Like `sanitizeActivityText` in utils.ts: Discord wants 2 to 128 characters.
-fn sanitize(input: Option<&str>) -> String {
-    let text = input.map(str::trim).filter(|t| !t.is_empty()).unwrap_or("undefined");
-    let mut text = truncate(text, 128);
-    if text.encode_utf16().count() < 2 {
-        text.push('⠀');
-    }
-    text
-}
-
-/// Like `padHangulFields` in utils.ts.
-fn pad_short(value: &str) -> String {
-    match value.encode_utf16().count() {
-        1 => format!("{value}{HANGUL_FILLER}"),
-        _ => value.to_owned(),
-    }
-}
-
-/// `buildActivityInfo` plus the RPC client's `setActivity` formatting.
-fn build_activity(song: &SongInfo, config: &Value, now_ms: f64) -> Value {
-    let title = pad_short(&song.title);
-    let artist = pad_short(&song.artist);
-    let album = song.album.as_deref().map(pad_short);
-
-    let mut activity = json!({
-        "type": 2, // Listening
-        "created_at": now_ms as u64,
-        "instance": false,
-        "details": sanitize(Some(song.alternative_title.as_deref().unwrap_or(&title))),
-        "state": sanitize(Some(song.tags.first().map(String::as_str).unwrap_or(&artist))),
-    });
-    if let Some(display_type) = config.get("statusDisplayType").filter(|v| !v.is_null()) {
-        activity["status_display_type"] = display_type.clone();
-    }
-    if let Some(url) = song.url.as_deref().filter(|u| !u.is_empty()) {
-        activity["details_url"] = json!(url);
-    }
-    if let Some(url) = song.artist_url.as_deref().filter(|u| !u.is_empty()) {
-        activity["state_url"] = json!(url);
-    }
-
-    let mut assets = serde_json::Map::new();
-    if let Some(image) = song.image_src.as_deref().filter(|i| !i.is_empty()) {
-        assets.insert("large_image".into(), json!(image));
-    }
-    let large_text = if song.is_paused == Some(true) {
-        Some("⏸︎".to_owned())
-    } else {
-        album.filter(|a| !a.is_empty()).map(|a| sanitize(Some(&a)))
-    };
-    if let Some(text) = large_text {
-        assets.insert("large_text".into(), json!(text));
-    }
-    if !assets.is_empty() {
-        activity["assets"] = Value::Object(assets);
-    }
-
-    let hide_duration = config["hideDurationLeft"].as_bool().unwrap_or(false);
-    if song.is_paused != Some(true) && !hide_duration && song.song_duration > 0.0 {
-        if let Some(elapsed) = song.elapsed_seconds {
-            let start = now_ms - elapsed * 1000.0;
-            activity["timestamps"] = json!({
-                "start": (start / 1000.0).floor() as i64,
-                "end": ((start + song.song_duration * 1000.0) / 1000.0).floor() as i64,
-            });
-        }
-    }
-
-    let mut buttons = Vec::new();
-    if config[PLAY_ON_KEY].as_bool().unwrap_or(true) {
-        if let Some(url) = song.url.as_deref().filter(|u| !u.is_empty()) {
-            buttons.push(json!({ "label": format!("Play on {APPLICATION_NAME}"), "url": url }));
-        }
-    }
-    if !config["hideGitHubButton"].as_bool().unwrap_or(false) {
-        buttons.push(json!({
-            "label": "View App On GitHub",
-            "url": "https://github.com/pear-devs/pear-desktop",
-        }));
-    }
-    if !buttons.is_empty() {
-        activity["buttons"] = json!(buttons);
-    }
-    activity
-}
-
-async fn write_frame(writer: &mut Writer, op: u32, payload: &Value) -> std::io::Result<()> {
-    let body = serde_json::to_vec(payload)?;
-    let mut frame = Vec::with_capacity(8 + body.len());
-    frame.extend_from_slice(&op.to_le_bytes());
-    frame.extend_from_slice(&(body.len() as u32).to_le_bytes());
-    frame.extend_from_slice(&body);
-    writer.write_all(&frame).await?;
-    writer.flush().await
-}
-
-async fn read_frames(
-    mut reader: Box<dyn AsyncRead + Send + Unpin>,
-    generation: u64,
-    commands: mpsc::UnboundedSender<Command>,
-) {
-    loop {
-        let mut header = [0u8; 8];
-        if reader.read_exact(&mut header).await.is_err() {
-            break;
-        }
-        let op = u32::from_le_bytes(header[..4].try_into().unwrap());
-        let length = u32::from_le_bytes(header[4..].try_into().unwrap()) as usize;
-        let mut body = vec![0u8; length];
-        if reader.read_exact(&mut body).await.is_err() {
-            break;
-        }
-        let payload = serde_json::from_slice(&body).unwrap_or(Value::Null);
-        if commands.send(Command::Incoming(generation, Some((op, payload)))).is_err() {
-            return;
-        }
-    }
-    let _ = commands.send(Command::Incoming(generation, None));
-}
-
-type Halves = (Box<dyn AsyncRead + Send + Unpin>, Writer);
-
-/// Discord listens on `discord-ipc-0` to `-9`, the first free one.
-#[cfg(windows)]
-async fn open_socket() -> std::io::Result<Halves> {
-    use tokio::net::windows::named_pipe::ClientOptions;
-    let mut last_error = None;
-    for index in 0..10 {
-        match ClientOptions::new().open(format!(r"\\.\pipe\discord-ipc-{index}")) {
-            Ok(pipe) => {
-                let (reader, writer) = tokio::io::split(pipe);
-                return Ok((Box::new(reader), Box::new(writer)));
-            }
-            Err(error) => last_error = Some(error),
-        }
-    }
-    Err(last_error.expect("tried at least one pipe"))
-}
-
-#[cfg(unix)]
-async fn open_socket() -> std::io::Result<Halves> {
-    let base = ["XDG_RUNTIME_DIR", "TMPDIR", "TMP", "TEMP"]
-        .iter()
-        .find_map(|key| std::env::var(key).ok())
-        .unwrap_or_else(|| "/tmp".to_owned());
-    let mut last_error = None;
-    for index in 0..10 {
-        match tokio::net::UnixStream::connect(format!("{base}/discord-ipc-{index}")).await {
-            Ok(stream) => {
-                let (reader, writer) = stream.into_split();
-                return Ok((Box::new(reader), Box::new(writer)));
-            }
-            Err(error) => last_error = Some(error),
-        }
-    }
-    Err(last_error.expect("tried at least one socket"))
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    fn song() -> SongInfo {
-        SongInfo {
-            title: "Song".into(),
-            artist: "Artist".into(),
-            album: Some("A".into()),
-            video_id: "abc".into(),
-            url: Some("https://music.youtube.com/watch?v=abc".into()),
-            image_src: Some("https://i.ytimg.com/x.jpg".into()),
-            song_duration: 200.0,
-            elapsed_seconds: Some(20.0),
-            is_paused: Some(false),
-            ..Default::default()
-        }
-    }
-
-    #[test]
-    fn activity_matches_the_electron_payload() {
-        let config = json!({ "statusDisplayType": 2, PLAY_ON_KEY: true, "hideGitHubButton": false });
-        let activity = build_activity(&song(), &config, 1_000_000.0);
-        assert_eq!(activity["type"], 2);
-        assert_eq!(activity["details"], "Song");
-        assert_eq!(activity["state"], "Artist");
-        assert_eq!(activity["status_display_type"], 2);
-        assert_eq!(activity["assets"]["large_text"], format!("A{HANGUL_FILLER}"));
-        assert_eq!(activity["timestamps"], json!({ "start": 980, "end": 1180 }));
-        assert_eq!(activity["buttons"].as_array().unwrap().len(), 2);
-    }
-
-    #[test]
-    fn paused_activity_has_no_timestamps() {
-        let mut song = song();
-        song.is_paused = Some(true);
-        let activity = build_activity(&song, &json!({ "hideGitHubButton": true, PLAY_ON_KEY: false }), 0.0);
-        assert_eq!(activity["assets"]["large_text"], "⏸︎");
-        assert!(activity.get("timestamps").is_none());
-        assert!(activity.get("buttons").is_none());
-    }
-
-    #[test]
-    fn text_is_sanitized_like_utils_ts() {
-        assert_eq!(sanitize(Some("  ")), "undefined");
-        assert_eq!(sanitize(Some("x")), "x⠀");
-        let long = "a".repeat(200);
-        assert_eq!(sanitize(Some(&long)), format!("{}...", "a".repeat(125)));
-    }
 }
