@@ -123,7 +123,9 @@ pub struct MenuState {
     tree: Mutex<Vec<Value>>,
     #[cfg_attr(mobile, allow(dead_code))]
     zoom: Mutex<f64>,
-    /// Set when in-app-menu draws the menu in the page (no native menu bar)
+    /// Set when in-app-menu draws the menu in the page (no native menu bar);
+    /// mobile has no native menu at all
+    #[cfg_attr(mobile, allow(dead_code))]
     pub in_app: std::sync::atomic::AtomicBool,
 }
 
@@ -133,19 +135,19 @@ pub struct MenuState {
 /// attached to prompt windows, and closing one tore the shared menu down.
 pub fn rebuild(app: &AppHandle) {
     let data = app.state::<MenuState>().data.lock().unwrap().clone();
+    // `NativeMenu` is `()` on mobile, where in-app-menu draws the built tree
+    #[cfg_attr(mobile, allow(clippy::let_unit_value, unused_variables))]
     let menu = match build(app, &data) {
         Ok(menu) => menu,
         Err(error) => return log::error!("building the menu failed: {error}"),
     };
-    if cfg!(mobile) || app.state::<MenuState>().in_app.load(std::sync::atomic::Ordering::Relaxed) {
-        // in-app-menu draws it in the page; keep the built items for its clicks
-        ipc::send_to_page(app, "refresh-in-app-menu", &[]);
-        return;
-    }
-    #[cfg(mobile)]
-    let _ = menu;
     #[cfg(desktop)]
-    install(app, menu);
+    if !app.state::<MenuState>().in_app.load(std::sync::atomic::Ordering::Relaxed) {
+        return install(app, menu);
+    }
+    // in-app-menu draws it in the page (always on mobile); keep the built
+    // items for its clicks
+    ipc::send_to_page(app, "refresh-in-app-menu", &[]);
 }
 
 #[cfg(desktop)]

@@ -1,7 +1,7 @@
-# Typechecks, lints, format-checks and unit-tests src, builds the page bundle
-# and runs the Rust tests on every push to master and every pull request, and
-# checks that the Rust side still compiles for Android (whose cfg(mobile) code
-# the Windows build never sees). Releases are release.yml.
+# Typechecks, lints, format-checks and unit-tests src, builds the page bundle,
+# runs clippy and the Rust tests on every push to master and every pull
+# request, and checks the Rust side with clippy for Android too (the Windows
+# build never sees its cfg(mobile) code). Releases are release.yml.
 
 name: Pear Tauri check
 
@@ -76,6 +76,9 @@ jobs:
       - name: Build the page bundle
         run: pnpm build
 
+      - name: Clippy
+        run: cargo clippy --manifest-path src-tauri/Cargo.toml --lib --all-targets -- -D warnings
+
       - name: Rust tests
         run: cargo test --manifest-path src-tauri/Cargo.toml --lib
 
@@ -144,4 +147,4 @@ jobs:
           $env:CC_aarch64_linux_android = $clang
           $env:CARGO_TARGET_AARCH64_LINUX_ANDROID_LINKER = $clang
           $env:AR_aarch64_linux_android = "$env:NDK_HOME\toolchains\llvm\prebuilt\windows-x86_64\bin\llvm-ar.exe"
-          cargo check --lib --target aarch64-linux-android
+          cargo clippy --lib --target aarch64-linux-android -- -D warnings
