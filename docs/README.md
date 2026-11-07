@@ -176,6 +176,7 @@ cd src-tauri && pnpm dlx @tauri-apps/cli@2.12.4 android build --debug --apk --ta
 - `PlaybackService`（`mediaPlayback` 類型的 foreground service + `MediaSession`）讓 Android 不會凍結行程，並提供系統媒體控制（通知、鎖定畫面、媒體鍵）。歌曲資訊由 `android_media.rs` 透過 Tauri 的 Android plugin（`MediaSessionPlugin`）送過去；按鈕經 Channel 回到 Rust 變成 `song_controls`。每秒的時間更新只有在跳轉（差超過 2 秒）時才轉送，其餘由 `PlaybackState` 自行推算。
 - **只有 foreground service 還不夠：** WebView 被 `onPause()`（`WryActivity` 會呼叫）或視窗變成不可見時，Chromium 會暫停有影像軌的媒體，而 YTM 一律用 `<video>` 播放。`MainActivity` 在 service 執行期間於 `onPause` 後立刻 `webView.onResume()`、`onStop` 後把視窗可見度報回 `VISIBLE`。
 - 暫停時通知仍是常駐的（service 不離開前景），避免之後從背景恢復播放時受 Android 12 起的「背景不可啟動前景服務」限制。從最近任務滑掉 app 會停止 service（WebView 跟著 activity 消失）。
+- **GeckoView 的內容行程被系統結束：** 記憶體不足時（多半在 app 位於背景時），Android 會結束 Gecko 的內容行程，GeckoSession 隨之關閉，回到 app 會是白屏、要重開才恢復。`GeckoPage` 在 `onKill`／`onCrash` 時重新開啟 session 並載入使用者原本所在的網址。模擬器上用 `adb shell run-as io.github.junxiangzhan.peartauri kill -9 <tab 行程>`（debug 版）可以重現。
 
 ## 發佈（GitHub Actions）
 
