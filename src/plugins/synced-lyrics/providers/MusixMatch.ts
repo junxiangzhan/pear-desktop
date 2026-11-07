@@ -52,6 +52,11 @@ export class MusixMatch implements LyricProvider {
   }
 }
 
+// `token.get` now (seen in October 2026) answers unregistered apps with an all-zero
+// token, and every query made with it returns made-up lyrics ("Wob gopini den")
+// as a success. Treat it as a failure so another provider is picked.
+const isDecoyToken = (token: string) => /^0+$/.test(token);
+
 // API Implementation, based on https://github.com/Strvm/musicxmatch-api/blob/main/src/musicxmatch_api/main.py
 
 const zBoolean = z.union([z.literal(0), z.literal(1)]);
@@ -260,7 +265,7 @@ class MusixMatchAPI {
     const { token, expires } = this.savedTokenSchema.parse(
       JSON.parse(localStorage.getItem(this.key) ?? '{ "token": null }'),
     );
-    if (token && expires > Date.now()) {
+    if (token && !isDecoyToken(token) && expires > Date.now()) {
       this.token = token;
       return;
     }
@@ -305,7 +310,13 @@ class MusixMatchAPI {
     const {
       message: { body },
     } = this.tokenSchema.parse(JSON.parse(json));
-    return body?.user_token ?? '';
+    const token = body?.user_token ?? '';
+    if (isDecoyToken(token)) {
+      throw new Error(
+        'MusixMatch no longer gives tokens to unregistered apps (it answers them with decoy lyrics)',
+      );
+    }
+    return token;
   }
 
   private readonly baseUrl = 'https://apic-desktop.musixmatch.com/ws/1.1/';
