@@ -148,7 +148,9 @@ struct SaveRequest {
     album: Option<String>,
     track: Option<u32>,
     cover: Option<String>,
-    /// A folder chosen for this download (download on finish)
+    /// A folder chosen for this download (download on finish). Desktop only:
+    /// Android saves into Music/Pear Desktop.
+    #[cfg_attr(mobile, allow(dead_code))]
     folder: Option<String>,
     /// A playlist's folder, inside the download folder
     subfolder: Option<String>,
