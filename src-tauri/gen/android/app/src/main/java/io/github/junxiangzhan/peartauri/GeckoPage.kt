@@ -37,6 +37,7 @@ class GeckoPage(activity: Activity) {
   /** A link opened before the page was ready; it replaces the start URL. */
   private var pending: String? = null
   private val reportFile = java.io.File(activity.filesDir, "gecko-report.json")
+  private val runtime = runtime(activity)
 
   init {
     session.navigationDelegate = object : GeckoSession.NavigationDelegate {
@@ -79,7 +80,14 @@ class GeckoPage(activity: Activity) {
       ): GeckoResult<GeckoSession.PromptDelegate.PromptResponse> =
         GeckoResult.fromValue(prompt.confirm(AllowOrDeny.ALLOW))
     }
-    val runtime = runtime(activity)
+    // Android kills Gecko's content processes when memory runs low, mostly
+    // while the app sits in the background. The session is closed then, and
+    // coming back showed a white page until the app was restarted. Reopen it
+    // and load the page again, where the user was.
+    session.contentDelegate = object : GeckoSession.ContentDelegate {
+      override fun onKill(session: GeckoSession) = recover("was killed")
+      override fun onCrash(session: GeckoSession) = recover("crashed")
+    }
     session.open(runtime)
     view.setSession(session)
 
@@ -118,6 +126,12 @@ class GeckoPage(activity: Activity) {
     ready = true
     session.loadUri(pending ?: startUrl)
     pending = null
+  }
+
+  private fun recover(what: String) {
+    Log.w(TAG, "content process $what; reloading the page")
+    if (!session.isOpen) session.open(runtime)
+    if (ready) session.loadUri(GeckoBridge.pageUrl ?: loaderStartUrl ?: YTM_URL)
   }
 
   // report.js: diagnostics, too long for logcat; the latest one is kept
