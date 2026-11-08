@@ -41,7 +41,7 @@ export class YTMusic implements LyricProvider {
     const { browseId } = lyricsTab?.tabRenderer?.endpoint?.browseEndpoint ?? {};
     if (!browseId) return null;
 
-    const { contents } = await this.fetchBrowse(browseId);
+    const { contents } = await this.fetchLyricsPage(browseId);
     if (!contents) return null;
 
     /*
@@ -124,6 +124,26 @@ export class YTMusic implements LyricProvider {
     });
   }
 
+  /**
+   * The lyrics page. The proxy's client gets the synced lyrics; when it fails
+   * (it is rate limited) the page asks YTM itself, like its own Lyrics tab,
+   * which only has the plain lyrics.
+   */
+  private async fetchLyricsPage(browseId: string): Promise<BrowseData> {
+    try {
+      const data = await this.fetchBrowse(browseId);
+      if (data?.contents) return data;
+    } catch (error) {
+      console.warn('[synced-lyrics] YTMusic: the browse proxy failed', error);
+    }
+    const app = document.querySelector<MusicPlayerAppElement>('ytmusic-app');
+    if (!app) return {};
+    return await app.networkManager.fetch<BrowseData, { browseId: string }>(
+      '/browse?prettyPrint=false',
+      { browseId },
+    );
+  }
+
   private fetchBrowse(browseId: string) {
     return crossOriginFetch(
       this.PROXIED_ENDPOINT + 'browse?prettyPrint=false',
@@ -165,7 +185,7 @@ interface NextData {
 }
 
 interface BrowseData {
-  contents: {
+  contents?: {
     elementRenderer: {
       newElement: {
         type: {
