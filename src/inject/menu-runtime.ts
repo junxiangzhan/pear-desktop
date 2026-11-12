@@ -168,23 +168,15 @@ const coreMenuLabels = async () => {
       : [prefix];
   const english = (await languageResources()).en?.translation as {
     main?: { menu?: unknown; tray?: unknown };
-    plugins?: Record<string, { dialog?: unknown }>;
   };
   const keys = [
     ...flatten(english?.main?.menu, 'main.menu'),
     ...flatten(english?.main?.tray, 'main.tray'),
-    ...flatten(
-      english?.plugins?.['api-server']?.dialog,
-      'plugins.api-server.dialog',
-    ),
-    'plugins.amuse.response.query',
   ];
   const values = {
     applicationName: APPLICATION_NAME,
     artist: '{artist}',
     title: '{title}',
-    ID: '{ID}',
-    origin: '{origin}',
   };
   return Object.fromEntries(keys.map((key) => [key, i18next.t(key, values)]));
 };

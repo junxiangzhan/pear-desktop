@@ -1,4 +1,11 @@
 {
-  "$comment": "Plugins the Tauri build cannot run (no backend implementation). They are forced off, and their menu is left out of the page bundle (it imports main-process code). Read by vite.config.mts and src-tauri/src/config.rs; remove an id once it is ported.",
-  "unavailable": []
+  "$comment": "Plugins the Tauri build cannot run. \"unavailable\": no backend implementation on any platform; their menu and preload are left out of the page bundle (it imports main-process code). \"unavailableOnMobile\": desktop-only plugins (window, global shortcut, SOCKS relay and Discord features) that Android cannot use. Both are forced off and greyed out in the menu. Read by vite.config.mts and src-tauri/src/config.rs.",
+  "unavailable": [],
+  "unavailableOnMobile": [
+    "auth-proxy-adapter",
+    "discord",
+    "picture-in-picture",
+    "shortcuts",
+    "transparent-player"
+  ]
 }

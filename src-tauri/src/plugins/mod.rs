@@ -95,22 +95,19 @@ impl Plugins {
     }
 }
 
-mod amuse;
-mod api_server;
 pub mod auth_proxy_adapter;
 pub mod in_app_menu;
+#[cfg(desktop)]
 mod discord;
 pub mod do_not_track;
 mod downloader;
 mod notifications;
-mod now_playing_post;
 #[cfg(desktop)]
 mod picture_in_picture;
 mod scrobbler;
 #[cfg(desktop)]
 mod shortcuts;
 mod sponsorblock;
-mod synced_lyrics;
 #[cfg(windows)]
 mod taskbar_mediacontrol;
 #[cfg(desktop)]
@@ -122,22 +119,17 @@ pub fn all() -> Vec<Arc<dyn Plugin>> {
     #[cfg_attr(mobile, allow(unused_mut))]
     let mut list: Vec<Arc<dyn Plugin>> = vec![
         Arc::new(sponsorblock::SponsorBlock),
-        Arc::new(synced_lyrics::SyncedLyrics),
-        Arc::new(now_playing_post::LumiaStream),
-        Arc::new(now_playing_post::TunaObs::new()),
         Arc::new(notifications::Notifications::new()),
         Arc::new(scrobbler::Scrobbler::new()),
-        Arc::new(discord::Discord::new()),
         Arc::new(downloader::Downloader),
         Arc::new(do_not_track::DoNotTrack),
-        Arc::new(api_server::ApiServer::new()),
-        Arc::new(amuse::Amuse::new()),
         // The only menu on Android, where there is no native one
         Arc::new(in_app_menu::InAppMenu::new()),
     ];
-    // Window and keyboard features of the desktop shell
+    // Window, keyboard, proxy relay and Discord features of the desktop shell
     #[cfg(desktop)]
     {
+        list.push(Arc::new(discord::Discord::new()));
         list.push(Arc::new(auth_proxy_adapter::AuthProxyAdapter));
         list.push(Arc::new(picture_in_picture::PictureInPicture::new()));
         list.push(Arc::new(transparent_player::TransparentPlayer));

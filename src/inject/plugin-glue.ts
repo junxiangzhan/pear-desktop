@@ -73,14 +73,6 @@ ipcRenderer.on('peard:pip-toggle', (_, inPiP) => {
   else window.removeEventListener('keydown', pipKeys, true);
 });
 
-// api-server's like state: Electron read it with `executeJavaScript`
-ipcRenderer.on('pear:get-like-state', () => {
-  const button = document.querySelector<HTMLElement & { likeStatus?: string }>(
-    '#like-button-renderer',
-  );
-  ipcRenderer.send('pear:like-state', button?.likeStatus ?? null);
-});
-
 // Frameless window: CSS `app-region: drag` (in-app-menu's title bar) moves the
 // window, as in Electron. The nearest element with an app-region decides.
 const appRegion = (target: EventTarget | null) => {
