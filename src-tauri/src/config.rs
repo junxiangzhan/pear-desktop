@@ -114,17 +114,25 @@ fn set_path(root: &mut Value, key: &str, value: Value) {
     }
 }
 
-/// Plugins whose backend is not ported yet: always reported as disabled.
+/// Plugins this build cannot run (`plugin-support.json`): always reported as
+/// disabled. Mobile builds add the desktop-only ones.
 pub fn unavailable_plugins() -> &'static HashSet<String> {
     static LIST: OnceLock<HashSet<String>> = OnceLock::new();
     LIST.get_or_init(|| {
         #[derive(Deserialize)]
+        #[serde(rename_all = "camelCase")]
         struct Support {
             unavailable: Vec<String>,
+            #[cfg_attr(desktop, allow(dead_code))]
+            unavailable_on_mobile: Vec<String>,
         }
         let support: Support = serde_json::from_str(include_str!("../../plugin-support.json"))
             .expect("plugin-support.json is valid");
-        support.unavailable.into_iter().collect()
+        #[cfg_attr(desktop, allow(unused_mut))]
+        let mut list: HashSet<String> = support.unavailable.into_iter().collect();
+        #[cfg(mobile)]
+        list.extend(support.unavailable_on_mobile);
+        list
     })
 }
 

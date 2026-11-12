@@ -34,7 +34,7 @@ src/                         # 頁面端（打包成單一 IIFE）
 │  └─ crossfade.ts           # crossfade 的 `audio-url`（youtubei.js 在頁面裡跑）
 ├─ platform/                 # 對 Rust 的 IPC、提示框、檔案選擇、平台判斷
 └─ config/                   # Rust 設定的鏡像
-plugin-support.json          # 強制停用的插件清單（Vite 與 Rust 共用）
+plugin-support.json          # 強制停用的插件清單，含 Android 不能用的桌面專用插件（Vite 與 Rust 共用）
 placeholder/prompt.html      # 提示框視窗（取代 custom-electron-prompt）
 vite.config.mts              # 頁面 bundle 的建置設定（`pnpm build`）
 src-tauri/
@@ -66,7 +66,7 @@ Rust 擁有 `config.json`（`config.rs`，`defaults.ts` 的移植）。renderer 
 | 狀態 | 插件 |
 |---|---|
 | 純 renderer，原本就能用 | album-actions、album-color-theme、ambient-mode、clock、equalizer、navigation、performance-improvement、playback-speed、video-toggle、visualizer 等 |
-| backend 已移植到 Rust | sponsorblock、synced-lyrics（`synced-lyrics:fetch`）、lumiastream、tuna-obs、notifications、picture-in-picture、transparent-player、scrobbler、shortcuts（全域／視窗內快捷鍵、媒體鍵）、precise-volume、discord、api-server、amuse、in-app-menu、taskbar-mediacontrol（Windows）、auth-proxy-adapter（桌面）、do-not-track 的 With blocklists 模式 |
+| backend 已移植到 Rust | sponsorblock、notifications、picture-in-picture、transparent-player、scrobbler、shortcuts（全域／視窗內快捷鍵、媒體鍵）、precise-volume、discord、in-app-menu、taskbar-mediacontrol（Windows）、auth-proxy-adapter（桌面）、do-not-track 的 With blocklists 模式 |
 | backend 分在頁面與 Rust | downloader（頁面找串流，Rust 下載存檔） |
 | backend 改在頁面處理 | captions-selector、quality-changer、music-together（只有 UI，`plugin-glue.ts`）、crossfade（`crossfade.ts`）、do-not-track 的 In player 模式 |
 
@@ -74,8 +74,6 @@ Rust 擁有 `config.json`（`config.rs`，`defaults.ts` 的移植）。renderer 
 - **downloader：** 頁面（`src/inject/downloader.ts`）用 youtubei.js 取得歌曲資訊、專輯、封面與串流網址（同 crossfade 的 BotGuard／PO token），Rust（`plugins/downloader/`）以 10 MB 分段下載、用 lofty 寫入標籤（標題、演出者、專輯、曲序、封面；1280×720 的封面照 Electron 裁成 720×720）後存檔，檔名 `演出者 - 標題.m4a`。**沒有 ffmpeg。Tauri 版的預設是「Source」：存 YouTube 原始的 AAC（`.m4a`）**（Electron 的預設 mp3 256 kbps 是把 AAC 再壓一次，檔案約大一倍、音質只會更差，所以在 `config.rs` 收到插件預設值時改掉；已經存過預設值的設定檔不受影響）。選「mp3 (256kbps)」時用 Symphonia（純 Rust）解碼 AAC、LAME（`mp3lame-encoder`，從原始碼編譯，LGPL-3.0）編成固定位元率的 mp3，再寫 ID3v2 標籤與封面（`plugins/downloader/mp3.rs`），轉檔進度顯示在下載按鈕上；「Custom」只支援副檔名 mp3 加上 `-b:a` 位元率，其他設定存原始檔。預設選單最上面有說明。Android 版在 Windows 上交叉編譯 LAME 時，`mp3lame-sys` 會套用 MSVC 的 config.h，與 NDK 的 `<stdint.h>` 衝突；`src-tauri/.cargo/config.toml` 對 Android 目標強制先引入 `build-support/include/pear-stdint-first.h` 解決。開發版也替這幾個轉檔套件開了最佳化（3 分半的歌從約 15 秒降到約 4 秒）。YouTube 給的是分段（DASH）的 MP4，Windows 內建的播放器打得開卻不會播（直接跳到結尾），所以存檔前先改寫成一般的 MP4（`plugins/downloader/remux.rs`，等同 ffmpeg 的 `-c copy`，yt-dlp 也會做這一步），再寫標籤。單曲的下載在每首歌的「⋮」選單最上面（插件加的「下載」，不是 YTM 自己附 P 標記的 Premium 下載）。播放清單、專輯（曲序）、跳過已存在的檔案、下載完成時下載、工作列進度條、錯誤與開始下載的對話框與 Electron 相同。youtubei.js 用的是未登入的工作階段（與 crossfade 相同），所以 Premium 的 256 kbps 格式、年齡限制與私人播放清單（例如「喜歡的音樂」）抓不到。**Android：** 存到共用的「音樂/Pear Desktop」（MediaStore，Android 10 以上不需要權限；Android 8、9 存在 app 自己的音樂資料夾，移除 app 時會一起刪掉），選單裡的資料夾選項會隱藏。選單在頁面執行（`src/plugins/downloader/menu.ts`）：資料夾選擇用非同步對話框（`pear:show-open-dialog` 加了 `openDirectory`），「下載播放清單」由頁面端的 downloader 回答（`download-playlist-request`）。
 - **proxy 與 auth-proxy-adapter：** 選項 › 進階新增「設定 Proxy」（`options.proxy`，Electron 的 `--proxy-server`），改完要重新啟動。Windows 在 WebView2 啟動時套用（`proxy_url`），Rust 自己的請求（歌詞、封面、下載等）也走同一個 proxy；Chromium 不能帶 SOCKS 帳密，所以 auth-proxy-adapter 開啟時 WebView2 改連它在本機開的 SOCKS5 中繼（`plugins/auth_proxy_adapter.rs`），由中繼帶帳密連到上游。**Android（GeckoView）** 由 pear-gecko extension 的 `browser.proxy.onRequest` 直接套用，SOCKS 帳密也能帶，改了立即生效，不需要中繼。
 - **discord：** Rust 直接講 Discord 的本機 IPC（Windows named pipe `discord-ipc-N`、Unix socket），取代 `@xhayper/discord-rpc`；節流、暫停逾時清除、自動重連照搬 `DiscordService`。選單在頁面執行，透過 `src/plugins/discord/service.ts` 以 IPC 讀連線狀態、連線、清除。
-- **api-server：** axum 重寫，路由、JWT（HS256，與 hono/jwt 互通）、CORS、WebSocket 事件與 Electron 版相同；`AUTH_AT_FIRST` 的 Allow/Deny 對話框用頁面送來的翻譯。`/doc`（OpenAPI）與 `/swagger` 來自 zod 路由定義，Rust 跑不了，所以用從 Electron 版路由產生的靜態檔（`src-tauri/api-docs/`；路由有改時要手動更新），Rust 原樣回傳；Swagger UI 和 Electron 一樣從 jsDelivr 載入。預設 secret 是頁面載入時的 `Date.now()`，Rust 第一次啟動時把它存進設定，token 才不會在重新整理後失效。HTTPS 用 rustls（ring）。
-- **amuse：** 9863 埠的 `/`、`/query`、`/api`，axum。
 - **in-app-menu：** 啟用時（Windows 預設）主視窗無邊框，選單與視窗按鈕由頁面畫，Rust 回答 `get-menu`／`peard:menu-event`／`window-*`。`app-region: drag` 由 `plugin-glue.ts` 轉成 `start_dragging`（雙擊最大化）。window-state 插件不還原 decorations／visible，否則會蓋掉這個設定。Android 上它是唯一的選單：啟動時一律開啟，外掛功能裡它的開關也變灰、不能關閉（關掉就只能用 adb 改設定）（頁面依 UA 判斷的預設值在「Linux」上是關閉），不畫視窗按鈕（`__pearNoWindowControls`），選單裡也拿掉 Android 用不到的項目（置頂、開機啟動、系統匣、縮放、全螢幕、DevTools、自訂視窗標題、重新啟動／結束）。
 - **系統媒體控制：** Windows 的 SMTC 由 WebView2 自己提供（顯示名稱是 `msedgewebview2.exe` 或「未知的應用程式」，設定 AppUserModelID 也不會變）；taskbar-mediacontrol 的縮圖按鈕用 `ITaskbarList3`。Linux 的 MPRIS 與 macOS Now Playing 沒有移植（見「這個環境無法建置測試的平台功能」）。Android 見下方「背景播放」。
 - **notifications：** `interactive` 開啟時，Windows 顯示附上一首／播放暫停／下一首按鈕的 WinRT toast，七種 `toastStyle` 都有（`plugins/notifications/toast.rs`，`interactive.ts` 的移植）。按鈕用 toast 自己的 `Activated` 事件在程式內處理（Electron 用 `peard://` 協定啟動第二個實例），所以 app 要在執行中。按鈕有文字（系統匣選單的翻譯，`hideButtonText` 開啟時不顯示；Electron 的判斷式誤用 `toastStyle`，文字從來沒出現過）與圖示，圖示依 Windows 的淺色／深色主題選黑色或白色（Electron 一律黑色，深色主題下看不見）；和 Electron 一樣 5 秒後收起，`refreshOnPlayPause` 會重新顯示，`trayControls` 讓按系統匣圖示顯示／收起 toast（雙擊切換視窗）。和 Electron 不同的地方：標題有做 XML 跳脫（Electron 遇到 `&` 會顯示失敗）、每首歌的封面用不同檔名（Windows 依路徑快取 toast 圖片）、切換模式不必重新啟動。未安裝的開發版（`target\debug`）沒有註冊 AppUserModelID，toast 會顯示成 PowerShell 的，和 tauri-plugin-notification 相同；安裝版用 app 的 identifier。試過讓開發版在 `HKCU\Software\Classes\AppUserModelId\` 註冊自己的 ID（顯示名稱與圖示），Windows 接受了 toast 卻完全不顯示（加上 `CustomActivator` 也一樣），所以維持 PowerShell 的 ID；要在開發版顯示 app 名稱，得像安裝程式那樣建立帶 AppUserModelID 的開始功能表捷徑。其他平台與 `interactive` 關閉時是基本通知。
@@ -83,6 +81,10 @@ Rust 擁有 `config.json`（`config.rs`，`defaults.ts` 的移植）。renderer 
 - **啟用時要求播放器事件：** Electron 的 backend 只在 `peard:player-api-loaded` 時要求 `peard:setup-*-listener`，執行中才啟用的插件會錯過；Rust 版（`plugins::request_player_listeners`）啟動時也會立刻要求一次（頁面端是 singleton，重複要求沒有影響）。
 
 **CSS：** renderer 的 `import 'mdui/mdui.css'` 會被 Vite 抽成獨立 CSS 檔，但 Electron 的 `get-renderer-script` 只讀 `<script>`，所以這份 CSS 在 Electron 裡從未套用。Pear Tauri 一度把它內嵌注入，結果 mdui 的 `:root { background-color }` 在 YTM 半透明背景後面畫出灰色色塊；現在改為直接丟棄，行為與 Electron 一致。
+
+**已移除的插件與功能：** amuse、tuna-obs、lumiastream、api-server（串流與遠端控制的整合，用的人少，Rust 端的維護成本高）；synced-lyrics 的 MusixMatch（它現在只給未註冊的 app 全為 0 的 token 和編造的假歌詞）與 Megalobiz（上游早已停用）來源，以及只給 MusixMatch 用的 `synced-lyrics:fetch`。
+
+**Android 上停用的桌面專用插件：** `plugin-support.json` 的 `unavailableOnMobile` 列出 auth-proxy-adapter、discord、picture-in-picture、shortcuts、transparent-player；它們在 Android 的選單裡變灰、無法開啟（沒有視窗、全域快捷鍵、SOCKS 中繼或 Discord 桌面版的本機 IPC）。
 
 ### 這個環境無法建置測試的平台功能
 
@@ -395,7 +397,6 @@ Android 版預設的頁面引擎。release APK（arm64）216 MB，壓縮後 101 
 - [x] Android 實機平板：Google 登入（UA／Client Hints 修改後重測：仍被拒）
 - [x] Android 實機平板：選單外觀與操作、在「預設開啟」加入 `music.youtube.com` 後點連結（步驟見上方「YouTube Music 連結」）
 - [ ] discord：連線成功（log 有 `discord: connected`、Discord 沒有回錯誤），但使用者的 Discord 沒看到音樂狀態；待確認 Discord 的「活動隱私」設定，並與 Electron 版對照
-- [ ] api-server：介面正常；新 client 的 Allow/Deny 對話框、HTTPS、實際呼叫 API
 - [x] taskbar-mediacontrol：縮圖按鈕外觀
 - [x] notifications：互動式 toast 的三個按鈕實際按下、系統匣 trayControls
 - [x] notifications：按鈕的新文字與白色圖示在深色主題下的外觀，切換語言後文字跟著變
