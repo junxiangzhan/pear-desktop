@@ -43,6 +43,16 @@ const itemStyle = cacheNoArgs(
       background-color: rgba(255, 255, 255, 0.2);
     }
 
+    /* Disabled items (enabled: false in the menu template) */
+    &[data-disabled='true'] {
+      opacity: 0.4;
+      cursor: default;
+    }
+    &[data-disabled='true']:hover,
+    &[data-disabled='true']:active {
+      background-color: transparent;
+    }
+
     & * {
       box-sizing: border-box;
     }
@@ -155,6 +165,8 @@ type BasePanelItemProps = {
   chip?: string;
   toolTip?: string;
   commandId?: number;
+  /** Shown greyed out, ignores clicks and doesn't open */
+  disabled?: boolean;
 };
 type NormalPanelItemProps = BasePanelItemProps & {
   type: 'normal';
@@ -214,7 +226,7 @@ export const PanelItem = (props: PanelItemProps) => {
       { once: true },
     );
 
-    if (props.type === 'submenu') {
+    if (props.type === 'submenu' && !props.disabled) {
       const timer = setTimeout(() => {
         setOpen(true);
 
@@ -278,6 +290,7 @@ export const PanelItem = (props: PanelItemProps) => {
   };
 
   const handleClick = async () => {
+    if (props.disabled) return;
     await window.ipcRenderer.invoke('peard:menu-event', props.commandId);
     if (props.type === 'radio') {
       props.onChange?.(!props.checked);
@@ -291,6 +304,7 @@ export const PanelItem = (props: PanelItemProps) => {
   return (
     <li
       class={itemStyle()}
+      data-disabled={props.disabled ? 'true' : undefined}
       data-selected={open()}
       onClick={handleClick}
       onMouseEnter={handleHover}
