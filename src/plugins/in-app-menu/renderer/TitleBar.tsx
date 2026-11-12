@@ -139,6 +139,7 @@ const PanelRenderer = (props: PanelRendererProps) => {
               <PanelItem
                 chip={subItem().sublabel}
                 commandId={subItem().commandId}
+                disabled={!subItem().enabled}
                 name={subItem().label}
                 onClick={() => props.onClick?.(subItem().commandId)}
                 toolTip={subItem().toolTip}
@@ -149,6 +150,7 @@ const PanelRenderer = (props: PanelRendererProps) => {
               <PanelItem
                 chip={subItem().sublabel}
                 commandId={subItem().commandId}
+                disabled={!subItem().enabled}
                 level={[...(props.level ?? []), subItem().commandId]}
                 name={subItem().label}
                 toolTip={subItem().toolTip}
@@ -166,6 +168,7 @@ const PanelRenderer = (props: PanelRendererProps) => {
                 checked={subItem().checked}
                 chip={subItem().sublabel}
                 commandId={subItem().commandId}
+                disabled={!subItem().enabled}
                 name={subItem().label}
                 onChange={() => props.onClick?.(subItem().commandId)}
                 toolTip={subItem().toolTip}
@@ -177,6 +180,7 @@ const PanelRenderer = (props: PanelRendererProps) => {
                 checked={subItem().checked}
                 chip={subItem().sublabel}
                 commandId={subItem().commandId}
+                disabled={!subItem().enabled}
                 name={subItem().label}
                 onChange={() =>
                   props.onClick?.(subItem().commandId, radioGroup())
