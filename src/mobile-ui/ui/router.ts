@@ -1,0 +1,182 @@
+// The new UI's navigation: a stack of pages under a bottom-nav tab, plus the
+// layers over them (the player, a menu sheet). Every page or layer opened
+// pushes one history entry, so the Android back button (GeckoSession.goBack)
+// and the UI's own back/close buttons both go through popstate and pop
+// exactly one layer.
+import { createSignal } from 'solid-js';
+
+import { installHistoryIsolation, pushBackEntry } from '../engine/history';
+
+import type { SaveTarget } from '../engine/ytm';
+import type { BrowseTarget, Endpoint, MenuEntry } from '../model/types';
+
+export type Tab = 'home' | 'explore' | 'library';
+
+export type Route =
+  /** A tab's page; `params` picks one of its chips (home's moods) */
+  | { name: Tab; params?: string }
+  | { name: 'search'; query?: string; params?: string }
+  | { name: 'browse'; target: BrowseTarget };
+
+export interface MenuSheet {
+  title: string;
+  subtitle?: string;
+  thumbnail?: string;
+  entries: MenuEntry[];
+  /** The page item it belongs to, hidden if an entry removes it */
+  itemKey?: string;
+}
+
+const [removedItems, setRemovedItems] = createSignal<ReadonlySet<string>>(
+  new Set(),
+);
+export { removedItems };
+
+/** Takes an item off its page (removed from its playlist), in place */
+export const hideItem = (key: string) =>
+  setRemovedItems((keys) => new Set([...keys, key]));
+
+/** "Save to playlist" for one song or playlist */
+export interface SaveSheet {
+  title: string;
+  thumbnail?: string;
+  target: SaveTarget;
+  /** YTM's own menu item, if the UI cannot list the playlists */
+  fallback?: Endpoint;
+}
+
+type Layer = 'page' | 'player' | 'menu' | 'save' | 'account';
+
+const [pages, setPages] = createSignal<Route[]>([{ name: 'home' }]);
+const [playerOpen, setPlayerOpen] = createSignal(false);
+const [menu, setMenu] = createSignal<MenuSheet | null>(null);
+const [saveSheet, setSaveSheet] = createSignal<SaveSheet | null>(null);
+const [accountOpen, setAccountOpen] = createSignal(false);
+
+export { accountOpen, menu, pages, playerOpen, saveSheet };
+
+export const currentTab = (): Tab => {
+  const root = pages()[0];
+  return root.name === 'explore' || root.name === 'library'
+    ? root.name
+    : 'home';
+};
+
+const layers: Layer[] = [];
+/** Runs once the pending back has popped its layer */
+const afterBack: (() => void)[] = [];
+let resetTo: Route | null = null;
+
+const popLayer = () => {
+  if (resetTo) {
+    // history.go(-n) from switchTab: one popstate for all the layers
+    layers.length = 0;
+    setMenu(null);
+    setSaveSheet(null);
+    setAccountOpen(false);
+    setPlayerOpen(false);
+    setPages([resetTo]);
+    resetTo = null;
+  } else {
+    switch (layers.pop()) {
+      case 'menu':
+        setMenu(null);
+        break;
+      case 'save':
+        setSaveSheet(null);
+        break;
+      case 'account':
+        setAccountOpen(false);
+        break;
+      case 'player':
+        setPlayerOpen(false);
+        break;
+      case 'page':
+        setPages((stack) => (stack.length > 1 ? stack.slice(0, -1) : stack));
+        break;
+      default:
+        break;
+    }
+  }
+  afterBack.splice(0).forEach((run) => run());
+};
+
+export const installRouter = () => installHistoryIsolation(popLayer);
+
+const pushLayer = (layer: Layer) => {
+  layers.push(layer);
+  pushBackEntry();
+};
+
+/** Pops the top layer; `then` runs after it is gone */
+export const back = (then?: () => void) => {
+  if (!layers.length) {
+    then?.();
+    return;
+  }
+  if (then) afterBack.push(then);
+  history.back();
+};
+
+export const go = (route: Route) => {
+  const open = () => {
+    setPages((stack) => [...stack, route]);
+    pushLayer('page');
+  };
+  // Opening a page from the player or a sheet closes them first
+  if (layers.length && layers[layers.length - 1] !== 'page') {
+    back(() => go(route));
+    return;
+  }
+  open();
+};
+
+export const switchTab = (tab: Tab) => {
+  if (!layers.length) {
+    setPages([{ name: tab }]);
+    return;
+  }
+  resetTo = { name: tab };
+  history.go(-layers.length);
+};
+
+export const openPlayer = () => {
+  if (playerOpen()) return;
+  setPlayerOpen(true);
+  pushLayer('player');
+};
+
+export const openMenu = (sheet: MenuSheet) => {
+  if (menu()) setMenu(sheet);
+  else {
+    setMenu(sheet);
+    pushLayer('menu');
+  }
+};
+
+/** Closes the player (and any sheet over it), e.g. when the queue is gone */
+export const closePlayer = () => {
+  if (!playerOpen()) return;
+  if (layers[layers.length - 1] === 'player') back();
+  else back(closePlayer);
+};
+
+/** The account and app menu sheet */
+export const openAccount = () => {
+  if (accountOpen()) return;
+  setAccountOpen(true);
+  pushLayer('account');
+};
+
+export const openSave = (sheet: SaveSheet) => {
+  setSaveSheet(sheet);
+  pushLayer('save');
+};
+
+/** Loads the top page again (after an edit changed what it shows) */
+export const reloadTop = () =>
+  setPages((stack) => [...stack.slice(0, -1), { ...stack[stack.length - 1] }]);
+
+/** Replaces the top page (e.g. a new search on the search page) */
+export const replacePage = (route: Route) =>
+  setPages((stack) => [...stack.slice(0, -1), route]);

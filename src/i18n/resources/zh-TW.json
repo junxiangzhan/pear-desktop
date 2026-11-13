@@ -193,6 +193,7 @@
         "label": "檢視",
         "submenu": {
           "force-reload": "強制重新整理",
+          "mobile-ui": "Pear 行動版介面（預覽）",
           "reload": "重新整理",
           "reset-zoom": "重設大小",
           "toggle-fullscreen": "切換全螢幕",

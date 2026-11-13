@@ -3,6 +3,9 @@
 import './shim';
 // GeckoView: a tap's trailing click must not land on what it just opened
 import './ghost-clicks';
+// Before YTM's scripts run (it isolates their history handling); a no-op on
+// desktop
+import './mobile-ui';
 import './plugin-stubs';
 import './preload-plugins';
 import './menu-runtime';
