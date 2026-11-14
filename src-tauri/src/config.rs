@@ -114,24 +114,33 @@ fn set_path(root: &mut Value, key: &str, value: Value) {
     }
 }
 
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct Support {
+    unavailable: Vec<String>,
+    #[cfg_attr(desktop, allow(dead_code))]
+    unavailable_on_mobile: Vec<String>,
+    #[cfg_attr(desktop, allow(dead_code))]
+    unavailable_in_mobile_ui: Vec<String>,
+}
+
+fn support() -> &'static Support {
+    static SUPPORT: OnceLock<Support> = OnceLock::new();
+    SUPPORT.get_or_init(|| {
+        serde_json::from_str(include_str!("../../plugin-support.json"))
+            .expect("plugin-support.json is valid")
+    })
+}
+
 /// Plugins this build cannot run (`plugin-support.json`): always reported as
 /// disabled. Mobile builds add the desktop-only ones.
 pub fn unavailable_plugins() -> &'static HashSet<String> {
     static LIST: OnceLock<HashSet<String>> = OnceLock::new();
     LIST.get_or_init(|| {
-        #[derive(Deserialize)]
-        #[serde(rename_all = "camelCase")]
-        struct Support {
-            unavailable: Vec<String>,
-            #[cfg_attr(desktop, allow(dead_code))]
-            unavailable_on_mobile: Vec<String>,
-        }
-        let support: Support = serde_json::from_str(include_str!("../../plugin-support.json"))
-            .expect("plugin-support.json is valid");
         #[cfg_attr(desktop, allow(unused_mut))]
-        let mut list: HashSet<String> = support.unavailable.into_iter().collect();
+        let mut list: HashSet<String> = support().unavailable.iter().cloned().collect();
         #[cfg(mobile)]
-        list.extend(support.unavailable_on_mobile);
+        list.extend(support().unavailable_on_mobile.iter().cloned());
         list
     })
 }
@@ -251,12 +260,29 @@ impl Config {
             .unwrap_or_else(|| json!({ "enabled": false }))
     }
 
+    /// Whether the page runs Pear's mobile UI instead of YouTube Music's
+    /// interface (src/mobile-ui): Android, unless switched off in the menu
+    pub fn mobile_ui(&self) -> bool {
+        cfg!(mobile) && self.get("options.mobileUi").as_bool().unwrap_or(true)
+    }
+
+    /// The plugins reported as off: those the build cannot run, and, while the
+    /// mobile UI runs, those that need YouTube Music's interface
+    /// (`unavailableInMobileUi`, see docs/OWN-ENGINE.md)
+    pub fn unavailable(&self) -> HashSet<String> {
+        let mut list = unavailable_plugins().clone();
+        if self.mobile_ui() {
+            list.extend(support().unavailable_in_mobile_ui.iter().cloned());
+        }
+        list
+    }
+
     /// The plugin's defaults merged with its stored options, like the
     /// `peard:get-config` handler in `src/index.ts`.
     pub fn plugin_config(&self, id: &str) -> Value {
         let stored = self.get(&format!("plugins.{id}"));
         let mut config = merge(&self.plugin_default(id), &stored);
-        if unavailable_plugins().contains(id) {
+        if self.unavailable().contains(id) {
             config["enabled"] = Value::Bool(false);
         }
         config
@@ -299,6 +325,7 @@ impl Config {
             .flat_map(|map| map.keys().cloned())
             .collect();
 
+        let unavailable = self.unavailable();
         for id in ids {
             let old_stored = before.get("plugins").and_then(|p| p.get(&id));
             let new_stored = after.get("plugins").and_then(|p| p.get(&id));
@@ -307,7 +334,7 @@ impl Config {
             }
             let default = self.plugin_default(&id);
             let enabled_in = |stored: Option<&Value>| {
-                !unavailable_plugins().contains(&id)
+                !unavailable.contains(&id)
                     && merge(&default, stored.unwrap_or(&Value::Null))["enabled"]
                         .as_bool()
                         .unwrap_or(false)

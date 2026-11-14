@@ -97,7 +97,7 @@ fn loader_script() -> String {
 /// Built per request so a page reload sees the current config.
 fn payload(app: &tauri::AppHandle) -> String {
     let config = app.state::<Config>();
-    let unavailable: Vec<&String> = config::unavailable_plugins().iter().collect();
+    let unavailable: Vec<String> = config.unavailable().into_iter().collect();
     format!(
         "window.__PEAR_STORED_CONFIG__ = {};\nwindow.__PEAR_UNAVAILABLE_PLUGINS__ = {};\nwindow.__PEAR_MOBILE__ = {};\n{}",
         config.snapshot(),

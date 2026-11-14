@@ -1,5 +1,5 @@
 {
-  "$comment": "Plugins the Tauri build cannot run. \"unavailable\": no backend implementation on any platform; their menu and preload are left out of the page bundle (it imports main-process code). \"unavailableOnMobile\": desktop-only plugins (window, global shortcut, SOCKS relay and Discord features) that Android cannot use. Both are forced off and greyed out in the menu. Read by vite.config.mts and src-tauri/src/config.rs.",
+  "$comment": "Plugins the Tauri build cannot run. \"unavailable\": no backend implementation on any platform; their menu and preload are left out of the page bundle (it imports main-process code). \"unavailableOnMobile\": desktop-only plugins (window, global shortcut, SOCKS relay and Discord features) that Android cannot use. Both are forced off and greyed out in the menu. \"unavailableInMobileUi\": plugins that need YouTube Music's own interface (its player bar, player page, queue store, menus or pages), which the mobile UI does not load: forced off and greyed out only while the mobile UI runs (Android, View > Pear mobile UI), still available with YouTube Music's interface. Why each one: docs/OWN-ENGINE.md. Read by vite.config.mts and src-tauri/src/config.rs.",
   "unavailable": [],
   "unavailableOnMobile": [
     "auth-proxy-adapter",
@@ -7,5 +7,15 @@
     "picture-in-picture",
     "shortcuts",
     "transparent-player"
+  ],
+  "unavailableInMobileUi": [
+    "album-actions",
+    "blur-nav-bar",
+    "captions-selector",
+    "clock",
+    "crossfade",
+    "music-together",
+    "navigation",
+    "unobtrusive-player"
   ]
 }

@@ -200,7 +200,7 @@ async fn run_async(app: &AppHandle, cmd: &str, args: Value) -> Result<Value, Str
 /// version is `lib.rs#payload`), plus the URL to start at.
 fn payload(app: &AppHandle) -> Value {
     let config = app.state::<config::Config>();
-    let unavailable: Vec<&String> = config::unavailable_plugins().iter().collect();
+    let unavailable: Vec<String> = config.unavailable().into_iter().collect();
     json!({
         "config": config.snapshot(),
         "unavailable": unavailable,
