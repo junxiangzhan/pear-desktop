@@ -18,6 +18,7 @@ import {
   repeatMode,
   shuffle,
 } from './queue';
+import { startSession } from './session';
 
 import type { Cover, PlayerControls } from '@/types/player-controls';
 
@@ -168,5 +169,8 @@ const exposeControls = () => {
 export const startEngine = async (uiHost: HTMLElement) => {
   exposeControls();
   readAccount();
+  // The queue the previous page played, before the player is ready: a song
+  // it was playing waits for it (see session.ts)
+  startSession();
   await startPlayer(uiHost);
 };

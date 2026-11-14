@@ -6,9 +6,11 @@ import { batch, createSignal, untrack } from 'solid-js';
 
 import { innertube } from './innertube';
 import {
+  cueVideo,
   loadVideo,
   markLoading,
   onEnded,
+  playbackDone,
   playerTime,
   seekTo,
   stop,
@@ -238,16 +240,21 @@ const readLike = (response: WatchNext) => {
 
 let likeRequest = 0;
 
+/** The like state of a song played from the queue (its own /next) */
+const fetchLike = (videoId: string) => {
+  setLikeStatus('INDIFFERENT');
+  const request = ++likeRequest;
+  innertube<WatchNext>('/next', { videoId })
+    .then((response) => request === likeRequest && readLike(response))
+    .catch(() => {});
+};
+
 const playEntry = (entry: QueueEntry) => {
   // A queue play outdates a playlist still loading
   playRequest++;
   setCurrent(entry);
   loadVideo(entry.videoId, playerParams(entry.endpoint));
-  setLikeStatus('INDIFFERENT');
-  const request = ++likeRequest;
-  innertube<WatchNext>('/next', { videoId: entry.videoId })
-    .then((response) => request === likeRequest && readLike(response))
-    .catch(() => {});
+  fetchLike(entry.videoId);
 };
 
 /**
@@ -267,14 +274,14 @@ export const playEndpoint = async (endpoint: Endpoint) => {
   let response: WatchNext;
   try {
     response = await innertube<WatchNext>('/next', {
-    videoId: watch.videoId,
-    playlistId: watch.playlistId,
-    params: watch.params,
-    playerParams: watch.playerParams,
-    index: watch.index,
-    isAudioOnly: true,
-    enablePersistentPlaylistPanel: true,
-    tunerSettingValue: 'AUTOMIX_SETTING_NORMAL',
+      videoId: watch.videoId,
+      playlistId: watch.playlistId,
+      params: watch.params,
+      playerParams: watch.playerParams,
+      index: watch.index,
+      isAudioOnly: true,
+      enablePersistentPlaylistPanel: true,
+      tunerSettingValue: 'AUTOMIX_SETTING_NORMAL',
     });
   } catch (error) {
     if (request === playRequest) markLoading(false);
@@ -298,7 +305,10 @@ export const playEndpoint = async (endpoint: Endpoint) => {
   });
   const first = page.entries[start];
   setCurrent(first);
-  loadVideo(first.videoId, playerParams(first.endpoint) ?? (watch.playerParams as string | undefined));
+  loadVideo(
+    first.videoId,
+    playerParams(first.endpoint) ?? (watch.playerParams as string | undefined),
+  );
   readLike(response);
 };
 
@@ -376,12 +386,12 @@ const playFrom = async (index: () => number, atEnd: () => void) => {
   else atEnd();
 };
 
+/** The song after the current one, else `atEnd` (see playFrom) */
+const playNext = (atEnd: () => void) =>
+  playFrom(() => indexOfCurrent() + 1, atEnd);
+
 /** The next song; at the end, more of the queue, else (repeat all) the first */
-export const next = () =>
-  playFrom(
-    () => indexOfCurrent() + 1,
-    () => {},
-  );
+export const next = () => playNext(() => {});
 
 /** As YTM: a few seconds in, back to the start; else the song before */
 export const previous = () => {
@@ -406,7 +416,8 @@ onEnded(() =>
       if (entry) playEntry(entry);
       return;
     }
-    next().catch(console.error);
+    // Past the queue's end, nothing is meant to play (session.ts)
+    playNext(playbackDone).catch(console.error);
   }),
 );
 
@@ -447,7 +458,8 @@ export const removeFromQueue = (entry: QueueEntry) => {
   setQueue(rest);
   // As at a song's end: the queue goes on (more of it, repeat all) before
   // it is over
-  if (entry === current()) playFrom(() => index, clearQueue).catch(console.error);
+  if (entry === current())
+    playFrom(() => index, clearQueue).catch(console.error);
 };
 
 /** "Dismiss queue": nothing plays, the player bar goes */
@@ -509,5 +521,61 @@ export const entryOfMenu = (endpoint: unknown) =>
   untrack(queue).find((entry) =>
     entry.menu.some((item) => item.endpoint === endpoint),
   );
+
+/** What a page reload keeps of the queue (session.ts) */
+export interface SavedQueue {
+  entries: QueueEntry[];
+  continuation?: string;
+  automix?: Endpoint;
+  repeat: string;
+}
+
+/**
+ * The queue as it is now. Read in an effect, it follows the queue's changes
+ * (its continuation and automix change with them).
+ */
+export const savedQueue = (): SavedQueue => ({
+  entries: queue(),
+  continuation,
+  automix,
+  repeat: repeatMode(),
+});
+
+/**
+ * Puts back the queue a page reload interrupted (session.ts), its song at
+ * `index` cued at `start` seconds, played as soon as the player can when
+ * `play`. Only into an empty queue: a song asked for first wins, and one
+ * asked for later replaces it as any play does (playRequest, generation).
+ */
+export const restoreQueue = (
+  saved: SavedQueue,
+  at: { index: number; start: number; duration?: number; play: boolean },
+) => {
+  if (untrack(queue).length) return false;
+  const entries = saved.entries.map((entry) => ({
+    ...entry,
+    key: `q${keySeed++}:${entry.videoId}`,
+  }));
+  const entry = entries[at.index];
+  if (!entry) return false;
+  playRequest++;
+  generation++;
+  continuation = saved.continuation;
+  automix = saved.automix;
+  batch(() => {
+    setQueue(entries);
+    setCurrent(entry);
+    setRepeatMode(saved.repeat);
+    updateMore();
+  });
+  cueVideo(entry.videoId, {
+    playerParams: playerParams(entry.endpoint),
+    start: at.start,
+    duration: at.duration,
+    play: at.play,
+  });
+  fetchLike(entry.videoId);
+  return true;
+};
 
 export { playerTime, seekTo };

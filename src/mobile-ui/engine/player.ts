@@ -61,6 +61,8 @@ const [loading, setLoading] = createSignal(false);
  * play on meanwhile); `loading`: the player has been given the new song
  */
 let loadPending: false | 'asked' | 'loading' = false;
+/** Where the song being loaded starts (a song resumed after a reload) */
+let loadFrom = 0;
 
 /** A song was asked for: loading until it plays (or gives up) */
 export const markLoading = (pending = true) => {
@@ -69,14 +71,29 @@ export const markLoading = (pending = true) => {
 };
 
 /**
+ * Whether playback is meant to go on: from a song's load or start until a
+ * pause that is not its end (the user's, the media notification's, another
+ * app taking the audio), the queue running out, or a stop. What a reload
+ * resumes (session.ts).
+ */
+const [playIntended, setPlayIntended] = createSignal(false);
+export { playIntended };
+
+/** The queue ran out at a song's end: nothing is meant to play now */
+export const playbackDone = () => setPlayIntended(false);
+
+/**
  * The asked-for song (or its ad) is moving: the player reports "playing"
  * well before that (the time sits at 0:00 meanwhile), so its time is what
  * ends the load. A song's start, not the previous song's last updates: the
  * previous song's early seconds, still playing while the queue asks, do not
  * count.
  */
+const near = (time: number) => time >= 0.05 && time <= 5;
 const loadMoved = (time: number) => {
-  if (loadPending !== 'loading' || time < 0.05 || time > 5) return;
+  if (loadPending !== 'loading' || !(near(time) || near(time - loadFrom))) {
+    return;
+  }
   loadPending = false;
   setLoading(false);
 };
@@ -199,6 +216,21 @@ let songDuration = 0;
 let adWasShowing = false;
 /** The song's end is told once per load */
 let endTold = false;
+/**
+ * A song resumed partway: the player is asked to start there (`start`), and
+ * seeking once it moves covers the player ignoring that
+ */
+let seekPending: number | null = null;
+/**
+ * A song restored after a reload and not given to the player yet: it waits
+ * for a play (or, `wanted`, for the player to be ready)
+ */
+let cued: {
+  videoId: string;
+  playerParams?: string;
+  start: number;
+  wanted: boolean;
+} | null = null;
 
 const songEnded = () => {
   if (endTold) return;
@@ -253,6 +285,14 @@ const bindVideo = (next: HTMLVideoElement) => {
     setCurrentTime(next.currentTime);
     loadMoved(next.currentTime);
     if (!player?.classList.contains('ad-showing')) {
+      if (seekPending !== null) {
+        const start = seekPending;
+        seekPending = null;
+        if (Math.abs(next.currentTime - start) > 3) {
+          player?.seekTo(start, true);
+          return;
+        }
+      }
       songTime = next.currentTime;
       if (Number.isFinite(next.duration)) songDuration = next.duration;
     }
@@ -262,8 +302,16 @@ const bindVideo = (next: HTMLVideoElement) => {
   );
   next.addEventListener('loadedmetadata', readRatio);
   next.addEventListener('resize', readRatio);
-  next.addEventListener('playing', () => setIsPlaying(true));
-  next.addEventListener('pause', () => setIsPlaying(false));
+  next.addEventListener('playing', () => {
+    setIsPlaying(true);
+    setPlayIntended(true);
+  });
+  next.addEventListener('pause', () => {
+    setIsPlaying(false);
+    // A song's end pauses too: the queue goes on (or says it is done). So
+    // does the player, swapping in the song being loaded.
+    if (!next.ended && !loadPending) setPlayIntended(false);
+  });
   next.addEventListener('ended', () => setIsPlaying(false));
 };
 
@@ -309,6 +357,7 @@ export const startPlayer = async (uiHost: HTMLElement) => {
   const first = element.querySelector('video');
   if (first) bindVideo(first);
   watchAds();
+  if (cued?.wanted) loadCued();
   return element;
 };
 
@@ -317,32 +366,121 @@ export const onEnded = (listener: () => void) => {
   endedListeners.push(listener);
 };
 
-/** Plays a song: the player fetches it (and its ads) itself */
-export const loadVideo = (videoId: string, playerParams?: string) => {
-  if (!player) return;
-  setCurrentTime(0);
-  songTime = 0;
+/**
+ * Plays a song: the player fetches it (and its ads) itself. From `start`
+ * seconds in, for a song resumed after a reload.
+ */
+export const loadVideo = (
+  videoId: string,
+  playerParams?: string,
+  start = 0,
+) => {
+  if (!player) {
+    // Asked for while the player starts (a tap, a resume): played once it
+    // is ready, in place of a song restored meanwhile
+    cueVideo(videoId, { playerParams, start, play: true });
+    return;
+  }
+  // Another song asked for: the restored one is outdated
+  cued = null;
+  const from = Math.max(0, Math.floor(start));
+  setCurrentTime(from);
+  songTime = from;
   songDuration = 0;
   endTold = false;
+  loadFrom = from;
+  seekPending = from > 0 ? from : null;
   markLoading();
   loadPending = 'loading';
-  player.loadVideoByPlayerVars(
-    playerParams ? { videoId, playerParams } : { videoId },
-  );
+  setPlayIntended(true);
+  const vars: Record<string, unknown> = { videoId };
+  if (playerParams) vars.playerParams = playerParams;
+  if (from > 0) vars.start = from;
+  player.loadVideoByPlayerVars(vars);
   player.playVideo();
 };
 
-export const play = () => player?.playVideo();
-export const pause = () => player?.pauseVideo();
-export const togglePlay = () => (isPlaying() ? pause() : play());
+const loadCued = () => {
+  if (!cued) return;
+  const { videoId, playerParams, start } = cued;
+  loadVideo(videoId, playerParams, start);
+};
+
+/**
+ * The song a reload interrupted (session.ts), at `start` seconds: shown in
+ * the player bar, and played now (`play`: once the player is ready) or at
+ * the next play
+ */
+export const cueVideo = (
+  videoId: string,
+  options: {
+    playerParams?: string;
+    start: number;
+    duration?: number;
+    play: boolean;
+  },
+) => {
+  cued = {
+    videoId,
+    playerParams: options.playerParams,
+    start: options.start,
+    wanted: options.play,
+  };
+  setCurrentTime(options.start);
+  setDuration(options.duration ?? 0);
+  songTime = options.start;
+  songDuration = options.duration ?? 0;
+  if (!options.play) return;
+  setPlayIntended(true);
+  if (player) loadCued();
+  // Loading until the player is ready (BotGuard can take half a minute)
+  else markLoading();
+};
+
+/** Where the song is (not an ad), or where a restored one will start */
+export const songPosition = () => cued?.start ?? songTime;
+/** The song's length (not an ad's), once known */
+export const songLength = () => songDuration;
+
+export const play = () => {
+  if (!cued) {
+    player?.playVideo();
+    return;
+  }
+  cued.wanted = true;
+  setPlayIntended(true);
+  if (player) loadCued();
+  else markLoading();
+};
+export const pause = () => {
+  setPlayIntended(false);
+  if (cued) {
+    // A restored song still waiting for the player stays where it is
+    cued.wanted = false;
+    markLoading(false);
+    return;
+  }
+  player?.pauseVideo();
+};
+export const togglePlay = () =>
+  isPlaying() || (cued?.wanted ?? false) ? pause() : play();
 export const stop = () => {
+  cued = null;
+  setPlayIntended(false);
   markLoading(false);
   player?.stopVideo();
   setIsPlaying(false);
   setCurrentTime(0);
   setDuration(0);
 };
-export const seekTo = (seconds: number) => player?.seekTo(seconds, true);
+export const seekTo = (seconds: number) => {
+  if (cued) {
+    cued.start = seconds;
+    setCurrentTime(seconds);
+    return;
+  }
+  player?.seekTo(seconds, true);
+};
 
 interface QualityApi {
   getAvailableQualityLevels?(): string[];
@@ -368,7 +506,8 @@ export const setQuality = (level: string) => {
   api?.setPlaybackQualityRange?.(level);
   api?.setPlaybackQuality?.(level);
 };
-export const playerTime = () => player?.getCurrentTime() ?? 0;
+export const playerTime = () =>
+  cued ? cued.start : (player?.getCurrentTime() ?? 0);
 
 /** Shows the player in the UI's `slot`, or parks it off screen (null) */
 export const showVideo = (slot: string | null) => {
