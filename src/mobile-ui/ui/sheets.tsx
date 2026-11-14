@@ -9,6 +9,8 @@ import {
 } from 'solid-js';
 
 import { Icon, type IconName } from './icons';
+import { pluginMenuEntries } from './plugins';
+import { Presence } from './presence';
 import {
   back,
   go,
@@ -19,6 +21,7 @@ import {
   reloadTop,
   saveSheet,
   type SaveSheet,
+  openMenu,
 } from './router';
 import { s } from './strings';
 import { showToast } from './toast';
@@ -30,7 +33,7 @@ import {
   rate,
   runMenuItem,
   YtmError,
-} from '../engine/ytm';
+} from '../engine';
 
 import type { PlaylistOption } from '../model/parse';
 import type { MenuAction, MenuEntry } from '../model/types';
@@ -133,6 +136,10 @@ const runEntry = (entry: MenuEntry, sheet: MenuSheet) => {
         })
         .catch(failed),
     );
+  } else if (action?.kind === 'local') {
+    // A sub-menu replaces this one; anything else runs once it is gone
+    if (action.keepOpen) action.run();
+    else back(action.run);
   } else if (action?.kind === 'save') {
     back(() =>
       openSave({
@@ -147,8 +154,13 @@ const runEntry = (entry: MenuEntry, sheet: MenuSheet) => {
     const done = queueToast(entry.endpoint);
     // After the sheet is gone: YTM may open a popup
     back(() => {
-      runMenuItem(item);
-      if (done) showToast(done);
+      runMenuItem(item)
+        .then((outcome) => {
+          if (outcome === 'unsupported') showToast(s('notSupported'));
+          else if (outcome === 'copied') showToast(s('linkCopied'));
+          else if (done) showToast(done);
+        })
+        .catch(failed);
     });
   }
 };
@@ -180,6 +192,11 @@ const MENU_ICONS: Record<string, IconName> = {
   FLAG: 'flag',
   KEEP: 'pin',
   KEEP_OFF: 'pin',
+  // The UI's own entries (plugins')
+  PEAR_DOWNLOAD: 'download',
+  PEAR_SPEED: 'speed',
+  PEAR_QUALITY: 'quality',
+  PEAR_CHECK: 'check',
 };
 
 /** Shown as the big buttons on top, in this order, as YTM's app does */
@@ -190,8 +207,15 @@ const MenuSheetBody = (props: { sheet: MenuSheet }) => {
     QUICK.flatMap((icon) =>
       props.sheet.entries.filter((entry) => entry.icon === icon),
     );
-  const rest = () =>
-    props.sheet.entries.filter((entry) => !QUICK.includes(entry.icon ?? ''));
+  const rest = () => [
+    ...props.sheet.entries.filter((entry) => !QUICK.includes(entry.icon ?? '')),
+    // Plugins' features, where YTM's interface had them
+    ...pluginMenuEntries(
+      props.sheet.target,
+      !!props.sheet.playing,
+      (title, entries) => openMenu({ title, entries }),
+    ),
+  ];
   return (
     <>
       <div class="scrim" onClick={() => back()} />
@@ -246,9 +270,9 @@ const MenuSheetBody = (props: { sheet: MenuSheet }) => {
 };
 
 export const MenuSheetView = () => (
-  <Show keyed when={menu()}>
+  <Presence when={menu()}>
     {(sheet) => <MenuSheetBody sheet={sheet} />}
-  </Show>
+  </Presence>
 );
 
 const NewPlaylist = (props: { sheet: SaveSheet }) => {
@@ -348,7 +372,16 @@ const YtmFallback = (props: { sheet: SaveSheet }) => (
     {(fallback) => (
       <button
         class="text-button"
-        onClick={() => back(() => runMenuItem(fallback()))}
+        onClick={() =>
+          back(() =>
+            runMenuItem(fallback())
+              .then(
+                (outcome) =>
+                  outcome === 'unsupported' && showToast(s('notSupported')),
+              )
+              .catch(failed),
+          )
+        }
       >
         {s('openInYtm')}
       </button>
@@ -357,7 +390,7 @@ const YtmFallback = (props: { sheet: SaveSheet }) => (
 );
 
 export const SaveSheetView = () => (
-  <Show keyed when={saveSheet()}>
+  <Presence when={saveSheet()}>
     {(sheet) => {
       const [options, { refetch }] = createResource(() =>
         playlistOptions(sheet.target),
@@ -404,5 +437,5 @@ export const SaveSheetView = () => (
         </>
       );
     }}
-  </Show>
+  </Presence>
 );

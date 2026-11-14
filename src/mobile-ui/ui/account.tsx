@@ -1,8 +1,11 @@
-// The account sheet, opened from the avatar: who is signed in, YTM's own
-// account menu (its items drawn here: your channel and history open as the
-// new UI's pages, the rest runs through YTM), and Pear's app menu (what in-app-menu's title bar offers,
-// which the new UI replaces on Android).
+// The account sheet, opened from the avatar: who is signed in, YouTube
+// Music's account menu (your channel and history open as the UI's pages;
+// settings as a page of its own, switching accounts in this sheet, sign out
+// after asking, uploads from a file picker, links in the browser), and
+// Pear's app menu (what in-app-menu's title bar offers, which the UI
+// replaces on Android).
 import {
+  createEffect,
   createResource,
   createSignal,
   For,
@@ -12,20 +15,30 @@ import {
 } from 'solid-js';
 
 import { Icon, type IconName } from './icons';
-import { accountOpen, back, go, openAccount } from './router';
+import { Presence } from './presence';
+import { accountOpen, back, go, openDialog } from './router';
 import { swipeDown } from './sheets';
 import { s } from './strings';
+import { showToast } from './toast';
 
 import {
   account,
+  accountAction,
+  addAccount,
   type AppMenuItem,
   avatarUrl,
+  appMenuVersion,
   clickAppMenu,
+  openUrl,
+  readAccounts,
   readAppMenu,
-  runAccountItem,
   signedIn,
   signIn,
-} from '../engine/ytm';
+  signOut,
+  switchAccount,
+  UPLOAD_TYPES,
+  uploadSong,
+} from '../engine';
 
 import type { AccountItem } from '../model/types';
 
@@ -55,12 +68,151 @@ const ACCOUNT_ICONS: Record<string, IconName> = {
   FEEDBACK: 'feedback',
 };
 
-/** Pages open in the new UI; the rest is YTM's (dialogs, sign out) */
-const runItem = (item: AccountItem) => {
-  const target = item.open;
-  if (target) go({ name: 'browse', target });
-  // The account switcher's ← comes back to this sheet
-  else back(() => runAccountItem(item, openAccount));
+/** The user's songs, from the system's file picker (in the tap itself) */
+const pickSongs = () =>
+  new Promise<File[]>((resolve) => {
+    const input = document.createElement('input');
+    input.type = 'file';
+    input.multiple = true;
+    input.accept = UPLOAD_TYPES;
+    input.addEventListener('change', () => resolve([...(input.files ?? [])]));
+    input.click();
+  });
+
+const upload = async (files: File[]) => {
+  for (const file of files) {
+    showToast(s('uploading', file.name));
+    try {
+      await uploadSong(file);
+      showToast(s('uploaded', file.name));
+    } catch (error) {
+      console.error('[pear-mobile-ui]', error);
+      showToast(s('uploadFailed', file.name));
+    }
+  }
+};
+
+/** Each item as YTM does it (engine/account.ts); `showAccounts` switches */
+const runItem = (item: AccountItem, showAccounts: () => void) => {
+  const action = accountAction(item);
+  switch (action?.kind) {
+    case 'page':
+      if (item.open) go({ name: 'browse', target: item.open });
+      break;
+    case 'settings':
+      go({ name: 'settings' });
+      break;
+    case 'accounts':
+      showAccounts();
+      break;
+    case 'signOut':
+      back(() =>
+        openDialog({
+          title: s('signOutTitle', account()?.name ?? ''),
+          confirm: s('signOut'),
+          onConfirm: signOut,
+        }),
+      );
+      break;
+    case 'upload': {
+      // The picker opens from the tap (it needs the user's gesture)
+      const picked = pickSongs();
+      back();
+      picked.then(upload).catch(console.error);
+      break;
+    }
+    case 'url':
+      openUrl(action.url);
+      break;
+    default:
+      back(() => showToast(s('notSupported')));
+  }
+};
+
+/** The accounts and channels to switch to, in place of the menu */
+const Accounts = (props: { title: string; onBack: () => void }) => {
+  const [switcher, { refetch }] = createResource(readAccounts);
+  return (
+    <>
+      <div class="menu-head">
+        <button
+          aria-label={s('back')}
+          class="icon-button"
+          onClick={() => props.onBack()}
+        >
+          <Icon name="back" />
+        </button>
+        <h2 class="sheet-title">{props.title}</h2>
+      </div>
+      <Switch>
+        <Match when={switcher.error as unknown}>
+          <div class="message">
+            <p>{s('error')}</p>
+            <button class="tonal-button" onClick={() => refetch()}>
+              {s('retry')}
+            </button>
+          </div>
+        </Match>
+        <Match when={switcher()}>
+          {(loaded) => (
+            <>
+              <Show when={loaded().googleAccount}>
+                <div class="sheet-note">{loaded().googleAccount}</div>
+              </Show>
+              <For each={loaded().accounts}>
+                {(entry) => (
+                  <button
+                    class="row account-row"
+                    disabled={entry.selected || !entry.signinUrl}
+                    onClick={() => entry.signinUrl && switchAccount(entry.signinUrl)}
+                  >
+                    <Show
+                      fallback={
+                        <span class="avatar large icon-thumb">
+                          <Icon name="account" />
+                        </span>
+                      }
+                      when={entry.photo}
+                    >
+                      {(photo) => <img alt="" class="avatar large" src={photo()} />}
+                    </Show>
+                    <span class="row-text">
+                      <span class="title">{entry.name}</span>
+                      <span class="subtitle">
+                        {[entry.handle, entry.byline].filter(Boolean).join(' · ')}
+                      </span>
+                    </span>
+                    <Show when={entry.selected}>
+                      <Icon name="check" />
+                    </Show>
+                  </button>
+                )}
+              </For>
+              <Show when={loaded().addAccountUrl}>
+                {(url) => (
+                  <>
+                    <hr class="sheet-divider" />
+                    <button
+                      class="sheet-item with-icon"
+                      onClick={() => addAccount(url())}
+                    >
+                      <span class="menu-icon">
+                        <Icon name="add" />
+                      </span>
+                      <span>{s('addAccount')}</span>
+                    </button>
+                  </>
+                )}
+              </Show>
+            </>
+          )}
+        </Match>
+        <Match when={switcher.loading}>
+          <p class="message">{s('loading')}</p>
+        </Match>
+      </Switch>
+    </>
+  );
 };
 
 const AccountPhoto = () => (
@@ -77,7 +229,7 @@ const AccountPhoto = () => (
 );
 
 /** Who is signed in (tap: their channel), then YTM's account menu */
-const AccountHeader = () => (
+const AccountHeader = (props: { onAccounts: (title: string) => void }) => (
   <Show
     fallback={
       <div class="account-head">
@@ -119,7 +271,9 @@ const AccountHeader = () => (
             {(item) => (
               <button
                 class="sheet-item with-icon"
-                onClick={() => runItem(item)}
+                onClick={() =>
+                  runItem(item, () => props.onAccounts(item.label))
+                }
               >
                 <span class="menu-icon">
                   <Show when={ACCOUNT_ICONS[item.icon ?? '']}>
@@ -193,10 +347,28 @@ const MenuLevel = (props: {
 );
 
 const AccountSheetBody = () => {
-  const [menu, { refetch }] = createResource(readAppMenu);
+  // Read again whenever Rust rebuilds the menu (after a switch)
+  const [menu, { refetch }] = createResource(appMenuVersion, () =>
+    readAppMenu(),
+  );
   // The submenus opened, by label: Rust renumbers the items each time it
   // rebuilds the menu (a plugin switched on gets a submenu)
   const [path, setPath] = createSignal<string[]>([]);
+  // The account switcher, in place of the menus (its title: YTM's label)
+  const [accounts, setAccounts] = createSignal<string | null>(null);
+  // A plugin switched off loses its submenu: back to the deepest level that
+  // is still in the rebuilt menu
+  createEffect(() => {
+    let items = menu() ?? [];
+    const open: string[] = [];
+    for (const label of path()) {
+      const submenu = items.find((entry) => entry.label === label)?.submenu;
+      if (!submenu) break;
+      open.push(label);
+      items = submenu.items;
+    }
+    if (menu() && open.length < path().length) setPath(open);
+  });
   const level = () => {
     let items = menu() ?? [];
     let title: string | undefined;
@@ -213,10 +385,16 @@ const AccountSheetBody = () => {
       <div class="sheet tall account-sheet">
         <div class="sheet-handle" {...swipeDown(() => back())} />
         <div class="sheet-scroll">
+          <Show when={accounts()}>
+            {(title) => (
+              <Accounts onBack={() => setAccounts(null)} title={title()} />
+            )}
+          </Show>
+          <Show when={!accounts()}>
           <Show
             fallback={
               <>
-                <AccountHeader />
+                <AccountHeader onAccounts={setAccounts} />
                 <h2 class="sheet-title">{s('appMenu')}</h2>
               </>
             }
@@ -245,6 +423,7 @@ const AccountSheetBody = () => {
               onOpen={(item) => setPath((open) => [...open, item.label])}
             />
           </Show>
+          </Show>
         </div>
       </div>
     </>
@@ -252,7 +431,5 @@ const AccountSheetBody = () => {
 };
 
 export const AccountSheet = () => (
-  <Show when={accountOpen()}>
-    <AccountSheetBody />
-  </Show>
+  <Presence when={accountOpen()}>{() => <AccountSheetBody />}</Presence>
 );

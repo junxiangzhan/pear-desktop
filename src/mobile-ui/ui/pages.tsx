@@ -1,4 +1,5 @@
 import {
+  createEffect,
   createResource,
   createSignal,
   For,
@@ -12,7 +13,7 @@ import {
 
 import { AvatarButton } from './account';
 import { Icon } from './icons';
-import { PendingLists, SectionView, showMenu } from './items';
+import { PendingLists, playAndOpen, SectionView, showMenu } from './items';
 import {
   back,
   go,
@@ -22,12 +23,27 @@ import {
   type Route,
   type Tab,
 } from './router';
+import { SettingsPage } from './settings';
 import { s } from './strings';
+import { showToast } from './toast';
 
-import { innertube, runEndpoint, signedIn, signIn } from '../engine/ytm';
+import {
+  innertube,
+  isSubscribed,
+  setSubscription,
+  signedIn,
+  signIn,
+} from '../engine';
 import { parseBrowse, parseContinuation, parseSearch } from '../model/parse';
 
-import type { BrowseTarget, Chip, Header, Page, Section } from '../model/types';
+import type {
+  BrowseTarget,
+  Chip,
+  Header,
+  Page,
+  Section,
+  Subscription,
+} from '../model/types';
 
 const browse = async (browseId: string, params?: string) =>
   parseBrowse(await innertube('/browse', { browseId, params }));
@@ -65,6 +81,43 @@ const SignInPrompt = () => (
   </div>
 );
 
+/** An artist's subscribe button: switches at once, back if YouTube refuses */
+const SubscribeButton = (props: { subscription: Subscription }) => {
+  // The page's state when it loaded (or this session's change), then the
+  // user's
+  const [subscribed, setSubscribed] = createSignal(
+    // oxlint-disable-next-line solid/reactivity
+    isSubscribed(props.subscription),
+  );
+  const toggle = () => {
+    if (!signedIn()) {
+      signIn();
+      return;
+    }
+    const on = !subscribed();
+    setSubscribed(on);
+    setSubscription(props.subscription, on).catch(() => {
+      setSubscribed(!on);
+      showToast(s('actionFailed'));
+    });
+  };
+  return (
+    <button
+      class="tonal-button subscribe-button"
+      classList={{ subscribed: subscribed() }}
+      onClick={toggle}
+    >
+      <Icon name="subscribe" />
+      {subscribed()
+        ? props.subscription.subscribedText
+        : props.subscription.subscribeText}
+      <Show when={props.subscription.count}>
+        {(count) => <span class="subscribe-count">{count()}</span>}
+      </Show>
+    </button>
+  );
+};
+
 const PageHeader = (props: { header: Header }) => (
   <div class="page-header" classList={{ wide: props.header.wide }}>
     <Show when={props.header.thumbnail}>
@@ -82,7 +135,7 @@ const PageHeader = (props: { header: Header }) => (
     <div class="page-header-actions">
       <Show when={props.header.play}>
         {(play) => (
-          <button class="filled-button" onClick={() => runEndpoint(play())}>
+          <button class="filled-button" onClick={() => playAndOpen(play())}>
             <Icon name="play" />
             {s('play')}
           </button>
@@ -90,15 +143,18 @@ const PageHeader = (props: { header: Header }) => (
       </Show>
       <Show when={props.header.shuffle}>
         {(shuffle) => (
-          <button class="tonal-button" onClick={() => runEndpoint(shuffle())}>
+          <button class="tonal-button" onClick={() => playAndOpen(shuffle())}>
             <Icon name="shuffle" />
             {s('shuffle')}
           </button>
         )}
       </Show>
+      <Show when={props.header.subscription}>
+        {(subscription) => <SubscribeButton subscription={subscription()} />}
+      </Show>
       <Show when={props.header.radio}>
         {(radio) => (
-          <button class="tonal-button" onClick={() => runEndpoint(radio())}>
+          <button class="tonal-button" onClick={() => playAndOpen(radio())}>
             <Icon name="radio" />
             {s('radio')}
           </button>
@@ -153,13 +209,17 @@ const Continuation = (props: {
 };
 
 /** A page's filter chips (home's moods and genres) */
-const Chips = (props: { chips: Chip[]; onChip: (chip: Chip) => void }) => (
+const Chips = (props: {
+  chips: Chip[];
+  onChip: (chip: Chip) => void;
+  isSelected: (chip: Chip) => boolean;
+}) => (
   <div class="chips">
     <For each={props.chips}>
       {(chip) => (
         <button
           class="chip"
-          classList={{ selected: chip.selected }}
+          classList={{ selected: props.isSelected(chip) }}
           onClick={() => props.onChip(chip)}
         >
           {chip.label}
@@ -169,7 +229,7 @@ const Chips = (props: { chips: Chip[]; onChip: (chip: Chip) => void }) => (
   </div>
 );
 
-const PageBody = (props: { page: Page; onChip?: (chip: Chip) => void }) => {
+const PageBody = (props: { page: Page }) => {
   const [extra, setExtra] = createSignal<Section[]>([]);
   // Each page object is rendered once (the stack keys by route)
   const [token, setToken] = createSignal(
@@ -184,12 +244,6 @@ const PageBody = (props: { page: Page; onChip?: (chip: Chip) => void }) => {
     <PendingLists.Provider value={pending}>
       <Show when={props.page.header}>
         {(header) => <PageHeader header={header()} />}
-      </Show>
-      <Show when={props.onChip && props.page.chips.length}>
-        <Chips
-          chips={props.page.chips}
-          onChip={(chip) => props.onChip?.(chip)}
-        />
       </Show>
       <Show
         fallback={<p class="message">{s('empty')}</p>}
@@ -216,9 +270,26 @@ const PageBody = (props: { page: Page; onChip?: (chip: Chip) => void }) => {
 
 const Loaded = (props: {
   load: () => Promise<Page>;
-  onChip?: (chip: Chip) => void;
+  /** Loads the page again when it changes (a chip's filter), in place */
+  reloadKey?: () => unknown;
+  /** A chip tapped; true if it filters this page (loads it again) */
+  onChip?: (chip: Chip) => boolean;
 }) => {
-  const [page, { refetch }] = createResource(() => props.load());
+  const [page, { refetch }] = createResource(
+    () => ({ key: props.reloadKey?.() }),
+    () => props.load(),
+  );
+  // The chip tapped, selected at once while its content loads
+  const [pendingChip, setPendingChip] = createSignal<Chip | null>(null);
+  createEffect(() => {
+    if (!page.loading) setPendingChip(null);
+  });
+  const isSelected = (chip: Chip) => {
+    const pending = pendingChip();
+    if (!pending) return chip.selected;
+    // Tapping the selected chip clears the filter
+    return !pending.selected && pending.label === chip.label;
+  };
   return (
     <Switch>
       <Match when={page.error as unknown}>
@@ -229,8 +300,29 @@ const Loaded = (props: {
           </button>
         </div>
       </Match>
-      <Match when={page()}>
-        {(loaded) => <PageBody onChip={props.onChip} page={loaded()} />}
+      {/* The page shown stays (dimmed, its chips kept) while the next one
+          loads, and the next one comes in with an animation */}
+      <Match when={page.latest}>
+        {(latest) => (
+          <>
+            <Show when={props.onChip && latest().chips.length}>
+              <Chips
+                chips={latest().chips}
+                isSelected={isSelected}
+                onChip={(chip) => {
+                  if (props.onChip?.(chip)) setPendingChip(chip);
+                }}
+              />
+            </Show>
+            <Show keyed when={latest()}>
+              {(loaded) => (
+                <div class="page-content" classList={{ stale: page.loading }}>
+                  <PageBody page={loaded} />
+                </div>
+              )}
+            </Show>
+          </>
+        )}
       </Match>
       <Match when={page.loading}>
         <p class="message">{s('loading')}</p>
@@ -330,6 +422,40 @@ const BrowsePage = (props: { target: BrowseTarget }) => (
   </>
 );
 
+/**
+ * A tab's page. A chip of its own (home's moods) filters it in place: the
+ * page stays, its chips too, and only its content changes; tapping the
+ * selected one clears the filter.
+ */
+const TabPage = (props: { route: Route & { name: Tab } }) => {
+  const tab = untrack(() => props.route.name);
+  const [params, setParams] = createSignal(untrack(() => props.route.params));
+  const [content, setContent] = createSignal<HTMLDivElement>();
+  return (
+    <div ref={setContent}>
+      <Loaded
+        load={() => browse(TAB_IDS[tab], params())}
+        onChip={(chip) => {
+          const target = chip.open;
+          if (target?.browseId === TAB_IDS[tab]) {
+            const next = chip.selected ? undefined : target.params;
+            // Kept on the route: a reload of the page keeps the filter
+            props.route.params = next;
+            setParams(next);
+            content()
+              ?.closest('.page')
+              ?.scrollTo({ top: 0, behavior: 'smooth' });
+            return true;
+          }
+          if (target) go({ name: 'browse', target });
+          return false;
+        }}
+        reloadKey={params}
+      />
+    </div>
+  );
+};
+
 export const RouteView = (props: { route: Route; depth: number }) => (
   <Switch>
     <Match
@@ -347,28 +473,7 @@ export const RouteView = (props: { route: Route; depth: number }) => (
         fallback={<SignInPrompt />}
         when={props.route.name !== 'library' || signedIn()}
       >
-        <Loaded
-          load={() =>
-            browse(
-              TAB_IDS[props.route.name as keyof typeof TAB_IDS],
-              (props.route as { params?: string }).params,
-            )
-          }
-          onChip={(chip) => {
-            const tab = props.route.name as Tab;
-            const target = chip.open;
-            // A chip of the tab's own page filters it in place; tapping the
-            // selected one clears the filter
-            if (target?.browseId === TAB_IDS[tab]) {
-              replacePage({
-                name: tab,
-                params: chip.selected ? undefined : target.params,
-              });
-            } else if (target) {
-              go({ name: 'browse', target });
-            }
-          }}
-        />
+        <TabPage route={props.route as Route & { name: Tab }} />
       </Show>
     </Match>
     <Match keyed when={props.route.name === 'search' && props.route}>
@@ -377,6 +482,10 @@ export const RouteView = (props: { route: Route; depth: number }) => (
           <SearchPage params={route.params} query={route.query} />
         )
       }
+    </Match>
+    <Match when={props.route.name === 'settings'}>
+      <TopBar canGoBack title={s('settings')} />
+      <SettingsPage />
     </Match>
     <Match keyed when={props.route.name === 'browse' && props.route}>
       {(route) =>

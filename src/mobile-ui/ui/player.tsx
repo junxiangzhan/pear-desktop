@@ -11,7 +11,9 @@ import {
 
 import { Icon } from './icons';
 import { Row, SectionView, Sentinel, showMenu } from './items';
-import { back, closePlayer, openPlayer, playerOpen } from './router';
+import { pluginEnabled } from './plugins';
+import { Presence } from './presence';
+import { back, closePlayer, go, openPlayer, playerOpen } from './router';
 import { swipeDown } from './sheets';
 import { s } from './strings';
 import { AdVideoSlot } from './video';
@@ -20,11 +22,14 @@ import {
   adInfo,
   adShowing,
   adSkippable,
+  currentEntry,
   currentTime,
   duration,
   innertube,
   isPlaying,
+  loading,
   next,
+  PLAYER_HOST_ID,
   nowPlaying,
   previous,
   queue,
@@ -33,6 +38,7 @@ import {
   loadMoreQueue,
   moveQueueEntry,
   type QueueEntry,
+  songVideoShown,
   videoRatio,
   queueHasMore,
   repeatMode,
@@ -41,7 +47,7 @@ import {
   toggleDislike,
   toggleLike,
   togglePlay,
-} from '../engine/ytm';
+} from '../engine';
 import { parseLyrics, parseSectionList, parseWatchTabs } from '../model/parse';
 
 import type { Item } from '../model/types';
@@ -64,15 +70,39 @@ const PlayPause = (props: { size?: number }) => (
       togglePlay();
     }}
   >
-    <Icon name={isPlaying() ? 'pause' : 'play'} size={props.size} />
+    <Show
+      fallback={<Icon name={isPlaying() ? 'pause' : 'play'} size={props.size} />}
+      when={loading()}
+    >
+      {/* The song is on its way (the first one can take half a minute) */}
+      <span
+        aria-hidden="true"
+        class="spinner"
+        style={{ '--size': `${props.size ?? 24}px` }}
+      />
+    </Show>
   </button>
 );
+
+/**
+ * A click from the player inside the bar (YouTube's skip button, reached
+ * through the "Skip ad" label, or its ad link): it bubbles out of the slot
+ * into the bar, which must not open the player for it
+ */
+const fromPlayer = (event: MouseEvent) =>
+  event
+    .composedPath()
+    .some(
+      (node) =>
+        node instanceof HTMLElement &&
+        (node.id === PLAYER_HOST_ID || node.classList.contains('skip-ad')),
+    );
 
 /**
  * "Skip ad": a <label> of the page (index.tsx) shown here through a slot, so
  * the user's tap reaches YouTube's skip button as their own click
  */
-const SkipAd = (props: { where: 'mini' | 'player' }) => (
+const SkipAd = (props: { where: 'mini' }) => (
   <Show when={adSkippable()}>
     {/* The box draws the backdrop: styling the slotted label itself did not
         hold on the tablet */}
@@ -120,7 +150,7 @@ const AdBadge = () => (
 
 /** The playing song as a queue item, for its menu */
 const playingItem = (): Item | undefined => {
-  const entry = queue().find((candidate) => candidate.selected);
+  const entry = currentEntry();
   if (!entry) return undefined;
   return {
     key: entry.key,
@@ -146,7 +176,9 @@ export const MiniPlayer = () => (
       <div
         class="mini-player"
         classList={{ ad: adShowing() }}
-        onClick={openPlayer}
+        onClick={(event) => {
+          if (!fromPlayer(event)) openPlayer();
+        }}
         role="button"
       >
         <div
@@ -160,7 +192,7 @@ export const MiniPlayer = () => (
             fallback={<img alt="" class="mini-art" src={song().thumbnail} />}
             when={adShowing()}
           >
-            <AdVideoSlot class="mini-art" name="video-mini" />
+            <AdVideoSlot class="mini-art" layer={0} name="video-mini" />
           </Show>
           <div class="row-text">
             <div class="title">
@@ -382,7 +414,7 @@ const QueueList = () => {
               <Icon name="drag" />
             </button>
             <Row
-              current={entry.selected}
+              current={entry === currentEntry()}
               item={{
                 key: entry.key,
                 kind: 'song',
@@ -407,7 +439,24 @@ const QueueList = () => {
   );
 };
 
-const LyricsView = (props: { browseId?: string }) => {
+/** synced-lyrics renders here (its own components and styles) while on */
+const PluginLyrics = () => (
+  <div class="plugin-lyrics">
+    <slot name="synced-lyrics" />
+  </div>
+);
+
+const LyricsView = (props: { browseId?: string }) => (
+  <Show
+    fallback={<YtmLyrics browseId={props.browseId} />}
+    when={pluginEnabled('synced-lyrics')}
+  >
+    <PluginLyrics />
+  </Show>
+);
+
+/** YouTube Music's own (plain) lyrics */
+const YtmLyrics = (props: { browseId?: string }) => {
   const [lyrics] = createResource(
     () => props.browseId,
     async (browseId) => parseLyrics(await innertube('/browse', { browseId })),
@@ -526,18 +575,69 @@ const Panel = (props: { onTab: () => void }) => {
  * beside the controls; narrow ones put it below them, a scroll away, with
  * the queue button as a shortcut.
  */
+/**
+ * The player page's cover: the song's picture, or the player's video (an ad,
+ * the song's video in video mode). Plugins draw on it as they do on YTM's
+ * player: ambient-mode's glow behind it, the visualizer over it,
+ * video-toggle's switch on top (their mounts, slotted in).
+ */
+const Cover = (props: { image?: string; atTop: () => boolean }) => {
+  const video = () => adShowing() || songVideoShown();
+  return (
+    <div
+      class="player-cover"
+      style={{ '--ratio': video() ? String(videoRatio()) : '1' }}
+    >
+      <Show when={pluginEnabled('ambient-mode')}>
+        <div class="cover-layer">
+          <slot name="ambient-mode" />
+        </div>
+      </Show>
+      <Show
+        fallback={
+          <img
+            alt=""
+            class="player-art"
+            src={props.image}
+            {...swipeDown(() => back(), () => props.atTop())}
+          />
+        }
+        when={video()}
+      >
+        <AdVideoSlot class="player-video" layer={1} name="video-player" />
+      </Show>
+      {/* Not over an ad: its own interface (the skip button) is tapped */}
+      <Show when={!adShowing()}>
+        <Show when={pluginEnabled('visualizer')}>
+          <div class="cover-layer cover-clip">
+            <slot name="visualizer" />
+          </div>
+        </Show>
+        <Show when={pluginEnabled('video-toggle')}>
+          <div class="cover-layer cover-switch">
+            <slot name="video-toggle" />
+          </div>
+        </Show>
+      </Show>
+    </div>
+  );
+};
+
 export const PlayerSheet = () => {
   const [layout, setLayout] = createSignal<HTMLDivElement>();
   const [panel, setPanel] = createSignal<HTMLDivElement>();
   const atTop = () => (layout()?.scrollTop ?? 0) <= 0;
   const showPanel = () =>
     panel()?.scrollIntoView({ behavior: 'smooth', block: 'start' });
-  // The queue cleared: YTM drops its player, the UI closes its own
+  // The queue cleared (or the first song failed to load): the UI closes
+  // its player. Not while the first song loads: a tap opens the player
+  // before its queue is there.
   createEffect(() => {
-    if (!nowPlaying()) closePlayer();
+    if (!nowPlaying() && !loading()) closePlayer();
   });
   return (
-    <Show when={playerOpen()}>
+    <Presence when={playerOpen()}>
+      {() => (
       <div class="player-sheet" classList={{ ad: adShowing() }}>
         <header class="top-bar" {...swipeDown(() => back(), atTop)}>
           <button
@@ -557,39 +657,43 @@ export const PlayerSheet = () => {
           </button>
         </header>
         <Show
-          fallback={<p class="message">{s('nothingPlaying')}</p>}
+          fallback={
+            <Show
+              fallback={<p class="message">{s('nothingPlaying')}</p>}
+              when={loading()}
+            >
+              <div class="message">
+                <span class="spinner" style={{ '--size': '40px' }} />
+              </div>
+            </Show>
+          }
           when={nowPlaying()}
         >
           {(song) => (
             <div class="player-layout" ref={setLayout}>
               <div class="player-main">
-                <Show
-                  fallback={
-                    <img
-                      alt=""
-                      class="player-art"
-                      src={song().thumbnail}
-                      {...swipeDown(() => back(), atTop)}
-                    />
-                  }
-                  when={adShowing()}
-                >
-                  <AdVideoSlot
-                    class="player-video"
-                    name="video-player"
-                    style={{ '--ratio': String(videoRatio()) }}
-                  >
-                    {/* On the picture: the video is an element of the UI */}
-                    <SkipAd where="player" />
-                  </AdVideoSlot>
-                </Show>
+                <Cover atTop={atTop} image={song().thumbnail} />
                 <div class="player-heading">
                   <div class="player-titles">
                     <div class="player-title">
                       <AdBadge />
                       {shown(song()).title}
                     </div>
-                    <div class="subtitle">{shown(song()).artist}</div>
+                    <Show
+                      fallback={
+                        <div class="subtitle">{shown(song()).artist}</div>
+                      }
+                      when={!adShowing() && song().artistOpen}
+                    >
+                      {(target) => (
+                        <button
+                          class="subtitle artist-link"
+                          onClick={() => go({ name: 'browse', target: target() })}
+                        >
+                          {song().artist}
+                        </button>
+                      )}
+                    </Show>
                   </div>
                   <Show when={!adShowing()}>
                     <Rating />
@@ -641,6 +745,7 @@ export const PlayerSheet = () => {
           )}
         </Show>
       </div>
-    </Show>
+      )}
+    </Presence>
   );
 };

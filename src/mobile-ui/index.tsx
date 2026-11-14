@@ -1,37 +1,45 @@
-// Pear's own mobile UI over YouTube Music.
+// Pear's own mobile UI for YouTube Music.
 //
-// YTM keeps running underneath as the engine (sign-in, playback, the queue,
-// ads handling, every plugin that hooks the player); its layout is made
-// invisible and the new UI is drawn over it in a shadow root, between
-// in-app-menu's title bar and the bottom of the screen. YTM's popups (sign-in
-// prompts, "save to playlist", toasts) still show, above the new UI.
+// YouTube Music's interface is not loaded: its scripts are stopped as the
+// page starts, the UI calls YouTube Music's API itself and plays through
+// YouTube's own player (see engine/). The UI is drawn in a shadow root on
+// the page YTM's HTML leaves (its ytcfg, cookies and origin are what the API
+// and the player need).
 //
 // Off on desktop: see enable.ts.
 import { render } from 'solid-js/web';
 
 import { isMobileUiEnabled } from './enable';
 import {
-  connectPlayer,
-  readAccount,
+  blockYtmInterface,
+  PLAYER_CSS,
   SKIP_AD_TARGET,
-  VIDEO_CSS,
-  whenAppReady,
-} from './engine/ytm';
+  startEngine,
+} from './engine';
 import { App } from './ui/App';
 import { installRouter } from './ui/router';
 import { s } from './ui/strings';
 import css from './ui/styles.css?inline';
 
-// opacity (unlike visibility) cannot be undone by YTM's own rules on the
-// children, and the <video> keeps playing under it
+// What YTM's HTML still has of its (never started) app
 const HIDE_YTM = `
-ytmusic-app-layout {
-  opacity: 0 !important;
-  pointer-events: none !important;
-}
-/* The Premium upsell bar, made for YTM's layout */
-tp-yt-paper-dialog:has(> ytmusic-mealbar-promo-renderer) {
+ytmusic-app {
   display: none !important;
+}
+`;
+
+// Plugins' places in the UI (light DOM, shown through the UI's slots):
+// they fill the box the UI gives them
+const PLUGIN_MOUNTS = `
+pear-mobile-ui > #synced-lyrics-container {
+  display: block;
+  height: 100%;
+}
+pear-mobile-ui > :is(#pear-visualizer, #pear-ambient-mode) {
+  position: relative;
+  display: block;
+  width: 100%;
+  height: 100%;
 }
 `;
 
@@ -67,13 +75,12 @@ const isEditable = (target: EventTarget | undefined) =>
     target instanceof HTMLTextAreaElement);
 
 /**
- * Keys typed in the UI's text fields reach YTM's own hotkey listeners
- * retargeted to the host, which is not a text field: space would toggle
- * playback while typing a search. YTM listens in the capture phase, so the
- * keys are stopped before it, at the window, as soon as the page starts.
- * Typing is the keys' default action, which stopping them leaves alone; the
- * UI has no key listeners of its own (Enter submits the search form by
- * default too).
+ * Keys typed in the UI's text fields reach the page's key listeners (Pear's
+ * plugins, the player) retargeted to the host, which is not a text field:
+ * space could toggle playback while typing a search. They are stopped at the
+ * window in the capture phase, as soon as the page starts. Typing is the
+ * keys' default action, which stopping them leaves alone; the UI has no key
+ * listeners of its own (Enter submits the search form by default too).
  */
 const keepTypingFromYtm = () => {
   for (const type of ['keydown', 'keypress', 'keyup']) {
@@ -100,7 +107,8 @@ const keepTypingFromYtm = () => {
  * host (the page's tree), shown inside the UI through slots.
  */
 const skipLabels = (host: HTMLElement) => {
-  for (const where of ['mini', 'player']) {
+  // The player page shows YouTube's own skip button on the video
+  for (const where of ['mini']) {
     const label = document.createElement('label');
     label.htmlFor = SKIP_AD_TARGET;
     label.slot = `skip-ad-${where}`;
@@ -119,17 +127,20 @@ const mount = () => {
   const root = host.attachShadow({ mode: 'open' });
   adopt(root, css);
   render(() => <App />, root);
+  return host;
 };
 
 export const startMobileUi = () => {
   if (!isMobileUiEnabled()) return;
-  // Before YTM's scripts add their popstate and key listeners
+  // As the page starts: before YTM's scripts are added
+  blockYtmInterface();
   installRouter();
   keepTypingFromYtm();
   adopt(
     document,
     HIDE_YTM +
-      VIDEO_CSS(HOST_TAG) +
+      PLUGIN_MOUNTS +
+      PLAYER_CSS(HOST_TAG) +
       // Android: the avatar's sheet has in-app-menu's menu, so its title bar
       // goes and the UI takes its height
       ((window as { __PEAR_MOBILE__?: boolean }).__PEAR_MOBILE__
@@ -137,10 +148,6 @@ export const startMobileUi = () => {
         : ''),
   );
   onDomReady(() => {
-    mount();
-    whenAppReady().then(() => {
-      readAccount();
-      return connectPlayer();
-    });
+    startEngine(mount()).catch(console.error);
   });
 };

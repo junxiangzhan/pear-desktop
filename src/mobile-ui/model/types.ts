@@ -34,7 +34,9 @@ export interface MenuEntry {
 export type MenuAction =
   | { kind: 'like'; status: string; target: Record<string, string> }
   | { kind: 'save'; videoId?: string; playlistId?: string }
-  | { kind: 'edit'; edit: unknown };
+  | { kind: 'edit'; edit: unknown }
+  /** The UI's own entries (plugins'): run here; `keepOpen` opens a sub-menu */
+  | { kind: 'local'; run: () => void; keepOpen?: boolean };
 
 export interface Item {
   key: string;
@@ -97,6 +99,18 @@ export interface Chip {
   open?: BrowseTarget;
 }
 
+/** An artist's subscribe button */
+export interface Subscription {
+  channelId: string;
+  subscribed: boolean;
+  /** "6.83萬" */
+  count?: string;
+  subscribeText: string;
+  subscribedText: string;
+  subscribe?: Endpoint;
+  unsubscribe?: Endpoint;
+}
+
 export interface Header {
   title: string;
   subtitle?: string;
@@ -107,6 +121,8 @@ export interface Header {
   play?: Endpoint;
   shuffle?: Endpoint;
   radio?: Endpoint;
+  /** Artist pages: subscribe to the artist */
+  subscription?: Subscription;
   menu: MenuEntry[];
 }
 
@@ -126,4 +142,71 @@ export interface WatchTabs {
 export interface Lyrics {
   text: string;
   source?: string;
+}
+
+/** A question YTM asks before an action (clear the history, sign out) */
+export interface Confirm {
+  title: string;
+  message?: string;
+  confirm: string;
+  cancel?: string;
+}
+
+/** One of YTM's settings (/account/get_setting), by its kind */
+export type SettingItem =
+  | {
+      kind: 'toggle';
+      /** YTM's itemId (SAFETY_MODE, MUSIC_SHOW_YT_LIKES…) */
+      id?: string;
+      title: string;
+      summary?: string;
+      on: boolean;
+      enable: Endpoint;
+      disable: Endpoint;
+      confirmOn?: Confirm;
+      confirmOff?: Confirm;
+    }
+  | {
+      kind: 'choice';
+      id?: string;
+      title: string;
+      options: {
+        label: string;
+        value?: string;
+        description?: string;
+        selected: boolean;
+        endpoint: Endpoint;
+      }[];
+    }
+  | { kind: 'link'; title: string; summary?: string; endpoint?: Endpoint }
+  | {
+      kind: 'action';
+      title: string;
+      summary?: string;
+      endpoint: Endpoint;
+      confirm?: Confirm;
+    };
+
+export interface SettingCategory {
+  title: string;
+  items: SettingItem[];
+}
+
+/** An account or channel to switch to (YTM's account switcher) */
+export interface SwitchAccount {
+  name: string;
+  byline?: string;
+  handle?: string;
+  photo?: string;
+  selected: boolean;
+  /** Where switching goes (YouTube's sign-in handler, back to YTM) */
+  signinUrl?: string;
+}
+
+export interface AccountSwitcher {
+  /** The Google account's name, over its channels */
+  googleAccount?: string;
+  accounts: SwitchAccount[];
+  /** Google's "add an account" page */
+  addAccountUrl?: string;
 }

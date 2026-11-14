@@ -14,17 +14,46 @@ import {
 } from 'solid-js';
 
 import { Icon } from './icons';
-import { go, openMenu, removedItems } from './router';
+import { go, openMenu, openPlayer, removedItems } from './router';
 import { s } from './strings';
 
-import { innertube, runEndpoint } from '../engine/ytm';
+import {
+  currentEntry,
+  innertube,
+  playQueueEntry,
+  queue,
+  runEndpoint,
+} from '../engine';
 import { parseShelfContinuation } from '../model/parse';
 
-import type { Item, Section } from '../model/types';
+import type { Endpoint, Item, Section } from '../model/types';
 
 export const activate = (item: Item) => {
   if (item.open) go({ name: 'browse', target: item.open });
-  else if (item.play) runEndpoint(item.play);
+  else if (item.queued) {
+    // A song of the queue plays from where it is, the queue kept
+    const entry = queue().find((candidate) => candidate.key === item.key);
+    if (entry) playQueueEntry(entry);
+  } else if (item.play) playAndOpen(item.play);
+};
+
+/** Plays (a song, a list, a radio) and opens the player page, as YTM does */
+export const playAndOpen = (endpoint: Endpoint) => {
+  runEndpoint(endpoint);
+  openPlayer();
+};
+
+/** A song's id, or a playlist's (albums and playlists, by their save entry) */
+const menuTarget = (item: Item) => {
+  const watch = item.play?.watchEndpoint as { videoId?: string } | undefined;
+  if (watch?.videoId) return { videoId: watch.videoId };
+  const save = item.menu.find((entry) => entry.action?.kind === 'save')?.action;
+  if (save?.kind === 'save') {
+    return { videoId: save.videoId, playlistId: save.playlistId };
+  }
+  const browse = item.open?.browseId;
+  if (browse?.startsWith('VL')) return { playlistId: browse.slice(2) };
+  return undefined;
 };
 
 export const showMenu = (item: Item) =>
@@ -34,6 +63,8 @@ export const showMenu = (item: Item) =>
     thumbnail: item.thumbnail,
     entries: item.menu,
     itemKey: item.queued ? undefined : item.key,
+    target: menuTarget(item),
+    playing: !!item.queued && currentEntry()?.key === item.key,
   });
 
 const LONG_PRESS_MS = 500;

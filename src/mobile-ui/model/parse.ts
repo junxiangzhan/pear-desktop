@@ -6,8 +6,10 @@
 import type {
   AccountItem,
   AccountMenu,
+  AccountSwitcher,
   BrowseTarget,
   Chip,
+  Confirm,
   Header,
   Item,
   ItemKind,
@@ -17,6 +19,10 @@ import type {
   Page,
   PageType,
   Section,
+  SettingCategory,
+  SettingItem,
+  Subscription,
+  SwitchAccount,
   WatchTabs,
 } from './types';
 
@@ -71,7 +77,9 @@ const PAGE_TYPES: Record<string, PageType> = {
   MUSIC_PAGE_TYPE_LIBRARY_ARTIST: 'artist',
 };
 
-const browseTarget = (endpoint: Node): BrowseTarget | undefined => {
+export const browseTarget = (
+  endpoint: Node,
+): BrowseTarget | undefined => {
   const browse = endpoint?.browseEndpoint;
   const browseId = str(browse?.browseId);
   if (!browseId) return undefined;
@@ -410,6 +418,32 @@ const chips = (header: Node): Chip[] =>
 const buttonEndpoint = (node: Node) =>
   node?.buttonRenderer?.navigationEndpoint ?? undefined;
 
+/** The first endpoint of `kind` anywhere under `node` */
+const findEndpoint = (node: unknown, kind: string): Obj | undefined => {
+  let found: Obj | undefined;
+  JSON.stringify(node ?? null, (key, value: unknown) => {
+    if (!found && key === kind) found = { [kind]: value as Obj };
+    return value;
+  });
+  return found;
+};
+
+/** An artist header's subscribe button */
+const subscription = (node: Node): Subscription | undefined => {
+  const button = node?.subscribeButtonRenderer;
+  const channelId = str(button?.channelId);
+  if (!button || !channelId) return undefined;
+  return {
+    channelId,
+    subscribed: (button.subscribed as unknown) === true,
+    count: text(button.shortSubscriberCountText ?? button.subscriberCountText) || undefined,
+    subscribeText: text(button.unsubscribedButtonText),
+    subscribedText: text(button.subscribedButtonText),
+    subscribe: findEndpoint(button.serviceEndpoints, 'subscribeEndpoint'),
+    unsubscribe: findEndpoint(button.serviceEndpoints, 'unsubscribeEndpoint'),
+  };
+};
+
 const header = (response: Obj, firstTab: Node): Header | undefined => {
   const immersive =
     response.header?.musicImmersiveHeaderRenderer ??
@@ -424,6 +458,7 @@ const header = (response: Obj, firstTab: Node): Header | undefined => {
       wide: true,
       shuffle: buttonEndpoint(immersive.playButton),
       radio: buttonEndpoint(immersive.startRadioButton),
+      subscription: subscription(immersive.subscriptionButton),
       menu: menu(immersive.menu),
     };
   }
@@ -678,4 +713,133 @@ export const parseAccountMenu = (data: unknown): AccountMenu | null => {
     channel,
     sections,
   };
+};
+
+// ---- Settings and the account switcher ---------------------------------
+
+/** A confirmDialogRenderer: its title, message and buttons */
+const parseConfirm = (node: Node): Confirm | undefined => {
+  const dialog = node?.confirmDialogRenderer;
+  if (!dialog) return undefined;
+  return {
+    title: text(dialog.title),
+    message:
+      arr(dialog.dialogMessages)
+        .map((message) => text(message))
+        .join('\n')
+        .trim() || undefined,
+    confirm: text(dialog.confirmButton?.buttonRenderer?.text),
+    cancel: text(dialog.cancelButton?.buttonRenderer?.text) || undefined,
+  };
+};
+
+const parseSetting = (node: Obj): SettingItem | undefined => {
+  const entry = unwrap(node);
+  if (!entry) return undefined;
+  const [kind, data] = entry;
+  const title = text(data.title);
+  const summary = text(data.summary) || undefined;
+  switch (kind) {
+    case 'settingBooleanRenderer': {
+      const enable = data.enableServiceEndpoint;
+      const disable = data.disableServiceEndpoint;
+      if (!enable || !disable) return undefined;
+      return {
+        kind: 'toggle',
+        id: str(data.itemId),
+        title,
+        summary,
+        on: (data.enabled as unknown) === true,
+        enable,
+        disable,
+        confirmOn: parseConfirm(data.confirmEnableDialog),
+        confirmOff: parseConfirm(data.confirmDisableDialog),
+      };
+    }
+    case 'settingSingleOptionMenuRenderer':
+      return {
+        kind: 'choice',
+        id: str(data.itemId),
+        title,
+        options: arr(data.items).flatMap((item) => {
+          const option = item.settingMenuItemRenderer;
+          const endpoint = option?.updateServiceEndpoint;
+          if (!option || !endpoint) return [];
+          return [
+            {
+              label: str(option.name) ?? '',
+              value: str(option.value),
+              description: str(option.description),
+              selected: (option.selected as unknown) === true,
+              endpoint,
+            },
+          ];
+        }),
+      };
+    case 'settingReadOnlyItemRenderer':
+      return { kind: 'link', title, summary, endpoint: data.navigationEndpoint };
+    case 'settingActionRenderer': {
+      const endpoint = data.serviceEndpoint;
+      if (!endpoint) return undefined;
+      return {
+        kind: 'action',
+        title,
+        summary,
+        endpoint,
+        confirm: parseConfirm(data.confirmDialog),
+      };
+    }
+    default:
+      return undefined;
+  }
+};
+
+/** YTM's settings (/account/get_setting), by category */
+export const parseSettings = (data: unknown): SettingCategory[] =>
+  arr((data as Obj | undefined)?.items).flatMap((node) => {
+    const category = node.settingCategoryCollectionRenderer;
+    if (!category) return [];
+    const items = arr(category.items).flatMap(
+      (item) => parseSetting(item) ?? [],
+    );
+    return items.length ? [{ title: text(category.title), items }] : [];
+  });
+
+/** The account switcher (/getAccountSwitcherEndpoint, its JSON) */
+export const parseAccountSwitcher = (data: unknown): AccountSwitcher => {
+  const accounts: SwitchAccount[] = [];
+  let googleAccount: string | undefined;
+  let addAccountUrl: string | undefined;
+  const walk = (node: unknown, depth: number) => {
+    if (depth > 24 || !node || typeof node !== 'object') return;
+    const obj = node as Obj;
+    const account = obj.accountItem;
+    if (account) {
+      const tokens = arr(
+        account.serviceEndpoint?.selectActiveIdentityEndpoint?.supportedTokens,
+      );
+      accounts.push({
+        name: text(account.accountName),
+        byline: text(account.accountByline) || undefined,
+        handle: text(account.channelHandle) || undefined,
+        photo: thumbnail(account.accountPhoto),
+        selected: (account.isSelected as unknown) === true,
+        signinUrl: tokens
+          .map((token) => str(token.accountSigninToken?.signinUrl))
+          .find(Boolean),
+      });
+      return;
+    }
+    if (obj.googleAccountHeaderRenderer && !googleAccount) {
+      googleAccount = text(obj.googleAccountHeaderRenderer.name) || undefined;
+    }
+    const link = obj.compactLinkRenderer;
+    if (link && str(link.icon?.iconType) === 'PERSON_ADD') {
+      addAccountUrl = str(link.navigationEndpoint?.urlEndpoint?.url);
+      return;
+    }
+    for (const value of Object.values(obj)) walk(value, depth + 1);
+  };
+  walk(data, 0);
+  return { googleAccount, accounts, addAccountUrl };
 };

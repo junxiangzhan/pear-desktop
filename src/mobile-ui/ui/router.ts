@@ -7,7 +7,7 @@ import { createSignal } from 'solid-js';
 
 import { installHistoryIsolation, pushBackEntry } from '../engine/history';
 
-import type { SaveTarget } from '../engine/ytm';
+import type { SaveTarget } from '../engine';
 import type { BrowseTarget, Endpoint, MenuEntry } from '../model/types';
 
 export type Tab = 'home' | 'explore' | 'library';
@@ -16,7 +16,9 @@ export type Route =
   /** A tab's page; `params` picks one of its chips (home's moods) */
   | { name: Tab; params?: string }
   | { name: 'search'; query?: string; params?: string }
-  | { name: 'browse'; target: BrowseTarget };
+  | { name: 'browse'; target: BrowseTarget }
+  /** YTM's settings (the account menu's) */
+  | { name: 'settings' };
 
 export interface MenuSheet {
   title: string;
@@ -25,6 +27,10 @@ export interface MenuSheet {
   entries: MenuEntry[];
   /** The page item it belongs to, hidden if an entry removes it */
   itemKey?: string;
+  /** What it is about, for plugins' entries (the downloader) */
+  target?: { videoId?: string; playlistId?: string };
+  /** The playing song's menu: plugins add speed and quality there */
+  playing?: boolean;
 }
 
 const [removedItems, setRemovedItems] = createSignal<ReadonlySet<string>>(
@@ -45,15 +51,25 @@ export interface SaveSheet {
   fallback?: Endpoint;
 }
 
-type Layer = 'page' | 'player' | 'menu' | 'save' | 'account';
+/** A question before an action (sign out, clear the history) */
+export interface Dialog {
+  title: string;
+  message?: string;
+  confirm: string;
+  cancel?: string;
+  onConfirm: () => void;
+}
+
+type Layer = 'page' | 'player' | 'menu' | 'save' | 'account' | 'dialog';
 
 const [pages, setPages] = createSignal<Route[]>([{ name: 'home' }]);
 const [playerOpen, setPlayerOpen] = createSignal(false);
 const [menu, setMenu] = createSignal<MenuSheet | null>(null);
 const [saveSheet, setSaveSheet] = createSignal<SaveSheet | null>(null);
 const [accountOpen, setAccountOpen] = createSignal(false);
+const [dialog, setDialog] = createSignal<Dialog | null>(null);
 
-export { accountOpen, menu, pages, playerOpen, saveSheet };
+export { accountOpen, dialog, menu, pages, playerOpen, saveSheet };
 
 export const currentTab = (): Tab => {
   const root = pages()[0];
@@ -74,6 +90,7 @@ const popLayer = () => {
     setMenu(null);
     setSaveSheet(null);
     setAccountOpen(false);
+    setDialog(null);
     setPlayerOpen(false);
     setPages([resetTo]);
     resetTo = null;
@@ -87,6 +104,9 @@ const popLayer = () => {
         break;
       case 'account':
         setAccountOpen(false);
+        break;
+      case 'dialog':
+        setDialog(null);
         break;
       case 'player':
         setPlayerOpen(false);
@@ -142,8 +162,10 @@ export const switchTab = (tab: Tab) => {
 
 export const openPlayer = () => {
   if (playerOpen()) return;
-  setPlayerOpen(true);
+  // The entry first: whatever reacts to the open (closing it again) finds
+  // its layer
   pushLayer('player');
+  setPlayerOpen(true);
 };
 
 export const openMenu = (sheet: MenuSheet) => {
@@ -157,7 +179,8 @@ export const openMenu = (sheet: MenuSheet) => {
 /** Closes the player (and any sheet over it), e.g. when the queue is gone */
 export const closePlayer = () => {
   if (!playerOpen()) return;
-  if (layers[layers.length - 1] === 'player') back();
+  if (!layers.includes('player')) setPlayerOpen(false);
+  else if (layers[layers.length - 1] === 'player') back();
   else back(closePlayer);
 };
 
@@ -166,6 +189,12 @@ export const openAccount = () => {
   if (accountOpen()) return;
   setAccountOpen(true);
   pushLayer('account');
+};
+
+/** Asks first; the answer closes it (confirm runs once it is gone) */
+export const openDialog = (next: Dialog) => {
+  setDialog(next);
+  pushLayer('dialog');
 };
 
 export const openSave = (sheet: SaveSheet) => {

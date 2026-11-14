@@ -25,6 +25,29 @@
   box-sizing: border-box;
 }
 
+/* album-color-theme: the song's color ("r, g, b" on the page's <html>),
+   mixed into the surfaces by the plugin's own ratio */
+.app.album-color {
+  --album-ratio: var(--ytmusic-album-color-ratio, 50%);
+  --bg: color-mix(
+    in srgb,
+    #030303 calc(100% - var(--album-ratio)),
+    rgb(var(--ytmusic-album-color-dark, 3, 3, 3)) var(--album-ratio)
+  );
+  --surface: color-mix(
+    in srgb,
+    #181818 calc(100% - var(--album-ratio)),
+    rgb(var(--ytmusic-album-color, 24, 24, 24)) var(--album-ratio)
+  );
+  --surface-high: color-mix(
+    in srgb,
+    #282828 calc(100% - var(--album-ratio)),
+    rgb(var(--ytmusic-album-color, 40, 40, 40)) var(--album-ratio)
+  );
+  background: var(--bg);
+  transition: background-color 400ms ease;
+}
+
 button {
   font: inherit;
   color: inherit;
@@ -339,17 +362,43 @@ h2 {
 }
 .page-header.wide .page-header-art {
   width: calc(100% + 32px);
-  margin: -8px -16px 0;
+  margin: -8px -16px -64px;
   aspect-ratio: 16 / 9;
   /* Landscape tablets: a full-width 16:9 banner is taller than the screen */
   max-height: 45vh;
   border-radius: 0;
+  /* Fades into the page, as YTM's artist header does; the name sits on
+     the faded end */
+  mask-image: linear-gradient(to bottom, #000 40%, transparent);
+}
+.page-header.wide .page-header-text {
+  position: relative;
 }
 .page-header h1 {
   font-size: 24px;
 }
 .page-header .subtitle {
   white-space: normal;
+}
+/* The player's artist name opens the artist page */
+.artist-link {
+  display: block;
+  max-width: 100%;
+  overflow: hidden;
+  text-align: left;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.artist-link:active {
+  text-decoration: underline;
+}
+.subscribe-count {
+  margin-left: 4px;
+  color: var(--text-2);
+}
+.subscribe-button.subscribed {
+  background: rgba(255, 255, 255, 0.1);
+  color: var(--text-2);
 }
 .page-header-actions {
   display: flex;
@@ -432,16 +481,37 @@ h2 {
   font-weight: 500;
   line-height: 18px;
 }
-.player-video {
-  --ratio: 1.7778;
+/* The cover: square for the picture, the video's own shape (an ad is not
+   always 16:9) no taller than the picture would be */
+.player-cover {
+  --ratio: 1;
   position: relative;
   align-self: center;
-  /* The ad's own shape (not always 16:9), no taller than the art would be */
   width: min(100%, calc(52vh * var(--ratio)));
   aspect-ratio: var(--ratio);
+}
+.player-video {
+  position: relative;
+  width: 100%;
+  height: 100%;
   border-radius: 8px;
   overflow: hidden;
   background: #000;
+}
+/* Plugins' layers (their mounts are slotted in): in tree order, so the
+   glow is behind the picture, the visualizer and the switch over it */
+.cover-layer {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+.cover-clip {
+  border-radius: 8px;
+  overflow: hidden;
+}
+.cover-switch {
+  pointer-events: auto;
+  height: 0;
 }
 /* The skip labels live in the page and are slotted in (index.tsx) */
 ::slotted(label.skip-ad) {
@@ -473,6 +543,21 @@ h2 {
 /* In the menu's place: the bar's edge padding is sized for the ⋮ icon */
 .skip-ad-box.mini {
   margin-right: 8px;
+}
+/* YouTube's player waits here, laid out (it sizes itself) but off screen */
+.player-parking {
+  position: fixed;
+  left: -10000px;
+  top: 0;
+  width: 320px;
+  height: 180px;
+  pointer-events: none;
+}
+/* synced-lyrics' own lyrics (its stylesheet, light DOM through a slot): its
+   virtualized list scrolls itself, in a box of a fixed height */
+.plugin-lyrics {
+  height: min(70vh, 720px);
+  padding: 0 8px;
 }
 .mini-previous:disabled {
   opacity: 0.35;
@@ -657,7 +742,9 @@ div.mini-art {
     display: grid;
     grid-template-columns: minmax(0, 1fr) minmax(360px, 42%);
     gap: 24px;
-    overflow: hidden;
+    /* Not clipped: ambient-mode's glow reaches up under the top bar to the
+       screen's edge (the panel scrolls itself, nothing here overflows) */
+    overflow: visible;
     padding: 0 24px 24px 0;
   }
   .player-main {
@@ -665,6 +752,9 @@ div.mini-art {
     padding-bottom: 0;
   }
   .player-panel-wrap {
+    /* Over the glow, which spills past the cover */
+    position: relative;
+    z-index: 1;
     min-height: 0;
   }
   .player-panel {
@@ -681,12 +771,25 @@ div.mini-art {
   .panel-shortcut {
     visibility: hidden;
   }
+  /* synced-lyrics fills the panel (its list scrolls itself) */
+  .panel-content:has(> .plugin-lyrics) {
+    display: flex;
+    flex-direction: column;
+    padding-bottom: 0;
+    overflow: hidden;
+  }
+  .panel-content > .plugin-lyrics {
+    flex: 1;
+    height: auto;
+    min-height: 0;
+  }
 }
 
 .player-art {
-  align-self: center;
-  width: min(100%, 52vh);
-  aspect-ratio: 1;
+  position: relative;
+  display: block;
+  width: 100%;
+  height: 100%;
   border-radius: 8px;
   object-fit: cover;
   box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5);
@@ -954,8 +1057,13 @@ button.account-head:not(:disabled):active {
   flex: none;
   color: var(--text-2);
 }
-.subtitle.wrap {
+.subtitle.wrap,
+.title.wrap {
   white-space: normal;
+}
+/* Rows built from spans (buttons hold no divs) */
+.row-text > span {
+  display: block;
 }
 .menu-head {
   display: flex;
@@ -1003,6 +1111,202 @@ button.account-head:not(:disabled):active {
   height: 1px;
 }
 
+/* ---- A question before an action (dialog.tsx) ---- */
+.dialog {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  z-index: 21;
+  width: min(400px, calc(100% - 48px));
+  max-height: 80%;
+  overflow-y: auto;
+  padding: 24px 24px 8px;
+  border-radius: 16px;
+  background: var(--surface-high);
+  transform: translate(-50%, -50%);
+  animation: fade-in 150ms ease-out;
+}
+.dialog-title {
+  font-size: 20px;
+  font-weight: 500;
+}
+.dialog-message {
+  margin: 16px 0 0;
+  color: var(--text-2);
+  white-space: pre-line;
+}
+.dialog-buttons {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: 16px;
+}
+
+/* ---- YTM's settings (settings.tsx) ---- */
+.settings {
+  max-width: 720px;
+  margin: 0 auto;
+}
+.setting-category {
+  padding: 8px 0;
+}
+.setting-category + .setting-category {
+  border-top: 1px solid rgba(255, 255, 255, 0.1);
+}
+.setting-category-title {
+  padding: 12px 16px 4px;
+  color: var(--text-2);
+  font-size: 14px;
+  font-weight: 500;
+}
+.setting-row,
+.setting-option {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  width: 100%;
+  min-height: 56px;
+  padding: 8px 16px;
+  text-align: left;
+}
+.setting-row:not(:disabled):active,
+.setting-option:active {
+  background: rgba(255, 255, 255, 0.08);
+}
+.setting-row:disabled {
+  opacity: 0.6;
+}
+.setting-option {
+  min-height: 48px;
+  padding-left: 32px;
+}
+.setting-chevron {
+  flex: none;
+  color: var(--text-2);
+  transform: rotate(90deg);
+  transition: transform 150ms ease;
+}
+.setting-chevron.open {
+  transform: rotate(-90deg);
+}
+/* An on/off switch, as Material's */
+.switch {
+  position: relative;
+  flex: none;
+  width: 52px;
+  height: 32px;
+  border: 2px solid var(--text-2);
+  border-radius: 16px;
+  transition:
+    background-color 150ms ease,
+    border-color 150ms ease;
+}
+.switch::after {
+  content: '';
+  position: absolute;
+  left: 6px;
+  top: 6px;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: var(--text-2);
+  transition:
+    transform 150ms ease,
+    width 150ms ease,
+    height 150ms ease,
+    background-color 150ms ease;
+}
+.switch.on {
+  border-color: var(--text);
+  background: var(--text);
+}
+.switch.on::after {
+  left: 2px;
+  top: 2px;
+  width: 24px;
+  height: 24px;
+  background: var(--bg);
+  transform: translateX(20px);
+}
+
+/* ---- The account switcher (account.tsx) ---- */
+.sheet-note {
+  padding: 0 16px 8px;
+  color: var(--text-2);
+  font-size: 14px;
+}
+.account-row {
+  width: 100%;
+  text-align: left;
+}
+.account-row:disabled {
+  opacity: 1;
+}
+
+/* The play button while a song loads */
+.spinner {
+  display: block;
+  box-sizing: border-box;
+  width: var(--size, 24px);
+  height: var(--size, 24px);
+  padding: calc(var(--size, 24px) / 12);
+  border: calc(var(--size, 24px) / 10) solid currentColor;
+  border-top-color: transparent;
+  border-radius: 50%;
+  background-clip: content-box;
+  animation: spin 0.8s linear infinite;
+}
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+/* A page's content: comes in once loaded; the old one dims while a chip's
+   content loads */
+.page-content {
+  animation: content-in 220ms ease-out;
+}
+.page-content.stale {
+  opacity: 0.4;
+  pointer-events: none;
+  transition: opacity 150ms ease;
+}
+@keyframes content-in {
+  from {
+    transform: translateY(12px);
+    opacity: 0;
+  }
+}
+
+/* Layers closing (presence.tsx): they leave as they came in */
+.presence {
+  display: contents;
+}
+.leaving > * {
+  pointer-events: none;
+}
+.leaving > .scrim,
+.leaving > .toast {
+  animation: fade-out 180ms ease-in forwards;
+}
+.leaving > .dialog {
+  animation: fade-out 180ms ease-in forwards;
+}
+.leaving > .sheet,
+.leaving > .player-sheet {
+  animation: slide-down 180ms ease-in forwards;
+}
+@keyframes fade-out {
+  to {
+    opacity: 0;
+  }
+}
+@keyframes slide-down {
+  to {
+    transform: translateY(24px);
+    opacity: 0;
+  }
+}
 @keyframes slide-up {
   from {
     transform: translateY(24px);

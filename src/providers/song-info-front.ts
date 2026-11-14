@@ -1,4 +1,5 @@
 import { LikeType, type GetState } from '@/types/datahost-get-state';
+import { playerControls } from '@/types/player-controls';
 
 import { singleton } from './decorators';
 
@@ -46,10 +47,30 @@ export const setupTimeChangedListener = singleton(() => {
   const progressBar = document.querySelector('#progress-bar');
   if (progressBar) {
     progressObserver.observe(progressBar, { attributeFilter: ['value'] });
+    return;
   }
+  // The mobile UI (no YTM progress bar): whole seconds, from the video, as
+  // the bar's value changes
+  const video = document.querySelector('video');
+  let last = -1;
+  video?.addEventListener('timeupdate', () => {
+    const seconds = Math.floor(video.currentTime);
+    if (seconds === last) return;
+    last = seconds;
+    window.ipcRenderer.send('peard:time-changed', seconds);
+    songInfo.elapsedSeconds = seconds;
+  });
 });
 
 export const setupRepeatChangedListener = singleton(() => {
+  const controls = playerControls();
+  if (controls) {
+    controls.onRepeatChange((mode) =>
+      window.ipcRenderer.send('peard:repeat-changed', mode),
+    );
+    window.ipcRenderer.send('peard:repeat-changed', controls.repeatMode());
+    return;
+  }
   const repeatObserver = new MutationObserver((mutations) => {
     // provided by App
     window.ipcRenderer.send(
@@ -89,6 +110,17 @@ const mapLikeStatus = (status: string | null): LikeType =>
 const LIKE_STATUS_ATTRIBUTE = 'like-status';
 
 export const setupLikeChangedListener = singleton(() => {
+  const controls = playerControls();
+  if (controls) {
+    controls.onLikeChange((status) =>
+      window.ipcRenderer.send('peard:like-changed', mapLikeStatus(status)),
+    );
+    window.ipcRenderer.send(
+      'peard:like-changed',
+      mapLikeStatus(controls.likeStatus()),
+    );
+    return;
+  }
   const likeDislikeObserver = new MutationObserver((mutations) => {
     window.ipcRenderer.send(
       'peard:like-changed',
@@ -181,11 +213,14 @@ export const setupAutoPlayChangedListener = singleton(() => {
     '.autoplay > tp-yt-paper-toggle-button',
   );
 
+  // The mobile UI has no autoplay switch
+  if (!autoplaySlider) return;
+
   const observer = new MutationObserver(() => {
     window.ipcRenderer.send('peard:autoplay-changed');
   });
 
-  observer.observe(autoplaySlider!, {
+  observer.observe(autoplaySlider, {
     attributes: true,
     childList: false,
     subtree: false,
@@ -380,6 +415,11 @@ export const setupSongInfo = (api: MusicPlayer) => {
       data.videoDetails.videoId,
     );
     if (queueTitle) data.videoDetails.title = queueTitle;
+    // The mobile UI loads songs without a watch-next response: its queue
+    // has the shown title and the album
+    const details = playerControls()?.songDetails(data.videoDetails.videoId);
+    if (details?.title) data.videoDetails.title = details.title;
+    if (details?.album) data.videoDetails.album ??= details.album;
     data.videoDetails.elapsedSeconds = 0;
     data.videoDetails.isPaused = false;
 
