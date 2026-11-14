@@ -1,7 +1,14 @@
 package io.github.junxiangzhan.peartauri
 
 import android.app.Activity
+import android.content.ActivityNotFoundException
+import android.content.Intent
+import android.net.Uri
+import android.provider.OpenableColumns
 import android.util.Log
+import androidx.activity.ComponentActivity
+import androidx.activity.result.ActivityResultLauncher
+import androidx.activity.result.contract.ActivityResultContracts
 import org.json.JSONObject
 import org.mozilla.geckoview.AllowOrDeny
 import org.mozilla.geckoview.GeckoResult
@@ -19,7 +26,7 @@ import org.mozilla.geckoview.GeckoView
  * and connects it to Rust through [GeckoBridge]; the page is loaded once its
  * background script has registered the loader with Rust's config.
  */
-class GeckoPage(activity: Activity) {
+class GeckoPage(private val activity: Activity) {
   val view = GeckoView(activity)
   private val session = GeckoSession(
     // Desktop Firefox: the renderer plugins need the desktop site. The
@@ -54,6 +61,22 @@ class GeckoPage(activity: Activity) {
       ) {
         GeckoBridge.pageUrl = url
       }
+
+      // A new window (window.open, a target=_blank link): the system's
+      // browser, as Pear's desktop window opens links outside itself
+      override fun onLoadRequest(
+        session: GeckoSession,
+        request: GeckoSession.NavigationDelegate.LoadRequest,
+      ): GeckoResult<AllowOrDeny>? {
+        if (request.target != GeckoSession.NavigationDelegate.TARGET_WINDOW_NEW) return null
+        openOutside(request.uri)
+        return GeckoResult.fromValue(AllowOrDeny.DENY)
+      }
+
+      override fun onNewSession(session: GeckoSession, uri: String): GeckoResult<GeckoSession>? {
+        openOutside(uri)
+        return null
+      }
     }
     // Let the page start audio without a gesture, like the WebView build
     // (mediaPlaybackRequiresUserGesture = false); YTM autoplays on resume
@@ -79,6 +102,12 @@ class GeckoPage(activity: Activity) {
         prompt: GeckoSession.PromptDelegate.BeforeUnloadPrompt,
       ): GeckoResult<GeckoSession.PromptDelegate.PromptResponse> =
         GeckoResult.fromValue(prompt.confirm(AllowOrDeny.ALLOW))
+
+      // <input type=file> (uploading songs): the system's document picker
+      override fun onFilePrompt(
+        session: GeckoSession,
+        prompt: GeckoSession.PromptDelegate.FilePrompt,
+      ): GeckoResult<GeckoSession.PromptDelegate.PromptResponse> = pickFiles(prompt)
     }
     // Android kills Gecko's content processes when memory runs low, mostly
     // while the app sits in the background. The session is closed then, and
@@ -128,6 +157,74 @@ class GeckoPage(activity: Activity) {
     pending = null
   }
 
+  private fun openOutside(uri: String) {
+    try {
+      activity.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(uri)))
+    } catch (error: ActivityNotFoundException) {
+      Log.w(TAG, "no app opens $uri", error)
+    }
+  }
+
+  /**
+   * The picked documents, copied into the cache: Gecko reads files, and a
+   * picker's content:// URIs are not files
+   */
+  private fun pickFiles(
+    prompt: GeckoSession.PromptDelegate.FilePrompt,
+  ): GeckoResult<GeckoSession.PromptDelegate.PromptResponse> {
+    val registry = (activity as? ComponentActivity)?.activityResultRegistry
+      ?: return GeckoResult.fromValue(prompt.dismiss())
+    val result = GeckoResult<GeckoSession.PromptDelegate.PromptResponse>()
+    val types = prompt.mimeTypes?.filter { it.contains('/') }?.toTypedArray()
+      ?.takeIf { it.isNotEmpty() } ?: arrayOf("*/*")
+    var launcher: ActivityResultLauncher<Array<String>>? = null
+    fun finish(uris: List<Uri>) {
+      launcher?.unregister()
+      if (uris.isEmpty()) {
+        result.complete(prompt.dismiss())
+        return
+      }
+      Thread {
+        val dir = java.io.File(activity.cacheDir, "picked").apply {
+          deleteRecursively()
+          mkdirs()
+        }
+        val files = uris.mapIndexedNotNull { index, uri ->
+          try {
+            val name = displayName(uri) ?: "file-$index"
+            val file = java.io.File(dir, name)
+            activity.contentResolver.openInputStream(uri)?.use { input ->
+              file.outputStream().use { input.copyTo(it) }
+            } ?: return@mapIndexedNotNull null
+            Uri.fromFile(file)
+          } catch (error: Exception) {
+            Log.w(TAG, "reading $uri failed", error)
+            null
+          }
+        }
+        activity.runOnUiThread {
+          result.complete(
+            if (files.isEmpty()) prompt.dismiss()
+            else prompt.confirm(activity, files.toTypedArray())
+          )
+        }
+      }.start()
+    }
+    launcher = if (prompt.type == GeckoSession.PromptDelegate.FilePrompt.Type.MULTIPLE) {
+      registry.register(FILE_PROMPT_KEY, ActivityResultContracts.OpenMultipleDocuments()) { finish(it) }
+    } else {
+      registry.register(FILE_PROMPT_KEY, ActivityResultContracts.OpenDocument()) { finish(listOfNotNull(it)) }
+    }
+    launcher.launch(types)
+    return result
+  }
+
+  private fun displayName(uri: Uri): String? =
+    activity.contentResolver.query(uri, arrayOf(OpenableColumns.DISPLAY_NAME), null, null, null)
+      ?.use { cursor -> if (cursor.moveToFirst()) cursor.getString(0) else null }
+      // A name, not a path
+      ?.substringAfterLast('/')
+
   private fun recover(what: String) {
     Log.w(TAG, "content process $what; reloading the page")
     if (!session.isOpen) session.open(runtime)
@@ -151,6 +248,7 @@ class GeckoPage(activity: Activity) {
   companion object {
     private const val TAG = "PearGecko"
     private const val YTM_URL = "https://music.youtube.com/"
+    private const val FILE_PROMPT_KEY = "pear-file-prompt"
     private const val EXTENSION_ID = "pear-gecko@pear-devs.github.io"
     private const val EXTENSION_URL = "resource://android/assets/pear-gecko/"
     private var sharedRuntime: GeckoRuntime? = null
