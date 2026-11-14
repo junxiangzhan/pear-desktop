@@ -100,6 +100,31 @@ const playerContext = () =>
     'WEB_PLAYER_CONTEXT_CONFIGS',
   )?.WEB_PLAYER_CONTEXT_CONFIG_ID_MUSIC_WATCH;
 
+/**
+ * The client flag (an experiment, on for some visitors) that has the player
+ * take its PO tokens from YTM's shared BotGuard instead of running its own.
+ * YTM's interface starts that BotGuard (from `/att/get`'s challenge) and
+ * hands it over on `window['havuokmhhs-…'].bevasrs`; without it the player
+ * waits for it forever, and the stream stops after the part it gets without
+ * a token (about 50 seconds).
+ */
+const SHARED_BOTGUARD_FLAG = '45760017';
+
+/** The context, with the player running its own BotGuard */
+const ownBotguardContext = (context: Record<string, unknown> | undefined) => {
+  const flags = context?.serializedClientExperimentFlags;
+  if (typeof flags !== 'string') return context;
+  const pattern = new RegExp(`(^|&)${SHARED_BOTGUARD_FLAG}=[^&]*`);
+  if (!pattern.test(flags)) return context;
+  return {
+    ...context,
+    serializedClientExperimentFlags: flags.replace(
+      pattern,
+      `$1${SHARED_BOTGUARD_FLAG}=false`,
+    ),
+  };
+};
+
 interface PlayerApplication {
   create(...args: unknown[]): unknown;
   createAlternate?(...args: unknown[]): unknown;
@@ -154,16 +179,16 @@ const loadPlayerScript = () =>
 
 /**
  * Creates YouTube's player in `host`, as YTM does: no app OAuth token (the
- * player then uses the page's cookies), the music watch context. The player
- * element gets YTM's id, `movie_player`, so the renderer and plugins, which
- * look for it, find it.
+ * player then uses the page's cookies), the music watch context, but its own
+ * BotGuard (`ownBotguardContext`). The player element gets YTM's id,
+ * `movie_player`, so the renderer and plugins, which look for it, find it.
  */
 export const createPlayer = async (host: HTMLElement) => {
   const application = await loadPlayerScript();
   const args = [
     host,
     { args: {}, attrs: { id: 'movie_player' } },
-    playerContext(),
+    ownBotguardContext(playerContext()),
   ];
   if (application.createAlternate) application.createAlternate(...args);
   else application.create(...args);
