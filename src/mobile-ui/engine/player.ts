@@ -213,6 +213,8 @@ const endedListeners: (() => void)[] = [];
 /** Where the song (not an ad) was last: an ad after its end ends it */
 let songTime = 0;
 let songDuration = 0;
+/** The song `songTime` and `songDuration` are of */
+let songVideoId: string | null = null;
 let adWasShowing = false;
 /** The song's end is told once per load */
 let endTold = false;
@@ -284,7 +286,12 @@ const bindVideo = (next: HTMLVideoElement) => {
   next.addEventListener('timeupdate', () => {
     setCurrentTime(next.currentTime);
     loadMoved(next.currentTime);
-    if (!player?.classList.contains('ad-showing')) {
+    // Until the asked-for song moves (loadMoved), updates are the previous
+    // song's
+    if (
+      !player?.classList.contains('ad-showing') &&
+      loadPending !== 'loading'
+    ) {
       if (seekPending !== null) {
         const start = seekPending;
         seekPending = null;
@@ -387,6 +394,7 @@ export const loadVideo = (
   setCurrentTime(from);
   songTime = from;
   songDuration = 0;
+  songVideoId = videoId;
   endTold = false;
   loadFrom = from;
   seekPending = from > 0 ? from : null;
@@ -430,6 +438,7 @@ export const cueVideo = (
   setDuration(options.duration ?? 0);
   songTime = options.start;
   songDuration = options.duration ?? 0;
+  songVideoId = videoId;
   if (!options.play) return;
   setPlayIntended(true);
   if (player) loadCued();
@@ -437,10 +446,17 @@ export const cueVideo = (
   else markLoading();
 };
 
-/** Where the song is (not an ad), or where a restored one will start */
-export const songPosition = () => cued?.start ?? songTime;
-/** The song's length (not an ad's), once known */
-export const songLength = () => songDuration;
+/**
+ * Where song `videoId` is (not an ad), or where a restored one will start.
+ * 0 for another song: right after a change of song the queue already has
+ * the new one while the time is still the previous song's (its last
+ * `timeupdate`s), and a reload then started the new song near its end.
+ */
+export const songPosition = (videoId: string) =>
+  videoId === songVideoId ? (cued?.start ?? songTime) : 0;
+/** Song `videoId`'s length (not an ad's), once known */
+export const songLength = (videoId: string) =>
+  videoId === songVideoId ? songDuration : 0;
 
 export const play = () => {
   if (!cued) {

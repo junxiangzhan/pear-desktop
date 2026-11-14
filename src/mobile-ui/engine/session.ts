@@ -141,13 +141,13 @@ let savedTime = -1;
 const savePosition = (unloaded = false) => {
   const entry = untrack(currentEntry);
   if (!entry) return;
-  savedTime = songPosition();
+  savedTime = songPosition(entry.videoId);
   const position: StoredPosition = {
     v: VERSION,
     index: untrack(queue).indexOf(entry),
     videoId: entry.videoId,
     time: savedTime,
-    duration: songLength() || undefined,
+    duration: songLength(entry.videoId) || undefined,
     playing: untrack(playing),
     at: Date.now(),
   };
@@ -198,7 +198,13 @@ const keepSaved = () => {
     createEffect(on(playing, () => savePosition(), { defer: true }));
   });
   setInterval(() => {
-    if (untrack(playing) || songPosition() !== savedTime) savePosition();
+    const entry = untrack(currentEntry);
+    if (
+      untrack(playing) ||
+      (entry && songPosition(entry.videoId) !== savedTime)
+    ) {
+      savePosition();
+    }
   }, SAVE_EVERY);
   // A reload, an account switch, leaving for a sign-in page: not an end of
   // the page's process, so no playing on by itself after it
