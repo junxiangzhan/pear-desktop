@@ -583,4 +583,14 @@ ambient-mode 影片模式的光暈是另一個問題：它本來就用 Canvas2D 
 
 強制停止後重新開啟、頁面還原到上次的 `/watch?v=…` 時，有時畫面全黑：`pear-mobile-ui` 的 shadow root 沒有內容，播放器卻照常播放。記錄：YTM 的 Polymer（`music_polymer_inlined_html.js`）先執行了，接著新介面的 `innerHTML` 被 Trusted Types 擋下（`Sink type mismatch violation blocked by CSP`）。原因是 GeckoView 的 loader（`pear-gecko/background.js`）用同步 XHR 讀 bundle，期間頁面的腳本照樣執行，冷啟動時讀取加執行花了約 1.9 秒，擋 YTM 介面的 `blockYtmInterface` 在 bundle 裡，來不及。
 
-修正：loader 在讀 bundle 之前，就用同樣的規則擋 YTM 介面的腳本（新介面開著時）。強制停止、重新開啟三次（都還原到 `/watch?v=…`）：新介面都正常顯示，Polymer 沒有執行，沒有 Trusted Types 錯誤 ✅。
+第一次修正是讓 loader 在讀 bundle 之前，先用同樣的規則擋 YTM 介面的腳本。之後另一個分支的測試，從首頁 `/` 冷啟動四次裡仍有一次空白（同樣是 Trusted Types 擋下 `innerHTML`）：讀取期間插隊的不只 YTM 介面的腳本。
+
+修正（`pear-gecko/background.js`）：背景腳本啟動時用 `fetch` 讀一次 `renderer.js`，把原始碼和設定一起放進註冊的內容腳本（約 7.3 MB 的字串）。內容腳本在 `document_start` 直接執行，不再用同步 XHR，所以 bundle 一定在頁面的任何腳本之前跑完；先擋 YTM 腳本的那段也就拿掉了。
+
+| 驗證（POCO，強制停止後重新開啟） | 結果 |
+|---|---|
+| 還原到 `/watch?v=…`，10 次 | 都正常顯示，Polymer 沒有執行、沒有 Trusted Types 錯誤 ✅ |
+| 「啟動時繼續播放上一首」關閉、從首頁 `/` 開始，6 次 | 同上 ✅ |
+| 頁面連上到 bundle 開始執行（`shim installed`） | 約 0.45–0.6 秒（改前冷啟動約 1.9 秒） |
+| 切換設定（背景腳本以新設定重新註冊）後再載入 | 正常 ✅ |
+| 關掉新介面（YTM 介面） | 正常載入，選單、外掛都在 ✅ |

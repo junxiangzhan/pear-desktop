@@ -5,11 +5,7 @@
 // (SABR), plays ads and reports playback, so the UI only tells it what to
 // play. Checked on a GeckoView tablet: docs/OWN-ENGINE.md.
 
-/**
- * YTM's interface: its Polymer app and the polyfills only it needs.
- * GeckoView's loader (pear-gecko/background.js) blocks the same scripts
- * before it reads the bundle: keep the two in step.
- */
+/** YTM's interface: its Polymer app and the polyfills only it needs */
 const YTM_INTERFACE =
   /\/music_polymer_inlined_html\.js|\/scheduler\.js|\/webcomponents-[\w-]+\.js|\/custom-elements-es5-adapter\.js/;
 

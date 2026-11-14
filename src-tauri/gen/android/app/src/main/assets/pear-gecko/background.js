@@ -4,39 +4,19 @@
 // synchronously before the bundle runs. The snapshot comes from Rust over
 // native messaging (src-tauri/src/gecko_bridge.rs), and every config change
 // re-registers the code, so the next page load starts with it.
+//
+// The bundle's source is part of the registered code too, read once here.
+// The content script used to read it with a synchronous XHR, but the page's
+// scripts go on during one: on a cold start (about 1.9 s) YTM's own scripts
+// ran before the bundle, and Trusted Types then blocked the mobile UI's
+// rendering (it stayed empty). Now the bundle runs before any of the page's
+// scripts.
 
 // Runs in the content script (isolated world) at document_start
-function load(payload, bundleUrl) {
+function load(payload, bundle) {
   if (window.top !== window) return;
   const page = window.wrappedJSObject;
   if (page.__pearRendererLoaded) return;
-  // The mobile UI stops YTM's interface as the page starts
-  // (src/mobile-ui/engine/boot.ts, blockYtmInterface), from the bundle read
-  // below. That read is synchronous, but the page's scripts go on meanwhile,
-  // and on a cold start it took long enough (1.9 s) for YTM's interface to
-  // start first; its Trusted Types policy then blocked the UI's rendering,
-  // which stayed empty. The same block, before the read; the bundle's own
-  // takes over. Keep the pattern in step with boot.ts.
-  if (payload.config?.options?.mobileUi ?? true) {
-    const ytmInterface =
-      /\/music_polymer_inlined_html\.js|\/scheduler\.js|\/webcomponents-[\w-]+\.js|\/custom-elements-es5-adapter\.js/;
-    new MutationObserver((records) => {
-      for (const record of records) {
-        for (const node of record.addedNodes) {
-          if (node.localName === 'script' && node.src && ytmInterface.test(node.src)) {
-            node.type = 'javascript/blocked';
-            node.remove();
-          }
-        }
-      }
-    }).observe(document.documentElement, { childList: true, subtree: true });
-  }
-  const read = (url) => {
-    const xhr = new XMLHttpRequest();
-    xhr.open('GET', url, false);
-    xhr.send();
-    return xhr.responseText;
-  };
   page.__PEAR_STORED_CONFIG__ = cloneInto(payload.config, window);
   page.__PEAR_UNAVAILABLE_PLUGINS__ = cloneInto(payload.unavailable, window);
   page.__PEAR_MOBILE__ = true;
@@ -65,7 +45,7 @@ function load(payload, bundleUrl) {
     { cloneFunctions: true },
   );
 
-  run(`${read(bundleUrl)}\n//# sourceURL=pear-renderer.js`);
+  run(`${bundle}\n//# sourceURL=pear-renderer.js`);
 }
 
 const port = browser.runtime.connectNative('pear');
@@ -80,14 +60,13 @@ const invoke = (cmd, args = {}) =>
   });
 
 let payload;
+let bundle;
 let registered;
 // One registration at a time, in the order of the config changes
 let queue = Promise.resolve();
 const register = () => {
   queue = queue.then(async () => {
-    const args = [payload, browser.runtime.getURL('renderer.js')]
-      .map((arg) => JSON.stringify(arg))
-      .join(', ');
+    const args = [payload, bundle].map((arg) => JSON.stringify(arg)).join(', ');
     const previous = registered;
     registered = await browser.contentScripts.register({
       matches: ['https://music.youtube.com/*'],
@@ -172,7 +151,9 @@ const report = (error) =>
   browser.runtime.sendNativeMessage('pear', { error: String(error?.stack ?? error) });
 
 const start = async () => {
+  const source = fetch(browser.runtime.getURL('renderer.js')).then((response) => response.text());
   payload = await invoke('gecko_payload');
+  bundle = await source;
   setProxy(payload.config.options?.proxy);
   syncBlocking(payload.config);
   await register();
