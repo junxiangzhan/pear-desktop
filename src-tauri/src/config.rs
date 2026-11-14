@@ -261,9 +261,11 @@ impl Config {
     }
 
     /// Whether the page runs Pear's mobile UI instead of YouTube Music's
-    /// interface (src/mobile-ui): Android, unless switched off in the menu
+    /// interface (src/mobile-ui): `options.mobileUi` when set, else Android.
+    /// Same rule as src/mobile-ui/enable.ts, so a desktop config that turns
+    /// it on also gets its plugins switched off
     pub fn mobile_ui(&self) -> bool {
-        cfg!(mobile) && self.get("options.mobileUi").as_bool().unwrap_or(true)
+        self.get("options.mobileUi").as_bool().unwrap_or(cfg!(mobile))
     }
 
     /// The plugins reported as off: those the build cannot run, and, while the

@@ -535,7 +535,12 @@ export const parseSearch = (data: unknown): Page => {
     ?.tabRenderer?.content?.sectionListRenderer;
   return {
     chips: chips(list?.header),
-    sections: sections(list?.contents),
+    // A filtered search's list ("Songs") continues in /search, not /browse
+    sections: sections(list?.contents).map((section) =>
+      section.continuation
+        ? { ...section, continuationPath: '/search' as const }
+        : section,
+    ),
   };
 };
 
@@ -603,7 +608,7 @@ export const parseAddToPlaylist = (data: unknown): PlaylistOption[] => {
   });
 };
 
-/** The next songs of a long playlist, from a /browse continuation */
+/** The next songs of a long list, from its continuation */
 export const parseShelfContinuation = (
   data: unknown,
 ): { items: Item[]; continuation?: string } => {
@@ -617,7 +622,11 @@ export const parseShelfContinuation = (
       continuation: shelfContinuation({ contents: appended }),
     };
   }
-  const shelf = response.continuationContents?.musicPlaylistShelfContinuation;
+  // A playlist's shelf, or a plain one (a library list, search results)
+  // with the older `continuations`
+  const shelf =
+    response.continuationContents?.musicPlaylistShelfContinuation ??
+    response.continuationContents?.musicShelfContinuation;
   return {
     items: items(shelf?.contents),
     continuation: shelf ? shelfContinuation(shelf) : undefined,

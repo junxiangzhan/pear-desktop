@@ -184,15 +184,22 @@ class GeckoPage(private val activity: Activity) {
         result.complete(prompt.dismiss())
         return
       }
+      // One directory per pick, and one per file in it: two documents with
+      // the same name must not overwrite each other, and the name stays as
+      // it is, since the page uploads it as the file's name
+      val root = java.io.File(activity.cacheDir, "picked")
+      val batch = java.io.File(root, "${System.currentTimeMillis()}-${++picks}")
       Thread {
-        val dir = java.io.File(activity.cacheDir, "picked").apply {
-          deleteRecursively()
-          mkdirs()
-        }
+        // Earlier picks may still be uploading (the page reads the file as
+        // it sends it), so only old ones are cleared
+        val stale = System.currentTimeMillis() - PICKED_MAX_AGE_MS
+        root.listFiles()
+          ?.filter { it != batch && it.lastModified() < stale }
+          ?.forEach { it.deleteRecursively() }
         val files = uris.mapIndexedNotNull { index, uri ->
           try {
             val name = displayName(uri) ?: "file-$index"
-            val file = java.io.File(dir, name)
+            val file = java.io.File(batch, "$index/$name").apply { parentFile?.mkdirs() }
             activity.contentResolver.openInputStream(uri)?.use { input ->
               file.outputStream().use { input.copyTo(it) }
             } ?: return@mapIndexedNotNull null
@@ -215,7 +222,14 @@ class GeckoPage(private val activity: Activity) {
     } else {
       registry.register(FILE_PROMPT_KEY, ActivityResultContracts.OpenDocument()) { finish(listOfNotNull(it)) }
     }
-    launcher.launch(types)
+    try {
+      launcher.launch(types)
+    } catch (error: ActivityNotFoundException) {
+      // No document picker on the device
+      Log.w(TAG, "no app picks documents", error)
+      launcher.unregister()
+      result.complete(prompt.dismiss())
+    }
     return result
   }
 
@@ -249,6 +263,10 @@ class GeckoPage(private val activity: Activity) {
     private const val TAG = "PearGecko"
     private const val YTM_URL = "https://music.youtube.com/"
     private const val FILE_PROMPT_KEY = "pear-file-prompt"
+    /** How long picked files stay in the cache: past any upload of them. */
+    private const val PICKED_MAX_AGE_MS = 24 * 60 * 60 * 1000L
+    /** Names each pick's cache directory, with the time. */
+    private var picks = 0
     private const val EXTENSION_ID = "pear-gecko@pear-devs.github.io"
     private const val EXTENSION_URL = "resource://android/assets/pear-gecko/"
     private var sharedRuntime: GeckoRuntime? = null

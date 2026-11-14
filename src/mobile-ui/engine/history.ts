@@ -1,17 +1,13 @@
-// Keeps the session history for Pear's UI while YTM still navigates behind it.
+// Keeps the session history for Pear's UI: the history only holds the
+// entries the UI pushed, one per layer it opened (a page, the player, a
+// sheet), so the Android back button pops exactly one of them.
 //
-// YTM pushes an entry for each of its navigations (playing a song goes to
-// /watch) and reacts to popstate. With its UI hidden, those entries would make
-// the Android back button step through pages nobody sees, and popstate would
-// navigate YTM. So while the new UI runs:
-// - YTM's pushState calls become replaceState: the URL still follows what YTM
-//   plays (a reload, or GeckoPage reopening a killed session, lands there),
-//   but the history only holds entries the new UI pushed;
-// - popstate is caught before YTM sees it and handed to the new UI, which
-//   pops one of its own layers (a page, the player, a sheet).
-//
-// This has to run before YTM's scripts register their popstate listener, as
-// it does when the bundle is injected at document start (Tauri, GeckoView).
+// YTM's interface, which pushed entries of its own and navigated on
+// popstate, is no longer loaded (engine/boot.ts); what is left of it:
+// - pushState calls from other scripts in the page become replaceState, so
+//   they cannot add entries the UI does not know of;
+// - popstate is caught first (capture, at document start) and handed to the
+//   UI, which pops one of its layers.
 
 const nativePushState = history.pushState.bind(history);
 

@@ -131,6 +131,9 @@ port.onMessage.addListener(({ m }) => {
   if ('event' in message) {
     if (message.event === 'pear:config' && payload) {
       payload.config = message.payload;
+      // Rust recomputes the list with each change (the mobile UI switch moves
+      // plugins in and out of it)
+      if (message.unavailable) payload.unavailable = message.unavailable;
       setProxy(payload.config.options?.proxy);
       syncBlocking(payload.config);
       register().catch(report);

@@ -138,8 +138,8 @@ type Key = keyof (typeof STRINGS)['en'];
 const language = (): keyof typeof STRINGS => {
   const lang = (
     window.mainConfig?.get('options.language') ??
-    document.documentElement.lang ??
-    navigator.language
+    // An unset `lang` is '', not null
+    (document.documentElement.lang || navigator.language)
   ).toLowerCase();
   return lang.startsWith('zh') ? 'zh-TW' : 'en';
 };

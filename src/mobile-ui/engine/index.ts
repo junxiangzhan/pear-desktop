@@ -7,12 +7,7 @@ import { createEffect, createRoot, on } from 'solid-js';
 import { toggleDislike, toggleLike } from './commands';
 import { innertube } from './innertube';
 import { readAccount } from './library';
-import {
-  adShowing,
-  setVideoMode,
-  songVideoShown,
-  startPlayer,
-} from './player';
+import { adShowing, setVideoMode, songVideoShown, startPlayer } from './player';
 import {
   cycleRepeat,
   likeStatus,
@@ -41,6 +36,7 @@ export {
 } from './account';
 export { blockYtmInterface } from './boot';
 export {
+  rateTarget,
   runCommand,
   runEndpoint,
   runMenuItem,

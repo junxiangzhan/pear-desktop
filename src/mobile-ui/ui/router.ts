@@ -82,9 +82,13 @@ const layers: Layer[] = [];
 /** Runs once the pending back has popped its layer */
 const afterBack: (() => void)[] = [];
 let resetTo: Route | null = null;
+/** Backs asked for whose popstate has not come yet */
+let popping = 0;
 
 const popLayer = () => {
+  if (popping) popping--;
   if (resetTo) {
+    popping = 0;
     // history.go(-n) from switchTab: one popstate for all the layers
     layers.length = 0;
     setMenu(null);
@@ -135,7 +139,18 @@ export const back = (then?: () => void) => {
     return;
   }
   if (then) afterBack.push(then);
+  popping++;
   history.back();
+};
+
+/**
+ * Pops `layer` if it is still the top one (once the backs on their way are
+ * done): what an answer that comes later closes, which may be gone already
+ * (the user closed it, or another answer did). `then` runs either way.
+ */
+export const backFrom = (layer: Layer, then?: () => void) => {
+  if (layers[layers.length - 1 - popping] === layer) back(then);
+  else then?.();
 };
 
 export const go = (route: Route) => {
@@ -202,9 +217,20 @@ export const openSave = (sheet: SaveSheet) => {
   pushLayer('save');
 };
 
-/** Loads the top page again (after an edit changed what it shows) */
-export const reloadTop = () =>
-  setPages((stack) => [...stack.slice(0, -1), { ...stack[stack.length - 1] }]);
+/** The page on top of the stack */
+export const topPage = () => pages()[pages().length - 1];
+
+/**
+ * Loads the top page again (after an edit changed what it shows); with
+ * `route`, only if that page is still the top one (the user may have moved
+ * on while the edit ran)
+ */
+export const reloadTop = (route?: Route) =>
+  setPages((stack) => {
+    const top = stack[stack.length - 1];
+    if (route && top !== route) return stack;
+    return [...stack.slice(0, -1), { ...top }];
+  });
 
 /** Replaces the top page (e.g. a new search on the search page) */
 export const replacePage = (route: Route) =>

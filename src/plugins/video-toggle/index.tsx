@@ -107,6 +107,8 @@ export default createPlugin({
 
   renderer: {
     config: null as VideoTogglePluginConfig | null,
+    // Undoes what the mobile UI path added, so enabling again starts clean
+    unmountMobileUi: undefined as (() => void) | undefined,
     applyStyleClass: (config: VideoTogglePluginConfig) => {
       if (config.forceHide) {
         document.body.classList.add('video-toggle-force-hide');
@@ -172,7 +174,7 @@ export default createPlugin({
       const switchButtonContainer = document.createElement('div');
       switchButtonContainer.id = 'ytmd-video-toggle-switch-button-container';
       switchButtonContainer.style.display = 'flex';
-      render(
+      const disposeSwitch = render(
         () => (
           <Show when={showButton()}>
             <VideoSwitchButton
@@ -348,6 +350,11 @@ export default createPlugin({
           );
         video?.addEventListener('peard:src-changed', songStarted);
         songStarted();
+        this.unmountMobileUi = () => {
+          video?.removeEventListener('peard:src-changed', songStarted);
+          disposeSwitch();
+          switchButtonContainer.remove();
+        };
         return;
       }
 
@@ -392,6 +399,8 @@ export default createPlugin({
     stop() {
       // The mobile UI's cover goes back to the song's picture
       playerControls()?.setVideoMode(false);
+      this.unmountMobileUi?.();
+      this.unmountMobileUi = undefined;
     },
   },
 });

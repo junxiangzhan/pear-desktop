@@ -170,6 +170,7 @@ export const Card = (props: { item: Item }) => (
 export const Sentinel = (props: { onVisible: () => Promise<void> }) => {
   const [element, setElement] = createSignal<HTMLDivElement>();
   let busy = false;
+  let disposed = false;
   onMount(() => {
     const target = element();
     if (!target) return;
@@ -178,12 +179,23 @@ export const Sentinel = (props: { onVisible: () => Promise<void> }) => {
       busy = true;
       try {
         await props.onVisible();
+        // Still in view after a load that added little or nothing: watched
+        // anew, so it fires again (not after a failure: no retry loop)
+        if (!disposed) {
+          observer.unobserve(target);
+          observer.observe(target);
+        }
+      } catch (error) {
+        console.error('[pear-mobile-ui]', error);
       } finally {
         busy = false;
       }
     });
     observer.observe(target);
-    onCleanup(() => observer.disconnect());
+    onCleanup(() => {
+      disposed = true;
+      observer.disconnect();
+    });
   });
   return <div class="sentinel" ref={setElement} />;
 };
@@ -221,7 +233,9 @@ export const SectionView = (props: { section: Section }) => {
     );
   const loadMore = async (continuation: string) => {
     const next = parseShelfContinuation(
-      await innertube('/browse', { continuation }),
+      await innertube(props.section.continuationPath ?? '/browse', {
+        continuation,
+      }),
     );
     setMore((list) => [...list, ...next.items]);
     setToken(next.continuation);

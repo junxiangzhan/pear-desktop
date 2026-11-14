@@ -1,4 +1,5 @@
 import { t } from '@/i18n';
+import { isMobileUiEnabled } from '@/mobile-ui/enable';
 import { playerControls } from '@/types/player-controls';
 import { createPlugin } from '@/utils';
 import { waitForElement } from '@/utils/wait-for-element';
@@ -8,6 +9,7 @@ export default createPlugin<
   {
     observer?: MutationObserver;
     unwatch?: () => void;
+    watchEngine?: () => boolean;
     start(): void;
     stop(): void;
   }
@@ -20,6 +22,7 @@ export default createPlugin<
       // The mobile UI: its engine's like state (YTM's like button is not in
       // the page); a song that comes up disliked gives way to the next
       const watchEngine = () => {
+        this.watchEngine = undefined;
         const controls = playerControls();
         if (!controls) return false;
         this.unwatch = controls.onLikeChange((status) => {
@@ -28,10 +31,14 @@ export default createPlugin<
         return true;
       };
       if (!watchEngine()) {
+        this.watchEngine = watchEngine;
         document.addEventListener('pear:player-controls', watchEngine, {
           once: true,
         });
       }
+      // YTM's like button never comes in the mobile UI (the wait would poll
+      // for good). Its controls may arrive after this, so ask whether it runs
+      if (isMobileUiEnabled()) return;
       waitForElement<HTMLElement>('#like-button-renderer').then(
         (dislikeBtn) => {
           this.observer = new MutationObserver(() => {
@@ -52,6 +59,10 @@ export default createPlugin<
     stop() {
       this.observer?.disconnect();
       this.unwatch?.();
+      if (this.watchEngine) {
+        document.removeEventListener('pear:player-controls', this.watchEngine);
+        this.watchEngine = undefined;
+      }
     },
   },
 });

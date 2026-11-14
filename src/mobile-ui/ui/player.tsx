@@ -221,7 +221,7 @@ export const MiniPlayer = () => (
             class="icon-button"
             onClick={(event) => {
               event.stopPropagation();
-              next();
+              next().catch(console.error);
             }}
           >
             <Icon name="next" />
@@ -466,7 +466,8 @@ const YtmLyrics = (props: { browseId?: string }) => {
       <Match when={lyrics.loading}>
         <p class="message">{s('loading')}</p>
       </Match>
-      <Match when={lyrics()}>
+      {/* A failed resource throws when read: then "no lyrics" */}
+      <Match when={!lyrics.error && lyrics()}>
         {(loaded) => (
           <div class="lyrics">
             <p>{loaded().text}</p>
@@ -491,7 +492,7 @@ const RelatedView = (props: { browseId?: string }) => {
       <Match when={sections.loading}>
         <p class="message">{s('loading')}</p>
       </Match>
-      <Match when={sections()?.length}>
+      <Match when={!sections.error && sections()?.length}>
         <For each={sections()}>
           {(section) => <SectionView section={section} />}
         </For>
@@ -559,10 +560,12 @@ const Panel = (props: { onTab: () => void }) => {
             <p class="message">{s('loading')}</p>
           </Match>
           <Match when={tab() === 'lyrics'}>
-            <LyricsView browseId={tabs()?.lyrics} />
+            <LyricsView browseId={tabs.error ? undefined : tabs()?.lyrics} />
           </Match>
           <Match when={tab() === 'related'}>
-            <RelatedView browseId={tabs()?.related} />
+            <RelatedView
+              browseId={tabs.error ? undefined : tabs()?.related}
+            />
           </Match>
         </Switch>
       </div>
@@ -711,6 +714,9 @@ export const PlayerSheet = () => {
                   <button
                     aria-label={s('previous')}
                     class="icon-button large"
+                    // As the bar's: during an ad, "previous" would only seek
+                    // the ad; next skips it with the song, as in YTM
+                    disabled={adShowing()}
                     onClick={() => previous()}
                   >
                     <Icon name="previous" size={36} />
@@ -721,7 +727,9 @@ export const PlayerSheet = () => {
                   <button
                     aria-label={s('next')}
                     class="icon-button large"
-                    onClick={() => next()}
+                    onClick={() => {
+                      next().catch(console.error);
+                    }}
                   >
                     <Icon name="next" size={36} />
                   </button>

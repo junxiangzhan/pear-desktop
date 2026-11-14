@@ -56,21 +56,27 @@ const [videoRatio, setVideoRatio] = createSignal(16 / 9);
  * player's BotGuard (up to half a minute).
  */
 const [loading, setLoading] = createSignal(false);
-let loadPending = false;
+/**
+ * `asked`: the queue is still fetching what to play (the previous song may
+ * play on meanwhile); `loading`: the player has been given the new song
+ */
+let loadPending: false | 'asked' | 'loading' = false;
 
 /** A song was asked for: loading until it plays (or gives up) */
 export const markLoading = (pending = true) => {
-  loadPending = pending;
+  loadPending = pending ? 'asked' : false;
   setLoading(pending);
 };
 
 /**
  * The asked-for song (or its ad) is moving: the player reports "playing"
  * well before that (the time sits at 0:00 meanwhile), so its time is what
- * ends the load. A song's start, not the previous song's last updates.
+ * ends the load. A song's start, not the previous song's last updates: the
+ * previous song's early seconds, still playing while the queue asks, do not
+ * count.
  */
 const loadMoved = (time: number) => {
-  if (!loadPending || time < 0.05 || time > 5) return;
+  if (loadPending !== 'loading' || time < 0.05 || time > 5) return;
   loadPending = false;
   setLoading(false);
 };
@@ -274,12 +280,13 @@ export const startPlayer = async (uiHost: HTMLElement) => {
   const element = (await createPlayer(host)) as PlayerApi;
   player = element;
   onPlayerEvent<number>(element, 'onStateChange', (state) => {
-    // ENDED of the song (an ad's end does not report it)
-    if (state === 0 && !element.classList.contains('ad-showing')) songEnded();
     setDuration(element.getDuration() || 0);
     // Paused, ended or cued: the load is over; buffering shows too
     if (state === 0 || state === 2 || state === 5) loadPending = false;
-    setLoading(loadPending || state === 3);
+    setLoading(!!loadPending || state === 3);
+    // ENDED of the song (an ad's end does not report it). After the load's
+    // end above, so the next song it starts shows as loading.
+    if (state === 0 && !element.classList.contains('ad-showing')) songEnded();
     // The song's own response (an ad's state changes leave it as it was)
     if (!element.classList.contains('ad-showing')) {
       const details = element.getPlayerResponse?.()?.videoDetails;
@@ -318,6 +325,7 @@ export const loadVideo = (videoId: string, playerParams?: string) => {
   songDuration = 0;
   endTold = false;
   markLoading();
+  loadPending = 'loading';
   player.loadVideoByPlayerVars(
     playerParams ? { videoId, playerParams } : { videoId },
   );

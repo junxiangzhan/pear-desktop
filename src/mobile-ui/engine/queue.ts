@@ -202,7 +202,13 @@ export const nowPlaying = (): NowPlaying | null => {
 
 let continuation: string | undefined;
 let automix: Endpoint | undefined;
-let loading = false;
+/**
+ * Which queue this is: a new one (a playlist played, the queue dismissed)
+ * outdates the pages still loading for the one before
+ */
+let generation = 0;
+/** The page of this queue being loaded: callers wait for the same one */
+let pendingMore: { generation: number; done: Promise<void> } | undefined;
 
 const updateMore = () => setQueueHasMore(!!continuation || !!automix);
 
@@ -281,6 +287,9 @@ export const playEndpoint = async (endpoint: Endpoint) => {
     return;
   }
   const start = page.selected >= 0 ? page.selected : 0;
+  generation++;
+  // A like still on its way is the previous song's
+  likeRequest++;
   continuation = page.continuation;
   automix = page.automix;
   batch(() => {
@@ -293,46 +302,55 @@ export const playEndpoint = async (endpoint: Endpoint) => {
   readLike(response);
 };
 
+/** Loads and appends the next page of queue `at` (see loadMoreQueue) */
+const fetchMore = async (at: number) => {
+  let page: ReturnType<typeof readPanel>;
+  if (continuation) {
+    const response = await innertube<WatchNext>('/next', {
+      continuation,
+      isAudioOnly: true,
+      enablePersistentPlaylistPanel: true,
+    });
+    // The queue was replaced meanwhile: this page was the old one's
+    if (at !== generation) return;
+    page = readPanel(response.continuationContents?.playlistPanelContinuation);
+  } else {
+    const watch = automix?.watchPlaylistEndpoint as
+      | Record<string, unknown>
+      | undefined;
+    const response = await innertube<WatchNext>('/next', {
+      playlistId: watch?.playlistId,
+      params: watch?.params,
+      isAudioOnly: true,
+      enablePersistentPlaylistPanel: true,
+      tunerSettingValue: 'AUTOMIX_SETTING_NORMAL',
+    });
+    if (at !== generation) return;
+    automix = undefined;
+    page = readPanel(queuePanel(response));
+    // The radio starts with the queue's own songs again: only new ones
+    const known = new Set(untrack(queue).map((entry) => entry.videoId));
+    page.entries = page.entries.filter((entry) => !known.has(entry.videoId));
+  }
+  continuation = page.continuation;
+  setQueue((entries) => [...entries, ...page.entries]);
+};
+
 /**
  * The queue's next songs: its own continuation, then the automix (a radio of
- * the queue) once the playlist is done, as YTM appends it
+ * the queue) once the playlist is done, as YTM appends it. A page already on
+ * its way is the one returned.
  */
-export const loadMoreQueue = async () => {
-  if (loading || (!continuation && !automix)) return;
-  loading = true;
-  try {
-    let page: ReturnType<typeof readPanel>;
-    if (continuation) {
-      const response = await innertube<WatchNext>('/next', {
-        continuation,
-        isAudioOnly: true,
-        enablePersistentPlaylistPanel: true,
-      });
-      page = readPanel(response.continuationContents?.playlistPanelContinuation);
-      continuation = page.continuation;
-    } else {
-      const watch = automix?.watchPlaylistEndpoint as
-        | Record<string, unknown>
-        | undefined;
-      automix = undefined;
-      const response = await innertube<WatchNext>('/next', {
-        playlistId: watch?.playlistId,
-        params: watch?.params,
-        isAudioOnly: true,
-        enablePersistentPlaylistPanel: true,
-        tunerSettingValue: 'AUTOMIX_SETTING_NORMAL',
-      });
-      page = readPanel(queuePanel(response));
-      continuation = page.continuation;
-      // The radio starts with the queue's own songs again: only new ones
-      const known = new Set(untrack(queue).map((entry) => entry.videoId));
-      page.entries = page.entries.filter((entry) => !known.has(entry.videoId));
-    }
-    setQueue((entries) => [...entries, ...page.entries]);
-  } finally {
-    loading = false;
-    updateMore();
-  }
+export const loadMoreQueue = (): Promise<void> => {
+  if (pendingMore?.generation === generation) return pendingMore.done;
+  if (!continuation && !automix) return Promise.resolve();
+  const at = generation;
+  const done = fetchMore(at).finally(() => {
+    if (pendingMore?.done === done) pendingMore = undefined;
+    if (at === generation) updateMore();
+  });
+  pendingMore = { generation: at, done };
+  return done;
 };
 
 const indexOfCurrent = () => {
@@ -340,15 +358,30 @@ const indexOfCurrent = () => {
   return entry ? queue().indexOf(entry) : -1;
 };
 
-/** The next song; at the end, more of the queue, else (repeat all) the first */
-export const next = async () => {
-  const index = indexOfCurrent();
-  if (index + 1 >= queue().length && queueHasMore()) await loadMoreQueue();
+/**
+ * Plays the queue's song at `index()`, loading more of the queue first when
+ * it ends before it; past its end, the first song (repeat all), else
+ * `atEnd`. A song played meanwhile (a tap, another skip) wins.
+ */
+const playFrom = async (index: () => number, atEnd: () => void) => {
+  const request = playRequest;
+  if (index() >= queue().length && queueHasMore()) {
+    await loadMoreQueue().catch(console.error);
+    if (request !== playRequest) return;
+  }
   const entries = queue();
-  const following = entries[index + 1];
+  const following = entries[index()];
   if (following) playEntry(following);
   else if (repeatMode() === 'ALL' && entries.length) playEntry(entries[0]);
+  else atEnd();
 };
+
+/** The next song; at the end, more of the queue, else (repeat all) the first */
+export const next = () =>
+  playFrom(
+    () => indexOfCurrent() + 1,
+    () => {},
+  );
 
 /** As YTM: a few seconds in, back to the start; else the song before */
 export const previous = () => {
@@ -412,15 +445,16 @@ export const removeFromQueue = (entry: QueueEntry) => {
   if (index < 0) return;
   const rest = entries.filter((candidate) => candidate !== entry);
   setQueue(rest);
-  if (entry === current()) {
-    const following = rest[index];
-    if (following) playEntry(following);
-    else clearQueue();
-  }
+  // As at a song's end: the queue goes on (more of it, repeat all) before
+  // it is over
+  if (entry === current()) playFrom(() => index, clearQueue).catch(console.error);
 };
 
 /** "Dismiss queue": nothing plays, the player bar goes */
 export const clearQueue = () => {
+  // A playlist still loading, or a skip waiting for more, is outdated too
+  playRequest++;
+  generation++;
   continuation = undefined;
   automix = undefined;
   batch(() => {
@@ -446,6 +480,7 @@ export const addToQueue = async (add: Record<string, unknown>) => {
     if (target.onEmptyQueue) await playEndpoint(target.onEmptyQueue);
     return;
   }
+  const forQueue = generation;
   const response = await innertube<{
     queueDatas?: { content?: unknown }[];
   }>(
@@ -458,7 +493,8 @@ export const addToQueue = async (add: Record<string, unknown>) => {
     .map((data) => panelVideo(data.content))
     .filter((video): video is PanelVideo => !!video)
     .map(toEntry);
-  if (!added.length) return;
+  // Added to a queue that has been replaced or dismissed meanwhile
+  if (!added.length || forQueue !== generation) return;
   const entries = [...queue()];
   const at =
     add.queueInsertPosition === 'INSERT_AFTER_CURRENT_VIDEO'

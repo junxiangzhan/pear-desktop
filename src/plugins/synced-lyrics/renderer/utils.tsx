@@ -52,7 +52,15 @@ export const tabStates: Record<string, () => void> = {
  * Returns false without the mobile UI.
  */
 export const mountInMobileUi = () => {
-  if (document.querySelector('#synced-lyrics-container')) return true;
+  // Already mounted in the mobile UI. YTM's lyrics tab gets a container with
+  // the same id (tabStates.true), which must not count: that tab still needs
+  // the per-song work
+  const host = document.querySelector('pear-mobile-ui');
+  if (!host) return false;
+  if (
+    document.getElementById('synced-lyrics-container')?.parentElement === host
+  )
+    return true;
   const container = mobileUiMount('synced-lyrics', 'synced-lyrics-container');
   if (!container) return false;
   // Visible first, as in YTM's tab: the renderer finds its list (for the

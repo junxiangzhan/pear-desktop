@@ -196,11 +196,17 @@ const Continuation = (props: {
     const observer = new IntersectionObserver(async (entries) => {
       if (loading || !entries.some((entry) => entry.isIntersecting)) return;
       loading = true;
-      const more = parseContinuation(
-        await innertube('/browse', { continuation: props.token }),
-      );
-      props.onLoaded(more.sections, more.continuation);
-      loading = false;
+      try {
+        const more = parseContinuation(
+          await innertube('/browse', { continuation: props.token }),
+        );
+        props.onLoaded(more.sections, more.continuation);
+      } catch (error) {
+        // Tried again the next time the end scrolls into view
+        console.error('[pear-mobile-ui]', error);
+      } finally {
+        loading = false;
+      }
     });
     observer.observe(element);
     onCleanup(() => observer.disconnect());
@@ -310,7 +316,10 @@ const Loaded = (props: {
                 chips={latest().chips}
                 isSelected={isSelected}
                 onChip={(chip) => {
-                  if (props.onChip?.(chip)) setPendingChip(chip);
+                  // As it shows: a chip tapped again while it loads is the
+                  // selected one, and clears the filter
+                  const shown = { ...chip, selected: isSelected(chip) };
+                  if (props.onChip?.(shown)) setPendingChip(shown);
                 }}
               />
             </Show>
@@ -333,7 +342,7 @@ const Loaded = (props: {
 
 const SearchPage = (props: { query?: string; params?: string }) => {
   const [input, setInput] = createSignal<HTMLInputElement>();
-  const [results] = createResource(
+  const [results, { refetch }] = createResource(
     () => (props.query ? { query: props.query, params: props.params } : null),
     async (search) => parseSearch(await innertube('/search', search)),
   );
@@ -371,7 +380,16 @@ const SearchPage = (props: { query?: string; params?: string }) => {
           />
         </form>
       </header>
-      <Show when={results()}>
+      {/* Read only without an error: a failed resource throws when read */}
+      <Show when={results.error as unknown}>
+        <div class="message">
+          <p>{s('error')}</p>
+          <button class="tonal-button" onClick={() => refetch()}>
+            {s('retry')}
+          </button>
+        </div>
+      </Show>
+      <Show when={!results.error && results()}>
         {(page) => (
           <>
             <div class="chips">

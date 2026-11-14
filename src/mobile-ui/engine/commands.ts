@@ -1,7 +1,7 @@
 // What menu entries and play buttons ask for (YouTube's endpoints), run by
 // the UI itself: YTM's interface, which used to run them, is not loaded.
 import { innertube, signedIn, signIn } from './innertube';
-import { rate } from './library';
+import { noteSubscriptions, rate } from './library';
 import {
   addToQueue,
   clearQueue,
@@ -96,6 +96,23 @@ export const toggleDislike = () => {
     .catch(console.error);
 };
 
+/**
+ * A rating from a menu (a song's, an album's): for the playing song, its
+ * like state follows, as with the player's buttons, and a dislike gives way
+ * to the next song
+ */
+export const rateTarget = async (
+  status: string,
+  target: Record<string, string>,
+) => {
+  const entry = currentEntry();
+  await rate(status, target);
+  if (!entry || target.videoId !== entry.videoId) return;
+  setLikeStatus(status);
+  // skip-disliked-songs may have moved on already
+  if (status === 'DISLIKE' && currentEntry() === entry) await next();
+};
+
 /** Runs one endpoint; what it did, or 'unsupported' */
 export const runCommand = async (
   endpoint: Endpoint,
@@ -119,7 +136,16 @@ export const runCommand = async (
     if (entry) removeFromQueue(entry);
     return 'done';
   }
-  if (Object.keys(endpoint).some((key) => /dismissQueue/i.test(key))) {
+  // "Dismiss queue": YouTube sends it as deleting the queue's own (QP…)
+  // playlist, with a dismissQueueCommand inside. Only the local queue goes:
+  // the deletion is never sent.
+  const deletion = endpoint.deletePlaylistEndpoint as
+    | { command?: Record<string, unknown> }
+    | undefined;
+  if (
+    deletion?.command?.dismissQueueCommand ||
+    Object.keys(endpoint).some((key) => /dismissQueue/i.test(key))
+  ) {
     clearQueue();
     return 'done';
   }
@@ -127,10 +153,7 @@ export const runCommand = async (
     | { status?: string; target?: Record<string, string> }
     | undefined;
   if (like?.status) {
-    await rate(like.status, like.target ?? {});
-    if (like.target?.videoId === currentEntry()?.videoId) {
-      setLikeStatus(like.status);
-    }
+    await rateTarget(like.status, like.target ?? {});
     return 'done';
   }
   const feedback = endpoint.feedbackEndpoint as
@@ -143,8 +166,11 @@ export const runCommand = async (
   const subscribe = endpoint.subscribeEndpoint as
     | { channelIds?: string[]; params?: string }
     | undefined;
+  // Noted as the artist page's button does: the page reports the old state
+  // for a while
   if (subscribe) {
     await innertube('/subscription/subscribe', subscribe);
+    noteSubscriptions(subscribe.channelIds, true);
     return 'done';
   }
   const unsubscribe = endpoint.unsubscribeEndpoint as
@@ -152,6 +178,7 @@ export const runCommand = async (
     | undefined;
   if (unsubscribe) {
     await innertube('/subscription/unsubscribe', unsubscribe);
+    noteSubscriptions(unsubscribe.channelIds, false);
     return 'done';
   }
   const shared = endpoint.shareEntityEndpoint as
@@ -175,9 +202,7 @@ export const runCommand = async (
 
 /** The endpoint a menu item (as YouTube sends it) runs */
 const itemEndpoint = (wrapped: Endpoint): Endpoint | undefined => {
-  const item = Object.values(wrapped)[0] as
-    | Record<string, unknown>
-    | undefined;
+  const item = Object.values(wrapped)[0] as Record<string, unknown> | undefined;
   if (!item) return undefined;
   const endpoint =
     item.isToggled === true

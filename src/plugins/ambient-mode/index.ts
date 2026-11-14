@@ -45,12 +45,15 @@ export default createPlugin({
     lastMediaType: null as 'video' | 'image' | null,
     lastVideoSource: null as string | null,
     lastImageSource: null as string | null,
-    stopped: false,
+    // Counts starts and stops: a start that awaited past a stop (and maybe a
+    // new start) must not set up its interval and watchers too
+    run: 0,
     unwatchCover: null as (() => void) | null,
 
     async start({ getConfig }) {
-      this.stopped = false;
+      const run = ++this.run;
       const config = await getConfig();
+      if (run !== this.run) return;
       this.interpolationTime = config.interpolationTime;
       this.buffer = config.buffer;
       this.qualityRatio = config.quality;
@@ -67,6 +70,7 @@ export default createPlugin({
       const video = await waitForElement<HTMLVideoElement>(
         '.html5-video-container > video',
       );
+      if (run !== this.run) return;
 
       const videoWrapper = document.querySelector(
         '#song-video > .player-wrapper',
@@ -274,7 +278,7 @@ export default createPlugin({
        * behind its cover, of the picture or the video the cover shows
        */
       const injectInMobileUi = (controls: PlayerControls) => {
-        if (this.stopped) return;
+        if (run !== this.run) return;
         const mount = mobileUiMount('ambient-mode', 'pear-ambient-mode');
         if (!mount) return;
         let shown: string | null = null;
@@ -316,7 +320,7 @@ export default createPlugin({
       this.update?.();
     },
     stop() {
-      this.stopped = true;
+      this.run++;
       this.unwatchCover?.();
       this.unwatchCover = null;
       this.update = null;

@@ -9,16 +9,19 @@ import {
 } from 'solid-js';
 
 import { Icon, type IconName } from './icons';
+import { playAndOpen } from './items';
 import { pluginMenuEntries } from './plugins';
 import { Presence } from './presence';
 import {
   back,
+  backFrom,
   go,
   hideItem,
   menu,
   type MenuSheet,
   openSave,
   reloadTop,
+  topPage,
   saveSheet,
   type SaveSheet,
   openMenu,
@@ -30,7 +33,7 @@ import {
   createPlaylist,
   editPlaylist,
   playlistOptions,
-  rate,
+  rateTarget,
   runMenuItem,
   YtmError,
 } from '../engine';
@@ -86,7 +89,7 @@ const RATED: Record<string, 'liked' | 'unliked' | 'disliked'> = {
 };
 
 const runRating = (action: Extract<MenuAction, { kind: 'like' }>) =>
-  rate(action.status, action.target)
+  rateTarget(action.status, action.target)
     .then(() =>
       showToast(
         // A playlist target is an album or playlist saved to the library
@@ -125,6 +128,7 @@ const runEntry = (entry: MenuEntry, sheet: MenuSheet) => {
     back(() => runRating(action));
   } else if (action?.kind === 'edit') {
     const itemKey = sheet.itemKey;
+    const page = topPage();
     back(() =>
       editPlaylist(action.edit)
         .then((message) => {
@@ -132,7 +136,7 @@ const runEntry = (entry: MenuEntry, sheet: MenuSheet) => {
           // A song taken off the playlist on screen goes, in place; other
           // edits (or one from the queue) show on the page reloaded
           if (itemKey && removesVideo(action.edit)) hideItem(itemKey);
-          else reloadTop();
+          else reloadTop(page);
         })
         .catch(failed),
     );
@@ -149,6 +153,14 @@ const runEntry = (entry: MenuEntry, sheet: MenuSheet) => {
         fallback: entry.ytm,
       }),
     );
+  } else if (
+    entry.endpoint?.watchEndpoint ||
+    entry.endpoint?.watchPlaylistEndpoint
+  ) {
+    // Shuffle, radio: played as the page's own buttons play, the player
+    // page opening
+    const endpoint = entry.endpoint;
+    back(() => playAndOpen(endpoint));
   } else if (entry.ytm) {
     const item = entry.ytm;
     const done = queueToast(entry.endpoint);
@@ -216,10 +228,18 @@ const MenuSheetBody = (props: { sheet: MenuSheet }) => {
       (title, entries) => openMenu({ title, entries }),
     ),
   ];
+  let scroller: HTMLDivElement | undefined;
   return (
     <>
       <div class="scrim" onClick={() => back()} />
-      <div class="sheet" {...swipeDown(() => back())}>
+      {/* A swipe that scrolls a long menu back up is not a close */}
+      <div
+        class="sheet"
+        {...swipeDown(
+          () => back(),
+          () => !scroller || scroller.scrollTop <= 0,
+        )}
+      >
         <div class="sheet-handle" />
         <div class="row sheet-head">
           <Show when={props.sheet.thumbnail}>
@@ -230,7 +250,12 @@ const MenuSheetBody = (props: { sheet: MenuSheet }) => {
             <div class="subtitle">{props.sheet.subtitle}</div>
           </div>
         </div>
-        <div class="sheet-scroll">
+        <div
+          class="sheet-scroll"
+          ref={(element) => {
+            scroller = element;
+          }}
+        >
           <Show when={quick().length}>
             <div class="menu-quick">
               <For each={quick()}>
@@ -286,7 +311,8 @@ const NewPlaylist = (props: { sheet: SaveSheet }) => {
     try {
       await createPlaylist(name, props.sheet.target);
       showToast(s('createdPlaylist', name));
-      back();
+      // The sheet may have been closed while it saved
+      backFrom('save');
     } catch (error) {
       failed(error);
       setBusy(false);
@@ -338,10 +364,11 @@ const PlaylistRow = (props: { option: PlaylistOption }) => {
     try {
       const message = await editPlaylist(option.add);
       showToast(message ?? s('savedTo', option.title));
-      back();
+      // The sheet may have been closed while it saved, or by another row
+      backFrom('save');
     } catch (error) {
       // Already there: YTM's message and its "Add anyway"
-      back(() => failed(error));
+      backFrom('save', () => failed(error));
     }
   };
   return (

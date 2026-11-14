@@ -94,6 +94,14 @@ const changedSubscriptions = new Map<string, boolean>();
 export const isSubscribed = (subscription: Subscription) =>
   changedSubscriptions.get(subscription.channelId) ?? subscription.subscribed;
 
+/** A subscription changed elsewhere (a menu's subscribe item) */
+export const noteSubscriptions = (
+  channelIds: string[] | undefined,
+  on: boolean,
+) => {
+  for (const id of channelIds ?? []) changedSubscriptions.set(id, on);
+};
+
 /** Subscribes to an artist (`on`) or unsubscribes */
 export const setSubscription = async (
   subscription: Subscription,

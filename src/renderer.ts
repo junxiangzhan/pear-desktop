@@ -394,10 +394,15 @@ async function onApiLoaded() {
 
   // Navigate to "Starting page"
   const startingPage: string = window.mainConfig.get('options.startingPage');
-  if (startingPage && startingPages[startingPage]) {
-    document
-      .querySelector<MusicPlayerAppElement>('ytmusic-app')
-      ?.navigate(startingPages[startingPage]);
+  // In the mobile UI the ytmusic-app element from YTM's HTML is never
+  // upgraded, so it has no navigate
+  const app = document.querySelector<MusicPlayerAppElement>('ytmusic-app');
+  if (
+    startingPage &&
+    startingPages[startingPage] &&
+    typeof app?.navigate === 'function'
+  ) {
+    app.navigate(startingPages[startingPage]);
   }
 
   // Remove upgrade button
@@ -501,11 +506,15 @@ const main = async () => {
     if (api) {
       const plugin = getLoadedRendererPlugin(id);
       if (plugin && typeof plugin.renderer !== 'function') {
-        await plugin.renderer?.onPlayerApiReady?.call(
-          plugin.renderer,
-          api,
-          createContext(id),
-        );
+        try {
+          await plugin.renderer?.onPlayerApiReady?.call(
+            plugin.renderer,
+            api,
+            createContext(id),
+          );
+        } catch (error) {
+          console.error(`[${id}] onPlayerApiReady failed`, error);
+        }
       }
     }
   });

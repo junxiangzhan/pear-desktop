@@ -348,8 +348,12 @@ const MenuLevel = (props: {
 
 const AccountSheetBody = () => {
   // Read again whenever Rust rebuilds the menu (after a switch)
+  // A failed read is an empty menu: a resource in error throws when read
   const [menu, { refetch }] = createResource(appMenuVersion, () =>
-    readAppMenu(),
+    readAppMenu().catch((error: unknown) => {
+      console.error('[pear-mobile-ui]', error);
+      return [];
+    }),
   );
   // The submenus opened, by label: Rust renumbers the items each time it
   // rebuilds the menu (a plugin switched on gets a submenu)

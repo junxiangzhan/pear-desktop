@@ -87,6 +87,8 @@ export interface Section {
   more?: BrowseTarget;
   /** More items of a long list (a playlist's songs) */
   continuation?: string;
+  /** Where `continuation` is sent: a search's results continue in /search */
+  continuationPath?: '/browse' | '/search';
   /** A list laid out in columns of this many rows, scrolled sideways */
   rows?: number;
 }
