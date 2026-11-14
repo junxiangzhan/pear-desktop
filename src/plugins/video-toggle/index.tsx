@@ -5,6 +5,7 @@ import { t } from '@/i18n';
 import { moveVolumeHud as preciseVolumeMoveVolumeHud } from '@/plugins/precise-volume/renderer';
 import { type ThumbnailElement } from '@/types/get-player-response';
 import { type MenuTemplate } from '@/types/menu';
+import { mobileUiMount, playerControls } from '@/types/player-controls';
 import { createPlugin } from '@/utils';
 
 import buttonSwitcherStyle from './button-switcher.css?inline';
@@ -209,6 +210,9 @@ export default createPlugin({
         ); // custom mode
         if (checkbox) checkbox.checked = !this.config?.hideVideo;
 
+        // The mobile UI: its cover shows the video (when the song has one)
+        playerControls()?.setVideoMode(showVideo);
+
         if (player) {
           player.style.margin = showVideo ? '' : 'auto 0px';
           player.setAttribute(
@@ -311,6 +315,42 @@ export default createPlugin({
         );
       };
 
+      // The mobile UI (YTM's player page is not in the page): the switch goes
+      // over its player page's cover, which shows the song's video while on.
+      // It has no toggle of its own, so the native mode uses the switch too.
+      if (playerControls()) {
+        // Video removed: the cover keeps the song's picture
+        if (config.forceHide) {
+          playerControls()?.setVideoMode(false);
+          return;
+        }
+        if (config.mode === 'disabled') {
+          playerControls()?.setVideoMode(!config.hideVideo);
+          return;
+        }
+        const mount = mobileUiMount('video-toggle', 'pear-video-toggle');
+        if (!mount) return;
+        document.body.classList.add('video-toggle-custom-mode');
+        switchButtonContainer.style.justifyContent =
+          config.align === 'right'
+            ? 'flex-end'
+            : config.align === 'middle'
+              ? 'center'
+              : 'flex-start';
+        mount.append(switchButtonContainer);
+        setVideoState(!config.hideVideo);
+        // A song without a video (YTM's audio track) has no switch; the
+        // choice stays for the next one
+        const songStarted = () =>
+          setShowButton(
+            api.getPlayerResponse()?.videoDetails?.musicVideoType !==
+              'MUSIC_VIDEO_TYPE_ATV',
+          );
+        video?.addEventListener('peard:src-changed', songStarted);
+        songStarted();
+        return;
+      }
+
       if (config.mode !== 'native' && config.mode != 'disabled') {
         setTimeout(() => {
           const playerSelector =
@@ -348,6 +388,10 @@ export default createPlugin({
     onConfigChange(newConfig) {
       this.config = newConfig;
       this.applyStyleClass(newConfig);
+    },
+    stop() {
+      // The mobile UI's cover goes back to the song's picture
+      playerControls()?.setVideoMode(false);
     },
   },
 });

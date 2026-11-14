@@ -27,6 +27,18 @@ const roundToTwo = (n: number) => Math.round(n * 1e2) / 1e2;
 const [speed, setSpeed] = createSignal(1);
 const sliderContainer = document.createElement('div');
 
+/**
+ * A speed asked for without the slider: the mobile UI's speed menu
+ * (src/mobile-ui/ui/plugins.ts), which has no YTM menu to put it in
+ */
+const onSpeedRequest = (event: Event) => {
+  const requested = Number((event as CustomEvent<unknown>).detail);
+  if (!Number.isFinite(requested)) return;
+  setSpeed(Math.min(Math.max(MIN_PLAYBACK_SPEED, requested), MAX_PLAYBACK_SPEED));
+  const video = document.querySelector<HTMLVideoElement>('video');
+  if (video) video.playbackRate = speed();
+};
+
 export const onPlayerApiReady = () => {
   const observePopupContainer = () => {
     const updatePlayBackSpeed = () => {
@@ -113,9 +125,11 @@ export const onPlayerApiReady = () => {
 
   observePopupContainer();
   observeVideo();
+  document.addEventListener('pear:set-playback-speed', onSpeedRequest);
 };
 
 export const onUnload = () => {
+  document.removeEventListener('pear:set-playback-speed', onSpeedRequest);
   const video = document.querySelector<HTMLVideoElement>('video');
   if (video) {
     video.removeEventListener('ratechange', forcePlaybackRate);

@@ -4,7 +4,7 @@ import { waitForElement } from '@/utils/wait-for-element';
 import { disposeReactiveRoot } from './reactive-root';
 import { setConfig, setCurrentTime } from './renderer';
 import { fetchLyrics } from './store';
-import { selectors, tabStates } from './utils';
+import { mountInMobileUi, selectors, tabStates } from './utils';
 
 import type { SyncedLyricsPluginConfig } from '../types';
 import type { SongInfo } from '@/providers/song-info';
@@ -55,6 +55,9 @@ export const renderer = createRenderer<
         100,
       );
     }
+
+    // The mobile UI: its own lyrics tab, no YTM tab to wait for
+    if (mountInMobileUi()) return;
 
     // prettier-ignore
     this.observer ??= new MutationObserver(this.observerCallback);

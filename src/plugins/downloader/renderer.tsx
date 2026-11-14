@@ -105,8 +105,13 @@ export const onPlayerApiReady = () => {
     buttonContainer,
   );
 
-  menuObserver.observe(document.querySelector('ytmusic-popup-container')!, {
-    childList: true,
-    subtree: true,
-  });
+  // With YouTube Music's interface; the mobile UI has its own entry
+  // (src/mobile-ui/ui/plugins.ts)
+  const popupContainer = document.querySelector('ytmusic-popup-container');
+  if (popupContainer) {
+    menuObserver.observe(popupContainer, {
+      childList: true,
+      subtree: true,
+    });
+  }
 };

@@ -1,5 +1,6 @@
 #song-video canvas.html5-blur-canvas,
-#song-image .html5-blur-image {
+#song-image .html5-blur-image,
+#pear-ambient-mode :is(canvas.html5-blur-canvas, .html5-blur-image) {
   filter: blur(var(--blur, 100px));
   opacity: var(--opacity, 1);
   width: var(--width, 100%);
@@ -9,14 +10,17 @@
 }
 
 #song-video canvas.html5-blur-canvas:not(.fullscreen),
-#song-image .html5-blur-image {
+#song-image .html5-blur-image,
+#pear-ambient-mode
+  :is(canvas.html5-blur-canvas:not(.fullscreen), .html5-blur-image) {
   position: absolute;
   left: 50%;
   top: 50%;
   transform: translate(-50%, -50%);
 }
 
-#song-video canvas.html5-blur-canvas.fullscreen {
+#song-video canvas.html5-blur-canvas.fullscreen,
+#pear-ambient-mode canvas.html5-blur-canvas.fullscreen {
   position: fixed;
   left: 0;
   top: 0;

@@ -148,9 +148,14 @@ export const LyricsRenderer = () => {
   const [scroller, setScroller] = createSignal<VirtualizerHandle>();
   const [stickyRef, setStickRef] = createSignal<HTMLElement | null>(null);
 
-  const tab = document.querySelector<HTMLElement>(selectors.body.tabRenderer)!;
+  // YTM's lyrics tab, or (the mobile UI) the container the lyrics are in
+  const tab =
+    document.querySelector<HTMLElement>(selectors.body.tabRenderer) ??
+    document.querySelector<HTMLElement>('#synced-lyrics-container')!;
 
-  let mouseCoord = 0;
+  // No pointer yet (a touch screen has none until a tap): not over the
+  // picker, so it hides as the lyrics scroll instead of covering them
+  let mouseCoord = Number.POSITIVE_INFINITY;
   const mousemoveListener = (e: Event) => {
     if ('clientY' in e) {
       mouseCoord = (e as MouseEvent).clientY;
