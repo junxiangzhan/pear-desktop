@@ -362,7 +362,7 @@ Android 版預設的頁面引擎。release APK（arm64）216 MB，壓縮後 101 
 
 - **第二層選單：** 子選單開在父選單右側，左右都放不下時 floating-ui 退回右側而超出畫面。`src/plugins/in-app-menu/renderer/Panel.tsx` 加上 `shift({ crossAxis: true })`，放不下時推回畫面內、疊在父選單上（Electron 的窄視窗也適用）。
 - **背景播放停住，三個原因**（GeckoView 的設定檔 `files/geckoview-config.yaml`，由 `GeckoPage` 在啟動時寫入）：
-  1. Gecko 在 app 進入背景時把 utility 與 GPU 行程降為 IDLE 優先權，手機約 30 秒內就把它們結束，音訊或影片解碼器跟著消失，YTM 重設播放器。設定 `media.utility-process.enabled: false`、`layers.gpu-process.enabled: false`，解碼改在不會被結束的行程（播放音訊的內容行程、有 `PlaybackService` 的主行程）。
+  1. Gecko 在 app 進入背景時把 utility 與 GPU 行程降為 IDLE 優先權，手機約 30 秒內就把它們結束，音訊或影片解碼器跟著消失，YTM 重設播放器。設定 `media.utility-process.enabled: false`、`layers.gpu-process.enabled: false`，解碼改在不會被結束的行程（播放音訊的內容行程、有 `PlaybackService` 的主行程）。例外：Android 上 Gecko 的 WebGL 需要 GPU 行程，所以 visualizer 用 butterchurn 時會打開它（`src-tauri/src/gecko_startup.rs`，切換後需要重新啟動）。
   2. renderer 讓影片經過 AudioContext 輸出，而 Gecko 的 autoplay 政策讓沒有使用者手勢時建立的 AudioContext 停在 suspended，**輸出是靜音**（app 自動續播時，第一次點擊前都沒有聲音）。HyperOS 的 PowerKeeper 會在背景 app 連續 60 秒輸出靜音後暫停它的音訊（logcat：`isLongTimeZeroData out of time 60S`、`pause zero data process`），播放就停在原地。設定 `media.autoplay.default: 0`（含 Web Audio），AudioContext 一建立就是 running。
   3. 平板（MIUI Pad）沒有遇到，推測是兩台的系統策略不同。
 - 這三個設定也套用在平板上，平板尚未重測。

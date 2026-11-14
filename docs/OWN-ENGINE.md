@@ -313,7 +313,7 @@ YTM 自己的 `/player` 請求內容（請求本體以 gzip 壓縮）：
 
 ### 驗證（平板，真實觸控）
 
-- visualizer：畫布在封面上、大小等於封面（408×408），wave 類型正常跟著音樂畫 ✅。預設的 butterchurn 需要 WebGL，這台 GeckoView 完全沒有 WebGL（`webgl`、`webgl2` 都取不到），所以畫不出來（記錄：`Failed to create WebGL context: WebGL disabled`）；這是引擎限制，和新介面無關，舊介面在同一台也一樣。
+- visualizer：畫布在封面上、大小等於封面（408×408），wave 類型正常跟著音樂畫 ✅。預設的 butterchurn 需要 WebGL，這台 GeckoView 完全沒有 WebGL（`webgl`、`webgl2` 都取不到），所以畫不出來（記錄：`Failed to create WebGL context: WebGL disabled`）；舊介面在同一台也一樣。（第十四輪更正：不是引擎限制，是我們關掉了 GPU 行程；現在 butterchurn 開著時會打開它）
 - ambient-mode：圖片模式在封面後面有模糊光暈，換歌時跟著換、影片模式切回圖片時也跟著換 ✅；關閉播放頁時移除 ✅。影片模式的光暈畫不出來：這台 GeckoView 把影片畫進 canvas 得到全透明（`drawImage(video)` 不報錯但沒有像素，應是硬體解碼的影片無法讀回），同樣是引擎限制。
 - video-toggle：ATV 的歌不顯示開關 ✅；MV（「為你痴狂」）封面顯示影片、開關在左上 ✅；真實觸控按開關 → 回到圖片、播放器停到畫面外、繼續播放、`hideVideo` 存成 true ✅；再按 → 回到影片 ✅；關閉播放頁 → 播放器停到畫面外、繼續播放 ✅；關閉插件 → 封面回到圖片 ✅。
 - 沒有廣告可以測播放頁的影片位置與插件圖層的互動（廣告時 visualizer 與開關不顯示）。
@@ -477,3 +477,34 @@ YTM 自己的 `/player` 請求內容（請求本體以 gzip 壓縮）：
 沒有測：上傳選檔（會上傳到帳號；Kotlin 的修改有編譯過）、ghost-clicks 的「從圖示按下、在按鈕邊緣放開」（adb 很難精準重現；一般真實觸控正常）、YTM 介面裡 synced-lyrics 的每首歌處理、廣告期間的上一首（這次沒遇到廣告）、桌面版設 `options.mobileUi: true`。
 
 測試留下的紀錄：觀看記錄多了這次播放的幾首歌；測試版的插件設定已還原（video-toggle、skip-disliked-songs 關閉），新介面仍開著。切換 video-toggle 時跳出的「需要重新啟動」對話框都按了「稍後」。
+
+## 第十四輪：WebGL（visualizer 的 butterchurn）
+
+第七輪記成「這台 GeckoView 沒有 WebGL」，其實是我們自己關掉的。Gecko 的錯誤是 `WebGL disabled, see about:support`；從 Gecko 主行程讀到的圖形資訊沒有問題（Adreno 830、硬體 WebRender 可用、驅動沒有被封鎖）。原因是 `GeckoPage.writeConfig` 的 `layers.gpu-process.enabled: false`：Android 上 Gecko 的 WebGL 在 GPU 行程裡執行，沒有 GPU 行程就停用。
+
+| 在平板上試的設定 | 結果 |
+|---|---|
+| 執行中打開 `webgl.force-enabled` | 仍然停用 |
+| 啟動時打開 `webgl.force-enabled`（寫進 GeckoView 的設定檔） | 仍然停用 |
+| 打開 GPU 行程 | WebGL 1.0、2.0 都能建立；butterchurn 在播放頁封面上正常畫出 |
+
+GPU 行程當初關掉是為了背景播放（README「背景播放」：POCO F7 Pro 在背景約 30 秒就結束 GPU 行程，解碼器跟著消失），所以改成**只在需要時打開**：
+
+- Rust 決定（`src-tauri/src/gecko_startup.rs`）：visualizer 開著且類型是 butterchurn（它的預設）時需要 GPU 行程。結果寫在 `config.json` 旁邊的 `gecko-startup.json`（`{"gpuProcess": …}`），啟動時與每次設定變更時更新。
+- Kotlin 在啟動 Gecko 前寫 GeckoView 設定檔時讀它（`GeckoPage.readStartup`），沒有這個檔就是關閉。
+- 偏好設定只在 Gecko 啟動時讀取，所以變更後若和執行中的 Gecko 不同（從它啟動時的設定檔判斷），跳出和 `restartNeeded` 插件相同的「需要重新啟動」對話框；改回和執行中相同時不會跳出。
+
+Canvas2D 不能取代：butterchurn 是 Milkdrop 的移植，每個預設都是 GLSL 著色器（逐像素變形與合成），Canvas2D 沒有著色器，改在 CPU 上算太慢。visualizer 的 vudio、wave 本來就是 Canvas2D，不需要 GPU 行程。
+
+ambient-mode 影片模式的光暈是另一個問題：它本來就用 Canvas2D 的 `drawImage(video)`，讀回來的影片畫面是透明的；打開 GPU 行程後有沒有改善還沒測（這次播的歌沒有影片畫面）。
+
+### 驗證（平板）
+
+| 檢查 | 結果 |
+|---|---|
+| visualizer 關閉時啟動 | `gecko-startup.json` 是 `false`、GeckoView 設定檔 `layers.gpu-process.enabled: false`、沒有 GPU 行程、WebGL 停用 ✅ |
+| 打開 visualizer（butterchurn） | 檔案變成 `true`，跳出「需要重新啟動」✅；按「Restart now」→ 重新啟動後有 GPU 行程、WebGL 2 可用 ✅ |
+| 在 GPU 行程開著時關掉 visualizer → 按「Restart now」 | 重新啟動後沒有 GPU 行程、WebGL 停用 ✅ |
+| 關掉後（按「稍後」）再打開 | 和執行中的 Gecko 相同，不再跳出對話框 ✅ |
+| GPU 行程開著、butterchurn 畫著，App 到背景並關螢幕 75 秒 | 繼續播放（2 秒 → 86 秒），GPU 行程沒有被結束 ✅。POCO F7 Pro（當初會結束 GPU 行程的那支手機）沒有測：開著 butterchurn 時那支手機的背景播放可能仍會中斷 |
+

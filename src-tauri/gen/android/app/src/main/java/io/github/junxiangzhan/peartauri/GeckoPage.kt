@@ -291,20 +291,33 @@ class GeckoPage(private val activity: Activity) {
      *   taking the audio or video decoder along (YTM reset the player).
      *   Their work then runs in processes that stay alive: the content
      *   process playing the audio, and this one (PlaybackService).
+     *   The GPU process is on only while something needs WebGL, which Gecko
+     *   runs there on Android (the visualizer's butterchurn): Rust decides
+     *   and keeps it in `gecko-startup.json` next to its config.json, in
+     *   the app's data dir (src-tauri/src/gecko_startup.rs).
      * - Autoplay allowed, including Web Audio: the renderer plays the video
      *   through an AudioContext, which otherwise stayed suspended until the
      *   first tap. Its output was silence, and MIUI pauses an app's silent
      *   audio after 60 s in the background, which stopped playback.
      */
     private fun writeConfig(activity: Activity): String {
+      val gpuProcess = readStartup(activity).optBoolean("gpuProcess", false)
       val file = java.io.File(activity.filesDir, "geckoview-config.yaml")
       file.writeText(
         "prefs:\n" +
           "  media.utility-process.enabled: false\n" +
-          "  layers.gpu-process.enabled: false\n" +
+          "  layers.gpu-process.enabled: $gpuProcess\n" +
           "  media.autoplay.default: 0\n"
       )
       return file.absolutePath
     }
+
+    /** What Rust decided for Gecko's start; empty before its first run. */
+    private fun readStartup(activity: Activity): JSONObject =
+      try {
+        JSONObject(java.io.File(activity.applicationInfo.dataDir, "gecko-startup.json").readText())
+      } catch (error: Exception) {
+        JSONObject()
+      }
   }
 }

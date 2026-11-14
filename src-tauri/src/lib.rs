@@ -10,6 +10,8 @@ mod config;
 mod dialogs;
 #[cfg(target_os = "android")]
 mod gecko_bridge;
+#[cfg(target_os = "android")]
+mod gecko_startup;
 mod ipc;
 mod menu;
 mod net;
@@ -242,6 +244,7 @@ pub fn run() {
                 android_app::register(app.handle());
                 if page::in_gecko() {
                     gecko_bridge::register(app.handle());
+                    gecko_startup::sync(app.handle(), true);
                 }
             }
 

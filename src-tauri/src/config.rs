@@ -198,6 +198,12 @@ impl Config {
         }
     }
 
+    /// The directory `config.json` is in (the app's data dir on Android)
+    #[cfg_attr(not(target_os = "android"), allow(dead_code))]
+    pub fn dir(&self) -> Option<&Path> {
+        self.path.parent()
+    }
+
     pub fn snapshot(&self) -> Value {
         self.store.lock().unwrap().clone()
     }
@@ -369,6 +375,11 @@ impl Config {
         }
 
         crate::page::emit(app, "pear:config", after);
+        // Gecko settings read only at its start (the visualizer's WebGL)
+        #[cfg(target_os = "android")]
+        if crate::page::in_gecko() {
+            crate::gecko_startup::sync(app, false);
+        }
     }
 }
 
