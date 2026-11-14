@@ -58,7 +58,7 @@ YTM 自己的 `/player` 請求內容（請求本體以 gzip 壓縮）：
 | 不啟動 YTM 介面，單獨建立 YouTube 播放器 | ✅ 整個 iframe 只有 225 個 DOM 節點 |
 | 播放器 API 與 `#movie_player` 相同 | ✅ |
 | 播放自己取得的 `/player` 回應 | ✅ 開始播放（狀態 1、MSE `blob:`），標題、長度正確 |
-| 繼續播放與拖曳進度 | ❌ 播到約 50 秒就停住。第二輪在平板上沒有這個問題，推測是內建瀏覽器窗格隱藏（背景頁）造成的 |
+| 繼續播放與拖曳進度 | ❌ 播到約 50 秒就停住。第二輪在平板上沒有這個問題，推測是內建瀏覽器窗格隱藏（背景頁）造成的（第十五輪更正：是播放器等不到 YTM 的共用 BotGuard，見第十五輪） |
 
 ## 第二輪：平板（GeckoView），不載入 YTM 介面
 
@@ -508,3 +508,79 @@ ambient-mode 影片模式的光暈是另一個問題：它本來就用 Canvas2D 
 | 關掉後（按「稍後」）再打開 | 和執行中的 Gecko 相同，不再跳出對話框 ✅ |
 | GPU 行程開著、butterchurn 畫著，App 到背景並關螢幕 75 秒 | 繼續播放（2 秒 → 86 秒），GPU 行程沒有被結束 ✅。POCO F7 Pro（當初會結束 GPU 行程的那支手機）沒有測：開著 butterchurn 時那支手機的背景播放可能仍會中斷 |
 
+
+## 第十五輪：POCO F7 Pro（手機）
+
+測試版（`.mobileui` 套件、未登入）裝在 POCO F7 Pro（HyperOS、Android 16、GeckoView 153）。每次都播首頁第一首〈甲乙丙丁Strangers〉，按 Home 後關螢幕，每 15 秒讀一次播放位置與行程。
+
+| 檢查 | 結果 |
+|---|---|
+| 打開 visualizer（butterchurn） | `gecko-startup.json` 變成 `true`、跳出「需要重新啟動」，重新啟動後有 GPU 行程、butterchurn 在封面上畫出 ✅ |
+| 解碼器是否在 GPU 行程 | 不在：這支手機的 `media.gpu-process-decoder` 預設就是 `false` |
+| ambient-mode 的影片讀回（GPU 行程開著） | 仍然透明（`drawImage(video)` 後 alpha 平均 0，影片 1080×608）❌：GPU 行程不能解決 |
+| **新引擎播到 50 秒就停住**（前景也會） | ❌ 緩衝停在 0–50 秒，播放器狀態 3（緩衝中）、`paused` 是 false。只拿到音訊（itag 251）前 5 段，之後的請求長度都是 0（除錯資訊 `lar`：`range_866859-866858 … len_0`）；拖到 100 秒也一樣。GPU 行程開或關都一樣 |
+| 同一個 App 切回 YTM 介面，同一首 | 播過 50 秒、緩衝到 200 秒 ✅：是新引擎自己的問題。第一輪記的「播到約 50 秒就停住」應該是同一個，不是窗格隱藏造成的 |
+| 關螢幕後的內容行程 | 關螢幕約 1 秒後，MIUI 以 `clean_up_mem` 結束正在播放的內容行程（adj 50），GPU 行程開或關、新引擎或 YTM 介面都一樣；GPU 行程（開著時）、`:media` 約 28 秒後以 `kill_bg_proc` 結束。只按 Home、不關螢幕時沒有被結束 |
+| YTM 介面、關螢幕 3 分鐘 | 內容行程被結束 → App 重新載入頁面 → 「繼續播放上一首」接著播，中斷約 15 秒、位置往回跳（98 秒 → 約 25 秒），之後在背景播到 195 秒 |
+| 新引擎、關螢幕 | 歌曲本來就停在 50 秒；重新載入後回到首頁，不會接著播 |
+
+結論：
+
+- 開 GPU 行程（butterchurn）不是這支手機背景播放中斷的原因；README 說的「GPU 行程被結束，解碼器跟著消失」這次沒有重現（解碼器不在 GPU 行程）。
+- 新引擎 50 秒後拿不到串流：播放器在等 YTM 的共用 BotGuard，已修正（見下）。
+- 關螢幕時內容行程會被 MIUI 清掉，是這支手機現在的狀況（README 記的「背景 2.5 分鐘持續播放」當時可能就是靠重新載入接著播）。新引擎重新載入後要能接著播放，否則背景播放在這支手機上會停。
+
+### 50 秒停住的原因與修正
+
+播放器（base.js）取得 PO token 有兩條路（`h0a`）：
+
+- 自己跑 BotGuard（`jT` → `jnn-pa.googleapis.com` 的 `Waa/Create`、`GenerateIT`）：第一輪起一直走的路，冷啟動第一首約 20–30 秒。
+- 用 YTM 的共用 BotGuard（`g0a`）：等 `window['havuokmhhs-<timeOrigin>'].bevasrs` 出現。提供它的是 YTM 的介面本身：它拿 `ytAtP` 的 eacrToken 呼叫 `/att/get`、把回應交給自己定義的 `ytAtRC`、執行 bgChallenge 的 BotGuard，再把介面（`s`、`p`、`wpc` 等）放上去。新引擎擋掉了 YTM 的介面，所以沒有人提供，播放器一直等，串流只拿到不需要 token 的開頭一段（這首約 50 秒）。
+
+走哪條路由客戶端實驗旗標 `45760017`（在 `WEB_PLAYER_CONTEXT_CONFIG_ID_MUSIC_WATCH.serializedClientExperimentFlags` 裡）決定，各訪客不同：測試版清掉資料（新訪客）後是 `true`，跑過一次 YTM 介面後的狀態下是另一條路。所以時好時壞，平板之前沒遇到。
+
+修正（`src/mobile-ui/engine/boot.ts` 的 `ownBotguardContext`）：建立播放器時把這個旗標改成 `false`，播放器回到自己的 BotGuard。
+
+| 驗證（POCO，清掉測試版資料、新訪客，伺服器給的旗標是 `true`） | 結果 |
+|---|---|
+| 修正前 | 停在 49 秒、狀態 3，`havuokmhhs-…` 只有等待的 `nqfbel` ✅（重現） |
+| 頁面上另建一個旗標改成 `false` 的播放器 | 開頭約 17 秒冷啟動（狀態 -1、重來一次），之後緩衝到 200 秒、播過 79 秒 ✅ |
+| 修正後 | 沒有 `havuokmhhs-…`，緩衝到 210 秒、播到 205 秒 ✅ |
+| 修正後、關螢幕（GPU 行程關閉，真的在播放） | ❌ 按 Home 後 MIUI 立刻 `clean_up_mem` 清其他 App（adj 701），關螢幕約 1 秒後正在播放的內容行程（adj 50）也被結束，頁面重新載入，沒有聲音。手機 12 GB、可用約 2.9 GB；主行程（adj 50）沒有被結束 |
+| 修正後、播放中直接按電源鍵（不回桌面） | 背景 3 分鐘持續播放，〈甲乙丙丁〉播完自動接下一首 ✅；只有一個閒置的內容行程自行結束 |
+| 使用者自己的 App（0.4.0 release、已登入），播放中直接按電源鍵 | 關螢幕 4 分鐘，內容行程沒有被結束 ✅ |
+
+| 使用者自己的 App，播放中 Home → 關螢幕（剛做過一鍵清理） | 沒有被結束 ✅ |
+| 測試版，一鍵清理後（可用 5.3 GB）Home → 關螢幕 | 背景 3 分鐘持續播放、自動接下一首 ✅ |
+
+被結束的是記憶體較緊（可用約 2.9 GB）時「先按 Home 回桌面、再關螢幕」：回桌面時 MIUI 會 `clean_up_mem` 回收記憶體，關螢幕後連有前景服務（adj 50）的 Gecko 內容行程也結束。直接關螢幕、或記憶體充裕時沒有這個問題，兩個 App 沒有差別。被結束時，背景播放要能接回來：YTM 介面靠重新載入後「繼續播放上一首」接回（中斷約 15 秒），新引擎重新載入後只回到首頁，還沒有接續播放。
+
+### butterchurn（GPU 行程開著）的背景播放，修正後重測
+
+第一次測的時候歌曲已經停在 50 秒，所以修正後重測：
+
+| 檢查 | 結果 |
+|---|---|
+| 打開 visualizer → 「Restart now」 | 有 GPU 行程，butterchurn 在封面上畫，播過 50 秒 ✅ |
+| Home → 關螢幕 3 分鐘（可用記憶體約 4 GB） | 持續播放，播完自動接下一首 ✅。GPU 行程（adj 900）約 29 秒後以 `kill_bg_proc` 結束，播放不受影響：解碼器不在 GPU 行程 |
+| 回到前景 | Gecko 重新啟動 GPU 行程，WebGL 可用，butterchurn 繼續畫 ✅ |
+
+結論：在這支手機上，開 GPU 行程不影響背景播放；README 說的「GPU 行程被結束，解碼器跟著消失」沒有重現。GPU 行程只在 butterchurn 需要時打開的做法照舊（背景時它仍會被結束、回前景再啟動）。
+
+### GPU 行程重啟後 butterchurn 停住（已修正）
+
+使用者回報：從背景回來後 visualizer 不會動。butterchurn 在 `OffscreenCanvas` 的 WebGL2 context 上畫，再複製到看得到的畫布。GPU 行程被結束、Gecko 再啟動一個新的之後，舊 context 不會觸發 `webglcontextlost`，`isContextLost()` 也一直是 false，只是不再畫出東西（讀回的像素是 `[0,0,0,0]`）；butterchurn 的迴圈照跑，畫面停在最後一格。新的 context 正常。
+
+修正（`src/plugins/visualizer/visualizers/butterchurn.ts`）：每 3 秒（以及頁面重新顯示後的第一幀）讀回一個像素。butterchurn 的 context 沒有 alpha，正常時讀到的 alpha 一定是 255（試過未畫、清成透明、隔幾幀都是），失效時是 0；失效就重建 butterchurn。
+
+| 驗證（以 `run-as` 結束測試版的 GPU 行程，PID 改變） | 結果 |
+|---|---|
+| 修正前 | 畫面像素變化 0（停住），繪圖迴圈仍在跑 |
+| 修正後 | 1 秒內恢復轉動 ✅ |
+| 修正後，使用者實測：背景超過 30 秒（GPU 行程被結束）後回到 App | 恢復轉動 ✅ |
+
+### 冷啟動時新介面一片空白（已修正）
+
+強制停止後重新開啟、頁面還原到上次的 `/watch?v=…` 時，有時畫面全黑：`pear-mobile-ui` 的 shadow root 沒有內容，播放器卻照常播放。記錄：YTM 的 Polymer（`music_polymer_inlined_html.js`）先執行了，接著新介面的 `innerHTML` 被 Trusted Types 擋下（`Sink type mismatch violation blocked by CSP`）。原因是 GeckoView 的 loader（`pear-gecko/background.js`）用同步 XHR 讀 bundle，期間頁面的腳本照樣執行，冷啟動時讀取加執行花了約 1.9 秒，擋 YTM 介面的 `blockYtmInterface` 在 bundle 裡，來不及。
+
+修正：loader 在讀 bundle 之前，就用同樣的規則擋 YTM 介面的腳本（新介面開著時）。強制停止、重新開啟三次（都還原到 `/watch?v=…`）：新介面都正常顯示，Polymer 沒有執行，沒有 Trusted Types 錯誤 ✅。
