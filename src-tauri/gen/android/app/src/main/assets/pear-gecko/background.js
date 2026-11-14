@@ -10,6 +10,27 @@ function load(payload, bundleUrl) {
   if (window.top !== window) return;
   const page = window.wrappedJSObject;
   if (page.__pearRendererLoaded) return;
+  // The mobile UI stops YTM's interface as the page starts
+  // (src/mobile-ui/engine/boot.ts, blockYtmInterface), from the bundle read
+  // below. That read is synchronous, but the page's scripts go on meanwhile,
+  // and on a cold start it took long enough (1.9 s) for YTM's interface to
+  // start first; its Trusted Types policy then blocked the UI's rendering,
+  // which stayed empty. The same block, before the read; the bundle's own
+  // takes over. Keep the pattern in step with boot.ts.
+  if (payload.config?.options?.mobileUi ?? true) {
+    const ytmInterface =
+      /\/music_polymer_inlined_html\.js|\/scheduler\.js|\/webcomponents-[\w-]+\.js|\/custom-elements-es5-adapter\.js/;
+    new MutationObserver((records) => {
+      for (const record of records) {
+        for (const node of record.addedNodes) {
+          if (node.localName === 'script' && node.src && ytmInterface.test(node.src)) {
+            node.type = 'javascript/blocked';
+            node.remove();
+          }
+        }
+      }
+    }).observe(document.documentElement, { childList: true, subtree: true });
+  }
   const read = (url) => {
     const xhr = new XMLHttpRequest();
     xhr.open('GET', url, false);
