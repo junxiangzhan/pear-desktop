@@ -584,3 +584,46 @@ ambient-mode 影片模式的光暈是另一個問題：它本來就用 Canvas2D 
 強制停止後重新開啟、頁面還原到上次的 `/watch?v=…` 時，有時畫面全黑：`pear-mobile-ui` 的 shadow root 沒有內容，播放器卻照常播放。記錄：YTM 的 Polymer（`music_polymer_inlined_html.js`）先執行了，接著新介面的 `innerHTML` 被 Trusted Types 擋下（`Sink type mismatch violation blocked by CSP`）。原因是 GeckoView 的 loader（`pear-gecko/background.js`）用同步 XHR 讀 bundle，期間頁面的腳本照樣執行，冷啟動時讀取加執行花了約 1.9 秒，擋 YTM 介面的 `blockYtmInterface` 在 bundle 裡，來不及。
 
 修正：loader 在讀 bundle 之前，就用同樣的規則擋 YTM 介面的腳本（新介面開著時）。強制停止、重新開啟三次（都還原到 `/watch?v=…`）：新介面都正常顯示，Polymer 沒有執行，沒有 Trusted Types 錯誤 ✅。
+
+## 第十六輪：內容行程被結束後接著播放（2026-11-14）
+
+第十五輪的狀況：記憶體緊時先回桌面再關螢幕，MIUI 會結束正在播放的 Gecko 內容行程，`GeckoPage.recover` 重新載入頁面。YTM 介面重新載入後會接著播，新引擎只回到首頁，背景播放就停了。
+
+做法（`src/mobile-ui/engine/session.ts`，新檔）：
+
+- 佇列存在 localStorage（`pear-mobile-ui:queue`）：歌曲（含選單）、續載的 continuation、automix、重複模式。只留目前這首前 25、共 100 首；存的時候拿掉每個端點裡的 `clickTrackingParams`、`trackingParams`（介面用不到，佔一半大小）。50 首約 380 KB（拿掉前 575 KB）。
+- 播放位置另存一筆（`pear-mobile-ui:position`）：第幾首、videoId、秒數、長度、是否在播、時間戳。播放中每 3 秒、播放／暫停／換歌時立刻存；暫停時拖動進度也會存。
+- 「是否在播」是播放器的 `playIntended`（`player.ts`）：載入或開始播放時為真；不是播到結尾的暫停（使用者、媒體通知、其他 App 搶走音訊）、佇列播完、停止時為假。換歌之間的暫停、播放器換曲時的暫停不算。
+- `pagehide`（重新載入、切換帳號、前往登入頁）時在位置上記 `unloaded`。行程被結束時不會有 `pagehide`。
+
+開頁時（`startSession`，在播放器建立之前）：
+
+| 存下的狀態 | 「啟動時繼續播放上一首」開 | 關 |
+|---|---|---|
+| 在播、沒有 `unloaded`、2 分鐘內存的（內容行程或整個 App 被結束） | 佇列放回，從存的位置接著播 | 同左 |
+| 暫停、`unloaded`，或超過 2 分鐘 | 佇列放回，歌曲停在存的位置，按播放才播 | 不放回（並清掉存的狀態） |
+
+也就是：頁面被結束後回來一律接著播（YTM 介面也是不看這個選項，重新載入它的 watch 頁就接著播）；選項只決定 App 啟動時要不要把上一首擺回播放列。App 不會自己開始播一首使用者暫停的歌。
+
+放回的歌（`cueVideo`）在播放器準備好之前等著：要播的話播放器一好就以 `start` 載入（播放器沒照做時，第一次 `timeupdate` 再 `seekTo`）；暫停的話按播放才載入，拖動進度只改起點。`restoreQueue` 只放進空的佇列，並遞增 `playRequest`、`generation`：放回之後使用者點的任何一首都照平常的規則取代它。播放器還沒準備好時點的歌，以前會被丟掉，現在也是等播放器好了就播。
+
+### 驗證（POCO F7 Pro，測試版 `.mobileui`、未登入）
+
+測試版的 APK 是第十五輪那一版只換掉 `assets/pear-gecko/renderer.js`、用同一把除錯金鑰重新簽署（這輪沒有改 Rust 與 Kotlin）。以 `run-as … kill <內容行程>` 結束播放中的內容行程，用 RDP 讀播放器狀態。
+
+| 檢查 | 結果 |
+|---|---|
+| 前景播放到 97 秒時結束內容行程 | 頁面重新載入，佇列放回 96 秒，約 2–3 秒後接著播 ✅ |
+| 安裝新版本時 App 被結束（播放中），重新開啟 | 從 157 秒接著播 ✅ |
+| Home → 關螢幕，第二首播到 18 秒時結束內容行程 | 放回第二首 16 秒，約 5 秒後在背景接著播，之後一直在播（60 秒內每 6 秒檢查一次）✅。`PlaybackService` 仍是前景服務、媒體工作階段 `PLAYING`、AAudio 輸出 `started` |
+| 從媒體通知暫停（`cmd media_session dispatch pause`），結束內容行程 | 放回 104 秒、暫停，播放列顯示這首，沒有載入 ✅；按播放後從 104 秒開始 ✅ |
+| 結束內容行程後，接著播的那首正在載入（狀態 3）時點首頁另一首 | 點的那首帶著它自己的佇列播放，沒有被接著播的那首蓋掉 ✅ |
+| 存的狀態是「在播」但已 10 分鐘前，強制停止後開啟 | 放回 54 秒、暫停 ✅ |
+| 選項關閉、存的狀態是暫停，強制停止後開啟 | 沒有放回，存的狀態清掉 ✅ |
+| 選項關閉、播放中結束內容行程 | 沒有在手機上測：手機有螢幕鎖，測試版沒辦法回到前景（見下），只看程式：「接著播」的判斷在看選項之前 |
+
+注意到的事：
+
+- **整個 App 被結束時，最後幾秒寫的 localStorage 會遺失**：暫停後 3 秒強制停止，開啟時拿到的是暫停前的狀態（在播），所以接著播了；等 12 秒再強制停止就正常。Gecko 的 localStorage 由主行程保管、晚幾秒才寫進磁碟，只結束內容行程時主行程還在，不受影響（上面的暫停測試）。只有「暫停後幾秒內整個 App 被結束、2 分鐘內又開啟」會把暫停當成在播。
+- **沒有前景服務時，背景的 App 沒有網路**：測試版在螢幕關閉時重新啟動、還沒播過歌，`PlaybackService` 沒有啟動，Android 擋掉它的網路（`dumpsys netpolicy`：`blocked=APP_BACKGROUND`）。這時結束內容行程，重新載入卡在 YTM 的 service worker 約 60 秒（`Terminating ServiceWorker … because of grace timeout`），innertube 請求都是 `NetworkError`。播放中不會這樣：`PlaybackService` 一旦啟動就一直是前景服務（Rust 從不叫它停），被結束後重新載入、接著播都在它還在的時候完成。
+- 冷啟動到首頁（選項關閉時從 `/` 開始）四次裡有一次新介面空白：和第十五輪一樣是 Trusted Types 擋下 Solid 模板的 `innerHTML`，跟這輪的改動無關，還沒處理。
