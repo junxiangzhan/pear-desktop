@@ -96,9 +96,8 @@ const domReady = () =>
 
 /** The player's context: script URLs, API key, client version, flags */
 const playerContext = () =>
-  config<Record<string, Record<string, unknown>>>(
-    'WEB_PLAYER_CONTEXT_CONFIGS',
-  )?.WEB_PLAYER_CONTEXT_CONFIG_ID_MUSIC_WATCH;
+  config<Record<string, Record<string, unknown>>>('WEB_PLAYER_CONTEXT_CONFIGS')
+    ?.WEB_PLAYER_CONTEXT_CONFIG_ID_MUSIC_WATCH;
 
 /**
  * The client flag (an experiment, on for some visitors) that has the player
@@ -134,10 +133,7 @@ const playerApplication = () =>
   (window as { yt?: { player?: { Application?: PlayerApplication } } }).yt
     ?.player?.Application;
 
-let scriptPolicy:
-  | Pick<TrustedTypePolicy, 'createScriptURL'>
-  | null
-  | undefined;
+let scriptPolicy: Pick<TrustedTypePolicy, 'createScriptURL'> | null | undefined;
 
 /** The page enforces Trusted Types: script URLs go through a policy */
 const scriptUrl = (url: string) => {

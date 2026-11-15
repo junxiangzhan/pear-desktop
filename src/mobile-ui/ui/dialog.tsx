@@ -20,10 +20,7 @@ export const DialogView = () => (
             <button class="text-button" onClick={() => back()}>
               {shown.cancel ?? s('cancel')}
             </button>
-            <button
-              class="text-button"
-              onClick={() => back(shown.onConfirm)}
-            >
+            <button class="text-button" onClick={() => back(shown.onConfirm)}>
               {shown.confirm}
             </button>
           </div>

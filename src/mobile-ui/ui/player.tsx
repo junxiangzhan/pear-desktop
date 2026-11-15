@@ -71,7 +71,9 @@ const PlayPause = (props: { size?: number }) => (
     }}
   >
     <Show
-      fallback={<Icon name={isPlaying() ? 'pause' : 'play'} size={props.size} />}
+      fallback={
+        <Icon name={isPlaying() ? 'pause' : 'play'} size={props.size} />
+      }
       when={loading()}
     >
       {/* The song is on its way (the first one can take half a minute) */}
@@ -563,9 +565,7 @@ const Panel = (props: { onTab: () => void }) => {
             <LyricsView browseId={tabs.error ? undefined : tabs()?.lyrics} />
           </Match>
           <Match when={tab() === 'related'}>
-            <RelatedView
-              browseId={tabs.error ? undefined : tabs()?.related}
-            />
+            <RelatedView browseId={tabs.error ? undefined : tabs()?.related} />
           </Match>
         </Switch>
       </div>
@@ -602,7 +602,10 @@ const Cover = (props: { image?: string; atTop: () => boolean }) => {
             alt=""
             class="player-art"
             src={props.image}
-            {...swipeDown(() => back(), () => props.atTop())}
+            {...swipeDown(
+              () => back(),
+              () => props.atTop(),
+            )}
           />
         }
         when={video()}
@@ -641,118 +644,120 @@ export const PlayerSheet = () => {
   return (
     <Presence when={playerOpen()}>
       {() => (
-      <div class="player-sheet" classList={{ ad: adShowing() }}>
-        <header class="top-bar" {...swipeDown(() => back(), atTop)}>
-          <button
-            aria-label={s('collapse')}
-            class="icon-button"
-            onClick={() => back()}
-          >
-            <Icon name="collapse" />
-          </button>
-          <span class="top-title" />
-          <button
-            aria-label={s('queue')}
-            class="icon-button panel-shortcut"
-            onClick={showPanel}
-          >
-            <Icon name="queue" />
-          </button>
-        </header>
-        <Show
-          fallback={
-            <Show
-              fallback={<p class="message">{s('nothingPlaying')}</p>}
-              when={loading()}
+        <div class="player-sheet" classList={{ ad: adShowing() }}>
+          <header class="top-bar" {...swipeDown(() => back(), atTop)}>
+            <button
+              aria-label={s('collapse')}
+              class="icon-button"
+              onClick={() => back()}
             >
-              <div class="message">
-                <span class="spinner" style={{ '--size': '40px' }} />
-              </div>
-            </Show>
-          }
-          when={nowPlaying()}
-        >
-          {(song) => (
-            <div class="player-layout" ref={setLayout}>
-              <div class="player-main">
-                <Cover atTop={atTop} image={song().thumbnail} />
-                <div class="player-heading">
-                  <div class="player-titles">
-                    <div class="player-title">
-                      <AdBadge />
-                      {shown(song()).title}
+              <Icon name="collapse" />
+            </button>
+            <span class="top-title" />
+            <button
+              aria-label={s('queue')}
+              class="icon-button panel-shortcut"
+              onClick={showPanel}
+            >
+              <Icon name="queue" />
+            </button>
+          </header>
+          <Show
+            fallback={
+              <Show
+                fallback={<p class="message">{s('nothingPlaying')}</p>}
+                when={loading()}
+              >
+                <div class="message">
+                  <span class="spinner" style={{ '--size': '40px' }} />
+                </div>
+              </Show>
+            }
+            when={nowPlaying()}
+          >
+            {(song) => (
+              <div class="player-layout" ref={setLayout}>
+                <div class="player-main">
+                  <Cover atTop={atTop} image={song().thumbnail} />
+                  <div class="player-heading">
+                    <div class="player-titles">
+                      <div class="player-title">
+                        <AdBadge />
+                        {shown(song()).title}
+                      </div>
+                      <Show
+                        fallback={
+                          <div class="subtitle">{shown(song()).artist}</div>
+                        }
+                        when={!adShowing() && song().artistOpen}
+                      >
+                        {(target) => (
+                          <button
+                            class="subtitle artist-link"
+                            onClick={() =>
+                              go({ name: 'browse', target: target() })
+                            }
+                          >
+                            {song().artist}
+                          </button>
+                        )}
+                      </Show>
                     </div>
-                    <Show
-                      fallback={
-                        <div class="subtitle">{shown(song()).artist}</div>
-                      }
-                      when={!adShowing() && song().artistOpen}
-                    >
-                      {(target) => (
-                        <button
-                          class="subtitle artist-link"
-                          onClick={() => go({ name: 'browse', target: target() })}
-                        >
-                          {song().artist}
-                        </button>
-                      )}
+                    <Show when={!adShowing()}>
+                      <Rating />
                     </Show>
                   </div>
-                  <Show when={!adShowing()}>
-                    <Rating />
-                  </Show>
-                </div>
-                <Seek />
-                <div class="controls">
-                  <button
-                    aria-label={s('shuffle')}
-                    class="icon-button"
-                    onClick={shuffle}
-                  >
-                    <Icon name="shuffle" />
-                  </button>
-                  <button
-                    aria-label={s('previous')}
-                    class="icon-button large"
-                    // As the bar's: during an ad, "previous" would only seek
-                    // the ad; next skips it with the song, as in YTM
-                    disabled={adShowing()}
-                    onClick={() => previous()}
-                  >
-                    <Icon name="previous" size={36} />
-                  </button>
-                  <div class="play-circle">
-                    <PlayPause size={40} />
+                  <Seek />
+                  <div class="controls">
+                    <button
+                      aria-label={s('shuffle')}
+                      class="icon-button"
+                      onClick={shuffle}
+                    >
+                      <Icon name="shuffle" />
+                    </button>
+                    <button
+                      aria-label={s('previous')}
+                      class="icon-button large"
+                      // As the bar's: during an ad, "previous" would only seek
+                      // the ad; next skips it with the song, as in YTM
+                      disabled={adShowing()}
+                      onClick={() => previous()}
+                    >
+                      <Icon name="previous" size={36} />
+                    </button>
+                    <div class="play-circle">
+                      <PlayPause size={40} />
+                    </div>
+                    <button
+                      aria-label={s('next')}
+                      class="icon-button large"
+                      onClick={() => {
+                        next().catch(console.error);
+                      }}
+                    >
+                      <Icon name="next" size={36} />
+                    </button>
+                    <button
+                      aria-label={s('repeat')}
+                      aria-pressed={repeatMode() !== 'NONE'}
+                      class="icon-button repeat"
+                      classList={{ on: repeatMode() !== 'NONE' }}
+                      onClick={cycleRepeat}
+                    >
+                      <Icon
+                        name={repeatMode() === 'ONE' ? 'repeat-one' : 'repeat'}
+                      />
+                    </button>
                   </div>
-                  <button
-                    aria-label={s('next')}
-                    class="icon-button large"
-                    onClick={() => {
-                      next().catch(console.error);
-                    }}
-                  >
-                    <Icon name="next" size={36} />
-                  </button>
-                  <button
-                    aria-label={s('repeat')}
-                    aria-pressed={repeatMode() !== 'NONE'}
-                    class="icon-button repeat"
-                    classList={{ on: repeatMode() !== 'NONE' }}
-                    onClick={cycleRepeat}
-                  >
-                    <Icon
-                      name={repeatMode() === 'ONE' ? 'repeat-one' : 'repeat'}
-                    />
-                  </button>
+                </div>
+                <div class="player-panel-wrap" ref={setPanel}>
+                  <Panel onTab={showPanel} />
                 </div>
               </div>
-              <div class="player-panel-wrap" ref={setPanel}>
-                <Panel onTab={showPanel} />
-              </div>
-            </div>
-          )}
-        </Show>
-      </div>
+            )}
+          </Show>
+        </div>
       )}
     </Presence>
   );

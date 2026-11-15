@@ -98,7 +98,8 @@ if ('mozInputSource' in MouseEvent.prototype) {
       const control = controlOf(touched);
       if (control && path.includes(control)) return;
       // A label passes its click on to its control
-      const label = touched instanceof Element ? touched.closest('label') : null;
+      const label =
+        touched instanceof Element ? touched.closest('label') : null;
       if (label?.control && path.includes(label.control)) return;
       event.preventDefault();
       event.stopImmediatePropagation();

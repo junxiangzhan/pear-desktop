@@ -19,7 +19,10 @@ const ipc = () =>
   (
     window as {
       ipcRenderer?: {
-        on(channel: string, listener: (event: unknown, ...args: unknown[]) => void): void;
+        on(
+          channel: string,
+          listener: (event: unknown, ...args: unknown[]) => void,
+        ): void;
         invoke(channel: string, ...args: unknown[]): Promise<unknown>;
       };
     }
@@ -27,8 +30,9 @@ const ipc = () =>
 
 const readEnabled = () => {
   const plugins =
-    (window as { mainConfig?: { plugins?: PluginConfigs } }).mainConfig?.plugins?.getPlugins() ??
-    {};
+    (
+      window as { mainConfig?: { plugins?: PluginConfigs } }
+    ).mainConfig?.plugins?.getPlugins() ?? {};
   return new Set(
     Object.entries(plugins)
       .filter(([, config]) => config?.enabled)
@@ -43,7 +47,9 @@ ipc()?.on('plugin:enable', (_, id) =>
   setEnabled((ids) => new Set([...ids, String(id)])),
 );
 ipc()?.on('plugin:unload', (_, id) =>
-  setEnabled((ids) => new Set([...ids].filter((other) => other !== String(id)))),
+  setEnabled(
+    (ids) => new Set([...ids].filter((other) => other !== String(id))),
+  ),
 );
 
 /** Whether a plugin is on (reactive) */
@@ -101,11 +107,14 @@ const setSpeed = (speed: number) =>
     new CustomEvent('pear:set-playback-speed', { detail: speed }),
   );
 
-const currentSpeed = () =>
-  document.querySelector('video')?.playbackRate ?? 1;
+const currentSpeed = () => document.querySelector('video')?.playbackRate ?? 1;
 
 /** A choice of a sub-menu: run locally, the current one marked */
-const choice = (label: string, selected: boolean, run: () => void): MenuEntry => ({
+const choice = (
+  label: string,
+  selected: boolean,
+  run: () => void,
+): MenuEntry => ({
   label,
   icon: selected ? 'PEAR_CHECK' : undefined,
   action: { kind: 'local', run },

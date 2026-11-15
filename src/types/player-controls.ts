@@ -19,7 +19,10 @@ export interface PlayerControls {
   /** What the queue knows of a song: the title YTM shows, its album */
   songDetails(videoId: string): { title?: string; album?: string } | undefined;
   /** YouTube Music's API, for what used to ask YTM's network manager */
-  innertube<T = unknown>(path: string, body: Record<string, unknown>): Promise<T>;
+  innertube<T = unknown>(
+    path: string,
+    body: Record<string, unknown>,
+  ): Promise<T>;
   /** What the player page's cover shows: the song's picture, or a video */
   cover(): Cover;
   onCoverChange(listener: (cover: Cover) => void): () => void;

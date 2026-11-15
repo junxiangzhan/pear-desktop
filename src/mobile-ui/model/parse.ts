@@ -77,9 +77,7 @@ const PAGE_TYPES: Record<string, PageType> = {
   MUSIC_PAGE_TYPE_LIBRARY_ARTIST: 'artist',
 };
 
-export const browseTarget = (
-  endpoint: Node,
-): BrowseTarget | undefined => {
+export const browseTarget = (endpoint: Node): BrowseTarget | undefined => {
   const browse = endpoint?.browseEndpoint;
   const browseId = str(browse?.browseId);
   if (!browseId) return undefined;
@@ -436,7 +434,9 @@ const subscription = (node: Node): Subscription | undefined => {
   return {
     channelId,
     subscribed: (button.subscribed as unknown) === true,
-    count: text(button.shortSubscriberCountText ?? button.subscriberCountText) || undefined,
+    count:
+      text(button.shortSubscriberCountText ?? button.subscriberCountText) ||
+      undefined,
     subscribeText: text(button.unsubscribedButtonText),
     subscribedText: text(button.subscribedButtonText),
     subscribe: findEndpoint(button.serviceEndpoints, 'subscribeEndpoint'),
@@ -786,7 +786,12 @@ const parseSetting = (node: Obj): SettingItem | undefined => {
         }),
       };
     case 'settingReadOnlyItemRenderer':
-      return { kind: 'link', title, summary, endpoint: data.navigationEndpoint };
+      return {
+        kind: 'link',
+        title,
+        summary,
+        endpoint: data.navigationEndpoint,
+      };
     case 'settingActionRenderer': {
       const endpoint = data.serviceEndpoint;
       if (!endpoint) return undefined;

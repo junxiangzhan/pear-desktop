@@ -115,7 +115,10 @@ export class YTMusic implements LyricProvider {
 
     // The mobile UI: no YTM network manager (its <ytmusic-app> is in the
     // page's HTML but never upgraded), the engine's API client
-    if (!app?.networkManager) return playerControls()?.innertube<NextData>('/next', { videoId }) ?? null;
+    if (!app?.networkManager)
+      return (
+        playerControls()?.innertube<NextData>('/next', { videoId }) ?? null
+      );
 
     return app.networkManager.fetch<
       NextData,
@@ -142,8 +145,9 @@ export class YTMusic implements LyricProvider {
     const app = document.querySelector<MusicPlayerAppElement>('ytmusic-app');
     if (!app?.networkManager) {
       return (
-        (await playerControls()?.innertube<BrowseData>('/browse', { browseId })) ??
-        {}
+        (await playerControls()?.innertube<BrowseData>('/browse', {
+          browseId,
+        })) ?? {}
       );
     }
     return await app.networkManager.fetch<BrowseData, { browseId: string }>(

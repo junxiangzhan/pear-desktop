@@ -164,7 +164,9 @@ const Accounts = (props: { title: string; onBack: () => void }) => {
                   <button
                     class="row account-row"
                     disabled={entry.selected || !entry.signinUrl}
-                    onClick={() => entry.signinUrl && switchAccount(entry.signinUrl)}
+                    onClick={() =>
+                      entry.signinUrl && switchAccount(entry.signinUrl)
+                    }
                   >
                     <Show
                       fallback={
@@ -174,12 +176,16 @@ const Accounts = (props: { title: string; onBack: () => void }) => {
                       }
                       when={entry.photo}
                     >
-                      {(photo) => <img alt="" class="avatar large" src={photo()} />}
+                      {(photo) => (
+                        <img alt="" class="avatar large" src={photo()} />
+                      )}
                     </Show>
                     <span class="row-text">
                       <span class="title">{entry.name}</span>
                       <span class="subtitle">
-                        {[entry.handle, entry.byline].filter(Boolean).join(' · ')}
+                        {[entry.handle, entry.byline]
+                          .filter(Boolean)
+                          .join(' · ')}
                       </span>
                     </span>
                     <Show when={entry.selected}>
@@ -395,38 +401,38 @@ const AccountSheetBody = () => {
             )}
           </Show>
           <Show when={!accounts()}>
-          <Show
-            fallback={
-              <>
-                <AccountHeader onAccounts={setAccounts} />
-                <h2 class="sheet-title">{s('appMenu')}</h2>
-              </>
-            }
-            when={path().length}
-          >
-            <div class="menu-head">
-              <button
-                aria-label={s('back')}
-                class="icon-button"
-                onClick={() => setPath((open) => open.slice(0, -1))}
-              >
-                <Icon name="back" />
-              </button>
-              <h2 class="sheet-title">{level().title}</h2>
-            </div>
-          </Show>
-          <Show
-            fallback={<p class="message">{s('loading')}</p>}
-            when={!menu.loading || menu()}
-          >
-            <MenuLevel
-              items={level().items}
-              // Labels and checks change with each switch (a plugin
-              // turned on gets its own submenu): read the tree again
-              onChanged={() => refetch()}
-              onOpen={(item) => setPath((open) => [...open, item.label])}
-            />
-          </Show>
+            <Show
+              fallback={
+                <>
+                  <AccountHeader onAccounts={setAccounts} />
+                  <h2 class="sheet-title">{s('appMenu')}</h2>
+                </>
+              }
+              when={path().length}
+            >
+              <div class="menu-head">
+                <button
+                  aria-label={s('back')}
+                  class="icon-button"
+                  onClick={() => setPath((open) => open.slice(0, -1))}
+                >
+                  <Icon name="back" />
+                </button>
+                <h2 class="sheet-title">{level().title}</h2>
+              </div>
+            </Show>
+            <Show
+              fallback={<p class="message">{s('loading')}</p>}
+              when={!menu.loading || menu()}
+            >
+              <MenuLevel
+                items={level().items}
+                // Labels and checks change with each switch (a plugin
+                // turned on gets its own submenu): read the tree again
+                onChanged={() => refetch()}
+                onOpen={(item) => setPath((open) => [...open, item.label])}
+              />
+            </Show>
           </Show>
         </div>
       </div>

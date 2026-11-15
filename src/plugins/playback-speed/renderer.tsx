@@ -34,7 +34,9 @@ const sliderContainer = document.createElement('div');
 const onSpeedRequest = (event: Event) => {
   const requested = Number((event as CustomEvent<unknown>).detail);
   if (!Number.isFinite(requested)) return;
-  setSpeed(Math.min(Math.max(MIN_PLAYBACK_SPEED, requested), MAX_PLAYBACK_SPEED));
+  setSpeed(
+    Math.min(Math.max(MIN_PLAYBACK_SPEED, requested), MAX_PLAYBACK_SPEED),
+  );
   const video = document.querySelector<HTMLVideoElement>('video');
   if (video) video.playbackRate = speed();
 };

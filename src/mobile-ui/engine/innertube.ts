@@ -34,7 +34,9 @@ export const authorization = async () => {
   ] as const) {
     const value = cookie(name);
     if (value) {
-      parts.push(`${scheme} ${time}_${await sha1(`${time} ${value} ${origin}`)}`);
+      parts.push(
+        `${scheme} ${time}_${await sha1(`${time} ${value} ${origin}`)}`,
+      );
     }
   }
   return parts.length ? parts.join(' ') : undefined;
