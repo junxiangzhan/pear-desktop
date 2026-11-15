@@ -299,11 +299,11 @@ pub(super) fn build(app: &AppHandle, data: &MenuData) -> tauri::Result<NativeMen
                 config.get_bool("options.fullscreen"),
                 true,
             ),
-            // Pear's own UI over YTM (src/mobile-ui); unset means on
+            // Pear's own UI over YTM (src/mobile-ui)
             b.check(
                 "opt:mobileUi",
                 &b.label("view.submenu.mobile-ui"),
-                config.get("options.mobileUi").as_bool().unwrap_or(true),
+                config.mobile_ui(),
                 true,
             ),
         ]);

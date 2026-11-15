@@ -8,7 +8,7 @@
 
 - music.youtube.com 照常載入，YTM 繼續負責登入、播放、待播清單、廣告處理，以及所有掛在播放器上的插件。`ytmusic-app-layout` 設成 `opacity: 0`，新介面用 Solid 畫在 shadow root（`<pear-mobile-ui>`）裡，位置在 in-app-menu 的標題列下方。YTM 的彈出視窗（登入提示、儲存至播放清單、toast）仍然顯示在新介面上方；Premium 廣告條則藏起來。
 - **只有 Android 預設開啟**（`__PEAR_MOBILE__`），桌面版完全不受影響：沒開啟時 `startMobileUi()` 直接返回，不會掛上任何東西。
-- 開關是設定檔的 `options.mobileUi`，在 Android 版 in-app menu 的「檢視 → Pear 行動版介面（預覽）」切換，切換後頁面會重新載入。沒設定過時，Android 為開、桌面為關。桌面開發時可以在 localStorage 設 `pear-mobile-ui-dev` = `on` 強制開啟（例如加在 `PEAR_INJECT_FILE` 載入的 bundle 最前面）。
+- 開關是設定檔的 `options.mobileUi`，在 Android 版 in-app menu 的「檢視 → Pear 行動版介面（預覽）」切換，切換後頁面會重新載入。沒設定過時是關的（Android 也是：新介面還是預覽，要自己開啟）。桌面開發時可以在 localStorage 設 `pear-mobile-ui-dev` = `on` 強制開啟（例如加在 `PEAR_INJECT_FILE` 載入的 bundle 最前面）。
 
 ## 分層
 
