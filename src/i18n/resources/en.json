@@ -193,6 +193,7 @@
         "label": "View",
         "submenu": {
           "force-reload": "Force Reload",
+          "mobile-ui": "Pear mobile UI (preview)",
           "reload": "Reload",
           "reset-zoom": "Actual Size",
           "toggle-fullscreen": "Toggle Full Screen",

@@ -1,4 +1,9 @@
 import { t } from '@/i18n';
+import {
+  mobileUiMount,
+  withPlayerControls,
+  type PlayerControls,
+} from '@/types/player-controls';
 import { createPlugin } from '@/utils';
 import { waitForElement } from '@/utils/wait-for-element';
 
@@ -40,9 +45,15 @@ export default createPlugin({
     lastMediaType: null as 'video' | 'image' | null,
     lastVideoSource: null as string | null,
     lastImageSource: null as string | null,
+    // Counts starts and stops: a start that awaited past a stop (and maybe a
+    // new start) must not set up its interval and watchers too
+    run: 0,
+    unwatchCover: null as (() => void) | null,
 
     async start({ getConfig }) {
+      const run = ++this.run;
       const config = await getConfig();
+      if (run !== this.run) return;
       this.interpolationTime = config.interpolationTime;
       this.buffer = config.buffer;
       this.qualityRatio = config.quality;
@@ -59,19 +70,23 @@ export default createPlugin({
       const video = await waitForElement<HTMLVideoElement>(
         '.html5-video-container > video',
       );
+      if (run !== this.run) return;
 
       const videoWrapper = document.querySelector(
         '#song-video > .player-wrapper',
       );
 
-      const injectBlurImage = () => {
-        if (!songImage || !image) return null;
+      const injectBlurImage = (
+        host: HTMLElement | null = songImage,
+        source = image?.src,
+      ) => {
+        if (!host || !source) return null;
 
-        this.lastImageSource = image.src;
+        this.lastImageSource = source;
 
         const blurImage = document.createElement('img');
         blurImage.classList.add('html5-blur-image');
-        blurImage.src = image.src;
+        blurImage.src = source;
 
         this.update = () => {
           if (this.isFullscreen) blurImage.classList.add('fullscreen');
@@ -85,7 +100,7 @@ export default createPlugin({
         this.update();
 
         /* injecting */
-        songImage.prepend(blurImage);
+        host.prepend(blurImage);
 
         /* cleanup */
         return () => {
@@ -93,8 +108,11 @@ export default createPlugin({
         };
       };
 
-      const injectBlurVideo = () => {
-        if (!songVideo || !video || !videoWrapper) return null;
+      const injectBlurVideo = (
+        host: Element | null = videoWrapper,
+        playback: EventTarget | null = songVideo,
+      ) => {
+        if (!playback || !video || !host) return null;
 
         this.lastVideoSource = video.src;
 
@@ -181,18 +199,18 @@ export default createPlugin({
             Math.max(1, Math.ceil(1000 / this.buffer)),
           );
         };
-        songVideo.addEventListener('pause', onPause);
-        songVideo.addEventListener('play', onPlay);
+        playback.addEventListener('pause', onPause);
+        playback.addEventListener('play', onPlay);
 
         /* injecting */
-        videoWrapper.prepend(blurCanvas);
+        host.prepend(blurCanvas);
 
         /* cleanup */
         return () => {
           if (canvasInterval) clearInterval(canvasInterval);
 
-          songVideo.removeEventListener('pause', onPause);
-          songVideo.removeEventListener('play', onPlay);
+          playback.removeEventListener('pause', onPause);
+          playback.removeEventListener('play', onPlay);
 
           if (blurCanvas.isConnected) blurCanvas.remove();
         };
@@ -254,6 +272,41 @@ export default createPlugin({
         /* fallback ticker for when the observer isn't triggered */
         this.interval = setInterval(injectBlurElement, 1000);
       }
+
+      /*
+       * The mobile UI (YTM's player page is not in the page): the glow goes
+       * behind its cover, of the picture or the video the cover shows
+       */
+      const injectInMobileUi = (controls: PlayerControls) => {
+        if (run !== this.run) return;
+        const mount = mobileUiMount('ambient-mode', 'pear-ambient-mode');
+        if (!mount) return;
+        let shown: string | null = null;
+        const sync = (force?: boolean) => {
+          // The mount is rendered only while the player page is open
+          const cover = controls.cover();
+          const now = !mount.getClientRects().length
+            ? null
+            : cover.video
+              ? `video:${video?.src ?? ''}`
+              : `image:${cover.image ?? ''}`;
+          if (!force && now === shown) return;
+          shown = now;
+          this.unregister?.();
+          this.unregister = null;
+          if (!now) return;
+          this.lastMediaType = cover.video ? 'video' : 'image';
+          this.unregister =
+            (cover.video
+              ? injectBlurVideo(mount, video)
+              : injectBlurImage(mount, cover.image)) ?? null;
+        };
+        this.unwatchCover = controls.onCoverChange(() => sync());
+        /* the page opening and closing, and a video's next source */
+        this.interval = setInterval(sync, 1000);
+        sync(true);
+      };
+      if (!playerPage) withPlayerControls(injectInMobileUi);
     },
     onConfigChange(newConfig) {
       this.interpolationTime = newConfig.interpolationTime;
@@ -267,6 +320,9 @@ export default createPlugin({
       this.update?.();
     },
     stop() {
+      this.run++;
+      this.unwatchCover?.();
+      this.unwatchCover = null;
       this.update = null;
       this.unregister?.();
       if (this.interval) clearInterval(this.interval);

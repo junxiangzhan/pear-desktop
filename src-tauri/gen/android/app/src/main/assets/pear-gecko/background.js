@@ -4,18 +4,19 @@
 // synchronously before the bundle runs. The snapshot comes from Rust over
 // native messaging (src-tauri/src/gecko_bridge.rs), and every config change
 // re-registers the code, so the next page load starts with it.
+//
+// The bundle's source is part of the registered code too, read once here.
+// The content script used to read it with a synchronous XHR, but the page's
+// scripts go on during one: on a cold start (about 1.9 s) YTM's own scripts
+// ran before the bundle, and Trusted Types then blocked the mobile UI's
+// rendering (it stayed empty). Now the bundle runs before any of the page's
+// scripts.
 
 // Runs in the content script (isolated world) at document_start
-function load(payload, bundleUrl) {
+function load(payload, bundle) {
   if (window.top !== window) return;
   const page = window.wrappedJSObject;
   if (page.__pearRendererLoaded) return;
-  const read = (url) => {
-    const xhr = new XMLHttpRequest();
-    xhr.open('GET', url, false);
-    xhr.send();
-    return xhr.responseText;
-  };
   page.__PEAR_STORED_CONFIG__ = cloneInto(payload.config, window);
   page.__PEAR_UNAVAILABLE_PLUGINS__ = cloneInto(payload.unavailable, window);
   page.__PEAR_MOBILE__ = true;
@@ -44,7 +45,7 @@ function load(payload, bundleUrl) {
     { cloneFunctions: true },
   );
 
-  run(`${read(bundleUrl)}\n//# sourceURL=pear-renderer.js`);
+  run(`${bundle}\n//# sourceURL=pear-renderer.js`);
 }
 
 const port = browser.runtime.connectNative('pear');
@@ -59,14 +60,13 @@ const invoke = (cmd, args = {}) =>
   });
 
 let payload;
+let bundle;
 let registered;
 // One registration at a time, in the order of the config changes
 let queue = Promise.resolve();
 const register = () => {
   queue = queue.then(async () => {
-    const args = [payload, browser.runtime.getURL('renderer.js')]
-      .map((arg) => JSON.stringify(arg))
-      .join(', ');
+    const args = [payload, bundle].map((arg) => JSON.stringify(arg)).join(', ');
     const previous = registered;
     registered = await browser.contentScripts.register({
       matches: ['https://music.youtube.com/*'],
@@ -131,6 +131,9 @@ port.onMessage.addListener(({ m }) => {
   if ('event' in message) {
     if (message.event === 'pear:config' && payload) {
       payload.config = message.payload;
+      // Rust recomputes the list with each change (the mobile UI switch moves
+      // plugins in and out of it)
+      if (message.unavailable) payload.unavailable = message.unavailable;
       setProxy(payload.config.options?.proxy);
       syncBlocking(payload.config);
       register().catch(report);
@@ -148,7 +151,9 @@ const report = (error) =>
   browser.runtime.sendNativeMessage('pear', { error: String(error?.stack ?? error) });
 
 const start = async () => {
+  const source = fetch(browser.runtime.getURL('renderer.js')).then((response) => response.text());
   payload = await invoke('gecko_payload');
+  bundle = await source;
   setProxy(payload.config.options?.proxy);
   syncBlocking(payload.config);
   await register();

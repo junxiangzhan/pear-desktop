@@ -20,6 +20,7 @@ import {
 } from './loader/renderer';
 import { startingPages } from './providers/extracted-data';
 import { setupSongInfo } from './providers/song-info-front';
+import { playerControls } from './types/player-controls';
 
 import type { MusicPlayer } from '@/types/music-player';
 import type { MusicPlayerAppElement } from '@/types/music-player-app-element';
@@ -31,6 +32,12 @@ import type { SearchBoxElement } from '@/types/search-box-element';
 setTheme('dark');
 
 let api: (Element & MusicPlayer) | null = null;
+
+/**
+ * The mobile UI's own player controls: with them, YTM's player bar, which
+ * the commands below press, is not in the page
+ */
+const controls = playerControls;
 let isPluginLoaded = false;
 let isApiLoaded = false;
 let firstDataLoaded = false;
@@ -70,11 +77,13 @@ async function onApiLoaded() {
     );
 
   window.ipcRenderer.on('peard:previous-video', () => {
+    if (controls()) return controls()?.previous();
     document
       .querySelector<HTMLElement>('.previous-button.ytmusic-player-bar')
       ?.click();
   });
   window.ipcRenderer.on('peard:next-video', () => {
+    if (controls()) return controls()?.next();
     document
       .querySelector<HTMLElement>('.next-button.ytmusic-player-bar')
       ?.click();
@@ -92,6 +101,7 @@ async function onApiLoaded() {
   window.ipcRenderer.on('peard:seek-to', (_, t: number) => api!.seekTo(t));
   window.ipcRenderer.on('peard:seek-by', (_, t: number) => api!.seekBy(t));
   window.ipcRenderer.on('peard:shuffle', () => {
+    if (controls()) return controls()?.shuffle();
     document
       .querySelector<HTMLElement & { queue: { shuffle: () => void } }>(
         'ytmusic-player-bar',
@@ -115,6 +125,7 @@ async function onApiLoaded() {
   window.ipcRenderer.on(
     'peard:update-like',
     (_, status: 'LIKE' | 'DISLIKE' = 'LIKE') => {
+      if (controls()) return controls()?.setLike(status);
       document
         .querySelector<
           HTMLElement & { updateLikeStatus: (status: string) => void }
@@ -124,6 +135,10 @@ async function onApiLoaded() {
   );
   window.ipcRenderer.on('peard:switch-repeat', (_, repeat = 1) => {
     for (let i = 0; i < repeat; i++) {
+      if (controls()) {
+        controls()?.cycleRepeat();
+        continue;
+      }
       document
         .querySelector<HTMLElement & { onRepeatButtonClick: () => void }>(
           'ytmusic-player-bar',
@@ -329,13 +344,19 @@ async function onApiLoaded() {
   }
   resumeAudio();
 
+  // One plugin failing (one that expects YTM's interface, say) must not
+  // keep the API from the ones after it
   for (const [id, plugin] of Object.entries(getAllLoadedRendererPlugins())) {
     if (typeof plugin.renderer !== 'function') {
-      await plugin.renderer?.onPlayerApiReady?.call(
-        plugin.renderer,
-        api!,
-        createContext(id),
-      );
+      try {
+        await plugin.renderer?.onPlayerApiReady?.call(
+          plugin.renderer,
+          api!,
+          createContext(id),
+        );
+      } catch (error) {
+        console.error(`[${id}] onPlayerApiReady failed`, error);
+      }
     }
   }
 
@@ -373,10 +394,15 @@ async function onApiLoaded() {
 
   // Navigate to "Starting page"
   const startingPage: string = window.mainConfig.get('options.startingPage');
-  if (startingPage && startingPages[startingPage]) {
-    document
-      .querySelector<MusicPlayerAppElement>('ytmusic-app')
-      ?.navigate(startingPages[startingPage]);
+  // In the mobile UI the ytmusic-app element from YTM's HTML is never
+  // upgraded, so it has no navigate
+  const app = document.querySelector<MusicPlayerAppElement>('ytmusic-app');
+  if (
+    startingPage &&
+    startingPages[startingPage] &&
+    typeof app?.navigate === 'function'
+  ) {
+    app.navigate(startingPages[startingPage]);
   }
 
   // Remove upgrade button
@@ -480,11 +506,15 @@ const main = async () => {
     if (api) {
       const plugin = getLoadedRendererPlugin(id);
       if (plugin && typeof plugin.renderer !== 'function') {
-        await plugin.renderer?.onPlayerApiReady?.call(
-          plugin.renderer,
-          api,
-          createContext(id),
-        );
+        try {
+          await plugin.renderer?.onPlayerApiReady?.call(
+            plugin.renderer,
+            api,
+            createContext(id),
+          );
+        } catch (error) {
+          console.error(`[${id}] onPlayerApiReady failed`, error);
+        }
       }
     }
   });

@@ -15,6 +15,8 @@ declare module 'butterchurn' {
       canvas: HTMLCanvasElement,
       opts: ButterchurnOptions,
     );
+    /** Of its internal canvas (no alpha), which it copies onto `canvas` */
+    readonly gl: WebGL2RenderingContext | null;
     loseGLContext(): void;
     connectAudio(audioNode: AudioNode): void;
     disconnectAudio(audioNode: AudioNode): void;

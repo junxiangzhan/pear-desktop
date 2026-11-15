@@ -1,4 +1,5 @@
 import { t } from '@/i18n';
+import { mobileUiMount } from '@/types/player-controls';
 import { createPlugin } from '@/utils';
 
 import emptyStyle from './empty-player.css?inline';
@@ -178,7 +179,10 @@ export default createPlugin({
         return;
       }
 
+      // The mobile UI: over its player page's cover (YTM's player is not
+      // in the page)
       const visualizerContainer =
+        mobileUiMount('visualizer', 'pear-visualizer') ??
         document.querySelector<HTMLElement>('#player');
       if (!visualizerContainer) {
         return;
@@ -208,7 +212,7 @@ export default createPlugin({
         this.props.audioSource,
         canvas,
         gainNode,
-        video.captureStream(),
+        video.captureStream?.() ?? new MediaStream(),
         config,
       );
 

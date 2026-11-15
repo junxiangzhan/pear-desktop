@@ -57,6 +57,8 @@ pub(super) fn dispatch(app: &AppHandle, id: &str) {
             "startAtLogin" => crate::window::set_start_at_login(app, checked),
             #[cfg(target_os = "android")]
             "fullscreen" => crate::android_app::set_fullscreen(app, checked),
+            // The page picks its UI as it starts
+            "mobileUi" => page::reload(app),
             "trayClickPlayPause" => {}
             _ => {}
         }

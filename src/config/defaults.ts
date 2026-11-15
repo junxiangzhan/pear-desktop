@@ -36,6 +36,8 @@ export interface DefaultConfig {
     usePodcastParticipantAsArtist: boolean;
     themes: string[];
     customWindowTitle?: string;
+    /** Pear's own mobile UI; unset: on for Android, off on desktop */
+    mobileUi?: boolean;
   };
   'plugins': Record<string, unknown>;
 }

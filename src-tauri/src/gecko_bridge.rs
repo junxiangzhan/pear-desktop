@@ -95,7 +95,13 @@ fn send(app: &AppHandle, port: &str, message: Value) {
 pub fn emit(app: &AppHandle, event: &str, payload: impl Serialize) {
     let message = json!({ "event": event, "payload": payload });
     if event == "pear:config" {
-        send(app, BACKGROUND, message.clone());
+        // The snapshot's unavailable list depends on the config too (switching
+        // the mobile UI off makes its plugins available again), so it travels
+        // with every change rather than only in `gecko_payload`
+        let unavailable: Vec<String> = app.state::<config::Config>().unavailable().into_iter().collect();
+        let mut background = message.clone();
+        background["unavailable"] = json!(unavailable);
+        send(app, BACKGROUND, background);
     }
     send(app, PAGE, message);
 }
@@ -200,7 +206,7 @@ async fn run_async(app: &AppHandle, cmd: &str, args: Value) -> Result<Value, Str
 /// version is `lib.rs#payload`), plus the URL to start at.
 fn payload(app: &AppHandle) -> Value {
     let config = app.state::<config::Config>();
-    let unavailable: Vec<&String> = config::unavailable_plugins().iter().collect();
+    let unavailable: Vec<String> = config.unavailable().into_iter().collect();
     json!({
         "config": config.snapshot(),
         "unavailable": unavailable,

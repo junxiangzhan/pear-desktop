@@ -10,6 +10,7 @@ import { pinyin } from 'pinyin-pro';
 import { render } from 'solid-js/web';
 import { detect } from 'tinyld';
 
+import { mobileUiMount } from '@/types/player-controls';
 import { waitForElement } from '@/utils/wait-for-element';
 
 import { LyricsRenderer, setIsVisible } from './renderer';
@@ -43,6 +44,30 @@ export const tabStates: Record<string, () => void> = {
   false: () => {
     setIsVisible(false);
   },
+};
+
+/**
+ * The mobile UI (YTM's lyrics tab is not in the page): the lyrics go into
+ * its own lyrics tab, which shows this container while the plugin is on.
+ * Returns false without the mobile UI.
+ */
+export const mountInMobileUi = () => {
+  // Already mounted in the mobile UI. YTM's lyrics tab gets a container with
+  // the same id (tabStates.true), which must not count: that tab still needs
+  // the per-song work
+  const host = document.querySelector('pear-mobile-ui');
+  if (!host) return false;
+  if (
+    document.getElementById('synced-lyrics-container')?.parentElement === host
+  )
+    return true;
+  const container = mobileUiMount('synced-lyrics', 'synced-lyrics-container');
+  if (!container) return false;
+  // Visible first, as in YTM's tab: the renderer finds its list (for the
+  // picker's scroll listener) as it mounts
+  setIsVisible(true);
+  render(() => <LyricsRenderer />, container);
+  return true;
 };
 
 export const canonicalize = (text: string) => {
