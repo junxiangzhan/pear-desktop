@@ -14,6 +14,8 @@
  * v0.2.0, 07/2016
  */
 
+import { clearTimer, setTimer } from './timers';
+
 // Internal utility: check if value is a valid volume level and throw if not
 const validateVolumeLevel = (value: number) => {
   // Number between 0 and 1?
@@ -34,8 +36,9 @@ export interface VolumeControl {
   volume: number;
 }
 
-// Fades run on a timer: requestAnimationFrame stops while the page is hidden
-// (minimized window), which left the video stuck at volume 0
+// Fades run on a worker timer (see timers.ts): requestAnimationFrame stops
+// while the page is hidden (minimized window), which left the video stuck at
+// volume 0, and window timers are slowed down there too
 const UPDATE_INTERVAL_MS = 10;
 
 interface VolumeFaderOptions {
@@ -80,7 +83,7 @@ export class VolumeFader {
   private fadeDuration: number = 1000;
   private active: boolean = false;
   private fade: VolumeFade | undefined;
-  private timer: ReturnType<typeof setTimeout> | undefined;
+  private timer: number | undefined;
 
   /**
    * VolumeFader Constructor
@@ -223,7 +226,7 @@ export class VolumeFader {
   stop() {
     // Set fader to be inactive
     this.active = false;
-    clearTimeout(this.timer);
+    clearTimer(this.timer);
 
     // Return instance for chaining
     return this;
@@ -306,7 +309,7 @@ export class VolumeFader {
    * (calls itself through a timer)
    */
   updateVolume() {
-    clearTimeout(this.timer);
+    clearTimer(this.timer);
 
     // Fader active and fade available to process?
     if (this.active && this.fade) {
@@ -328,7 +331,7 @@ export class VolumeFader {
         this.media.volume = this.scale.internalToVolume(level);
 
         // Schedule next update
-        this.timer = setTimeout(() => this.updateVolume(), UPDATE_INTERVAL_MS);
+        this.timer = setTimer(() => this.updateVolume(), UPDATE_INTERVAL_MS);
       } else {
         // Log end of fade
         this.logger?.('Fade to ' + String(this.fade.volume.end) + ' complete.');
